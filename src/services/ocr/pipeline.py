@@ -17,6 +17,8 @@ Bước:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+from collections import OrderedDict
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -30,6 +32,39 @@ from src.services.ocr.preprocessing import preprocess_document_image
 _CLASSIFIER_STRONG_CONFIDENCE = 0.8
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+
+# Cache OcrResult theo hash ảnh đã tiền xử lý — upload lại cùng ảnh (công dân bấm
+# lại, refresh, retry) không tốn thêm API call. OcrResult là frozen dataclass nên
+# chia sẻ an toàn; ExtractedDocument vẫn được build mới cho từng lần gọi.
+_ocr_cache: OrderedDict[str, OcrResult] = OrderedDict()
+
+
+def _cache_key(image_bytes: bytes, field_keys: list[str] | None) -> str:
+    digest = hashlib.sha256(image_bytes).hexdigest()
+    config_sig = (
+        f"{settings.ocr_llm_provider}|{settings.ocr_llm_model}"
+        f"|{getattr(settings, 'ocr_llm_reasoning_effort', '')}"
+        f"|{','.join(field_keys or [])}"
+    )
+    return f"{digest}|{config_sig}"
+
+
+def _cache_get(key: str) -> OcrResult | None:
+    if settings.ocr_cache_size <= 0:
+        return None
+    result = _ocr_cache.get(key)
+    if result is not None:
+        _ocr_cache.move_to_end(key)
+    return result
+
+
+def _cache_put(key: str, result: OcrResult) -> None:
+    if settings.ocr_cache_size <= 0:
+        return
+    _ocr_cache[key] = result
+    _ocr_cache.move_to_end(key)
+    while len(_ocr_cache) > settings.ocr_cache_size:
+        _ocr_cache.popitem(last=False)
 
 
 def _resolve_doc_type(result: OcrResult) -> tuple[str, float, bool]:
@@ -70,11 +105,15 @@ async def process(
     preprocessed = preprocess_document_image(content)
     image_bytes = preprocessed.content if preprocessed.mime_type else content
 
-    engine = get_engine()
-    if isinstance(engine, VisionLlmEngine):
-        result = await asyncio.to_thread(engine.extract, image_bytes, field_keys)
-    else:
-        result = await asyncio.to_thread(engine.extract, image_bytes)
+    cache_key = _cache_key(image_bytes, field_keys)
+    result = _cache_get(cache_key)
+    if result is None:
+        engine = get_engine()
+        if isinstance(engine, VisionLlmEngine):
+            result = await asyncio.to_thread(engine.extract, image_bytes, field_keys)
+        else:
+            result = await asyncio.to_thread(engine.extract, image_bytes)
+        _cache_put(cache_key, result)
 
     doc_type, doc_type_confidence, conflicting = _resolve_doc_type(result)
 

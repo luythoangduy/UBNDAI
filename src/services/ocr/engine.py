@@ -193,6 +193,7 @@ class VisionLlmEngine:
         client: httpx.Client | None = None,
         anthropic_client: anthropic.Anthropic | None = None,
         timeout_s: float = 60.0,
+        reasoning_effort: str | None = None,
     ) -> None:
         # Dùng bộ setting OCR_LLM_* — TÁCH RIÊNG với LLM chatbot (LLM_*).
         self._provider = (provider or settings.ocr_llm_provider).strip().lower()
@@ -201,6 +202,11 @@ class VisionLlmEngine:
         self._client = client
         self._anthropic_client = anthropic_client
         self._timeout_s = timeout_s
+        self._reasoning_effort = (
+            reasoning_effort
+            if reasoning_effort is not None
+            else getattr(settings, "ocr_llm_reasoning_effort", "")
+        ).strip().lower()
 
     def _extract_anthropic_text(self, task: str, image_b64: str) -> str:
         client = self._anthropic_client or anthropic.Anthropic(
@@ -246,7 +252,7 @@ class VisionLlmEngine:
     def _extract_openai_text(self, task: str, image_b64: str) -> str:
         # GPT-5/o-series là reasoning model: KHÔNG gửi temperature (bị từ chối),
         # dùng max_completion_tokens thay cho max_tokens.
-        payload = {
+        payload: dict = {
             "model": self._model,
             "max_completion_tokens": 16000,
             "messages": [
@@ -271,6 +277,10 @@ class VisionLlmEngine:
                 },
             },
         }
+        # OCR là trích xuất, không cần suy luận sâu — effort thấp cắt mạnh
+        # reasoning tokens (nhanh + rẻ hơn) mà không đổi độ chính xác đọc chữ.
+        if self._reasoning_effort in ("minimal", "low", "medium", "high"):
+            payload["reasoning_effort"] = self._reasoning_effort
 
         client = self._client or httpx.Client(timeout=self._timeout_s)
         try:

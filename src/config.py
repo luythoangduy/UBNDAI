@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     ocr_llm_provider: str = "openai"  # 'openai' | 'anthropic' | 'gemini'
     ocr_llm_api_key: str = ""
     ocr_llm_model: str = "gpt-5-mini"
+    # Chỉ áp dụng provider openai (GPT-5): minimal | low | medium | high.
+    # OCR là trích xuất, không cần suy luận sâu — effort thấp giảm mạnh latency + token.
+    ocr_llm_reasoning_effort: str = "minimal"
+    # Cache kết quả OCR theo hash ảnh (upload lại cùng ảnh không tốn API call). 0 = tắt.
+    ocr_cache_size: int = 128
 
     readiness_submit_threshold: float = 0.9
 

@@ -303,3 +303,21 @@ def test_factory_resolves_all_engines():
     assert isinstance(get_engine("google_vision"), GoogleVisionEngine)
     with pytest.raises(OcrEngineError):
         get_engine("does-not-exist")
+
+
+def test_openai_payload_includes_reasoning_effort():
+    engine, captured = _openai_engine_with_mock({"raw_text": "x", "fields": []})
+    engine._reasoning_effort = "low"
+
+    engine.extract(FAKE_IMAGE)
+
+    assert captured["request"]["reasoning_effort"] == "low"
+
+
+def test_invalid_reasoning_effort_is_omitted():
+    engine, captured = _openai_engine_with_mock({"raw_text": "x", "fields": []})
+    engine._reasoning_effort = "turbo"
+
+    engine.extract(FAKE_IMAGE)
+
+    assert "reasoning_effort" not in captured["request"]

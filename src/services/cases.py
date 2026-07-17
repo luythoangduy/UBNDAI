@@ -62,6 +62,21 @@ async def create(payload: CaseCreate) -> Case:
     return case
 
 
+async def create_from_identity(citizen_id: str) -> Case:
+    return await create(CaseCreate(citizen_id=citizen_id))
+
+
+async def insert_exact(case: Case) -> Case:
+    """Insert a pre-built case while preserving its externally assigned id.
+
+    The citizen/officer workflow owns public case identifiers. Guidance uses
+    this helper when it needs to attach LangGraph state to an existing portal
+    case instead of creating a second, disconnected record.
+    """
+    await asyncio.to_thread(_insert_sync, case)
+    return case
+
+
 async def get(case_id: str) -> Case:
     return await asyncio.to_thread(_get_sync, case_id)
 

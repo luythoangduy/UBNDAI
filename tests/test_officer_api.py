@@ -57,6 +57,10 @@ def test_blocking_finding_prevents_ready_and_supplement_moves_case_to_update():
     headers = {"Authorization": f"Bearer {token}"}
     blocked = client.post("/api/v1/officer/cases/case-demo-001/transition", headers=headers, json={"target_status": "precheck_ready"})
     assert blocked.status_code == 422
+    accepted = client.post("/api/v1/officer/findings/finding-demo-001/accept", headers=headers)
+    assert accepted.status_code == 200
+    still_blocked = client.post("/api/v1/officer/cases/case-demo-001/transition", headers=headers, json={"target_status": "precheck_ready"})
+    assert still_blocked.status_code == 422
     request = client.post("/api/v1/officer/cases/case-demo-001/supplement-requests", headers=headers, json={"public_message": "Vui lòng bổ sung giấy tờ.", "finding_ids": ["finding-demo-001"]})
     assert request.status_code == 200
     assert request.json()["data"]["status"] == "sent"
@@ -94,9 +98,10 @@ def test_officer_detail_contains_authorized_case_documents():
         )
         assert response.status_code == 200
         documents = response.json()["data"]["documents"]
-        assert documents[0]["original_filename"] == "giay-khai-sinh.pdf"
-        assert "file_uri" not in documents[0]
-        assert "object_key" not in documents[0]
+        uploaded = next(item for item in documents if item["id"] == document.id)
+        assert uploaded["original_filename"] == "giay-khai-sinh.pdf"
+        assert "file_uri" not in uploaded
+        assert "object_key" not in uploaded
     finally:
         store.documents.pop(document.id, None)
 
@@ -155,7 +160,10 @@ def test_officer_can_read_and_edit_extracted_field_then_rerun_validation():
 
         rerun = client.post("/api/v1/officer/cases/case-demo-001/rerun-validation", headers=headers)
         assert rerun.status_code == 200
-        assert all(item["type"] != "ocr_human_review" for item in rerun.json()["data"])
+        assert all(
+            item["type"] != "ocr_human_review" or field.field_key not in item["field_keys"]
+            for item in rerun.json()["data"]
+        )
         assert any(event.event_type == "ocr_field_edited" for event in store.audit)
     finally:
         store.documents.pop(document.id, None)

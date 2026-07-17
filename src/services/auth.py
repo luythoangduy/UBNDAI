@@ -68,6 +68,15 @@ def current_claims(credentials: HTTPAuthorizationCredentials | None = Security(_
     return decode_token(credentials.credentials)
 
 
+def optional_current_claims(
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
+) -> TokenClaims | None:
+    """Return claims when a bearer token is supplied; allow anonymous callers."""
+    if not credentials:
+        return None
+    return decode_token(credentials.credentials)
+
+
 def require_role(*roles: str):
     def dependency(claims: TokenClaims = Security(current_claims)) -> TokenClaims:
         if not set(roles).intersection(claims.roles):

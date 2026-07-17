@@ -74,8 +74,8 @@ OCR_OUTPUT_SCHEMA = {
                         "description": "Tọa độ tương đối [x, y, width, height] 0.0–1.0; null nếu không xác định",
                     },
                 },
-                # Mọi key đều required (OpenAI strict mode) — model trả chuỗi rỗng
-                # hoặc null khi không có giá trị.
+                # Mọi key đều required (OpenAI strict mode): model trả chuỗi rỗng
+                # cho văn bản thiếu và null cho bbox không xác định.
                 "required": ["key", "value", "confidence", "note", "bbox"],
                 "additionalProperties": False,
             },

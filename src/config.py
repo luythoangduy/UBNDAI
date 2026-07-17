@@ -56,6 +56,6 @@ class Settings(BaseSettings):
     oidc_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/oidc/callback"
     oidc_required_mfa_claim: str = "amr:mfa"
     upload_max_files: int = 10
-    upload_max_bytes: int = 20 * 1024 * 1024
+    upload_max_bytes: int = 10 * 1024 * 1024
 
 settings = Settings()

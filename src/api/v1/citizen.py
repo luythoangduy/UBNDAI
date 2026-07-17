@@ -6,6 +6,7 @@ import hashlib
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
+from src.config import settings
 from src.models import (
     CitizenCaseCreate,
     CitizenCaseUpdate,
@@ -87,7 +88,7 @@ async def upload(document_id: str, request: Request, claims: TokenClaims = Depen
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     content = await request.body()
-    if len(content) != document.size_bytes or len(content) > 20 * 1024 * 1024:
+    if len(content) != document.size_bytes or len(content) > settings.upload_max_bytes:
         raise HTTPException(status_code=422, detail="Uploaded size does not match intent")
     storage.put(document.object_key or "", content)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -134,6 +135,7 @@ async def complete_upload(document_id: str, payload: UploadCompleteRequest, clai
         ocr.doc_type,
         ocr.needs_human_review,
         [field.model_dump() for field in ocr.fields],
+        ocr.ocr_engine,
     )
     # Alias sang shape ExtractedFieldRecord mà FE hiển thị (field_key/raw_value/bounding_box)
     fields_resp = [
@@ -143,7 +145,11 @@ async def complete_upload(document_id: str, payload: UploadCompleteRequest, clai
             "field_key": field.key,
             "raw_value": field.value,
             "bounding_box": field.bbox,
-            "review_status": "unreviewed",
+            "review_status": (
+                "needs_human_review"
+                if field.confidence < settings.ocr_confidence_threshold
+                else "unreviewed"
+            ),
         }
         for index, field in enumerate(ocr.fields)
     ]

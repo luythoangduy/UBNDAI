@@ -39,6 +39,20 @@ Kế thừa trực tiếp từ `C2-App-108` (xem `ARCHITECTURE.md §5` — bản
 
 ## 5. Chạy dự án
 
+### Chạy demo một lệnh (Windows)
+
+Sau khi đã tạo `.venv` và cài dependencies Python, lệnh sau sẽ cài dependencies frontend theo lockfile, build UI, reset dữ liệu mẫu tổng hợp và chạy ứng dụng tại cổng 8000:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/demo.ps1
+```
+
+- Cổng công dân: `http://127.0.0.1:8000/citizen`
+- Cổng cán bộ: `http://127.0.0.1:8000/officer`
+- Tài khoản: `citizen.demo` hoặc `officer.demo`; mật khẩu `ChangeMe123!`
+- Ảnh demo: `data/demo/giay_chung_sinh_demo.svg` chỉ chứa dữ liệu tổng hợp.
+- Upload OCR trong demo hỗ trợ JPEG/PNG, tối đa 10 MB.
+
 ```bash
 pip install -e ".[dev]"
 

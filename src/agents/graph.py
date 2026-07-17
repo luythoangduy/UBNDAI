@@ -14,8 +14,9 @@ from langgraph.graph import END, StateGraph
 
 from src.agents.nodes import answer, checklist, clarify, identify, planner
 from src.agents.state import GuidanceState
-from src.models import CaseCreate, ChatRequest, ChatResponse, ChecklistItem, Citation
+from src.models import ChatRequest, ChatResponse, ChecklistItem, Citation
 from src.services import cases
+from src.services.guidance_bridge import resolve_case_id, sync_to_portal
 from src.services.retrieval import NO_SOURCE_WARNING
 
 
@@ -50,18 +51,18 @@ def _compiled_graph() -> Any:
     return build_graph()
 
 
-async def run_guidance(payload: ChatRequest) -> ChatResponse:
+async def run_guidance(
+    payload: ChatRequest,
+    citizen_id: str | None = None,
+) -> ChatResponse:
     """Entrypoint cho src/api/v1/chat.py: load Case, chạy graph, persist state về Case."""
-    if payload.case_id:
-        case_id = payload.case_id
-    else:
-        # TODO(C): citizen_id lấy từ auth sau khi port JWT từ C2-App-108
-        case = await cases.create(CaseCreate(citizen_id="anonymous"))
-        case_id = case.id
+    case_id = await resolve_case_id(payload.case_id, citizen_id)
 
     async with cases.case_lock(case_id):
         case = await cases.get(case_id)
-        return await _run_locked_turn(case, payload.message)
+        response = await _run_locked_turn(case, payload.message)
+        await sync_to_portal(case_id, citizen_id)
+        return response
 
 
 async def _run_locked_turn(case: Any, message: str) -> ChatResponse:

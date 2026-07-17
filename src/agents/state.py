@@ -25,9 +25,13 @@ class GuidanceState(TypedDict, total=False):
     # Làm rõ
     answers: dict[str, Any]  # tích luỹ từ các lượt clarify, ghi về Case.answers
     pending_questions: list[str]
-    pending_action: Literal["select_procedure", "answer_clarification"] | None
+    pending_action: Literal[
+        "select_procedure", "answer_clarification", "confirm_switch_procedure"
+    ] | None
     pending_procedure_ids: list[str]
     pending_question_keys: list[str]
+    pending_switch_query: str | None
+    reset_procedure: bool
     # Retrieval + citation
     retrieved_chunks: list[dict[str, Any]]
     citations: list[dict[str, Any]]

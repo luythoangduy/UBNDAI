@@ -21,11 +21,26 @@ def load_catalog(catalog_dir: Path | str | None = None) -> dict[str, Procedure]:
     cache_key = str(directory.resolve())
     if cache_key not in _CACHE:
         catalog: dict[str, Procedure] = {}
+        source_paths: dict[str, Path] = {}
+        national_codes: dict[str, Path] = {}
         for path in sorted(directory.glob("*.json")):
             procedure = Procedure.model_validate(
                 json.loads(path.read_text(encoding="utf-8"))
             )
+            if procedure.id in catalog:
+                raise ValueError(
+                    f"Duplicate procedure id {procedure.id!r}: "
+                    f"{source_paths[procedure.id]} và {path}"
+                )
+            if procedure.national_code and procedure.national_code in national_codes:
+                raise ValueError(
+                    f"Duplicate national_code {procedure.national_code!r}: "
+                    f"{national_codes[procedure.national_code]} và {path}"
+                )
             catalog[procedure.id] = procedure
+            source_paths[procedure.id] = path
+            if procedure.national_code:
+                national_codes[procedure.national_code] = path
         _CACHE[cache_key] = catalog
     return _CACHE[cache_key]
 

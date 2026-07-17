@@ -84,15 +84,21 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         "pending_action": case.pending_action,
         "pending_procedure_ids": list(case.pending_procedure_ids),
         "pending_question_keys": list(case.pending_question_keys),
+        "pending_switch_query": case.pending_switch_query,
+        "checklist": [item.model_dump() for item in case.checklist],
     }
     final = await _compiled_graph().ainvoke(initial)
 
     updates: dict[str, Any] = {
         "answers": final.get("answers", case.answers),
-        "procedure_id": final.get("selected_procedure_id") or case.procedure_id,
+        "procedure_id": (
+            final.get("selected_procedure_id")
+            or (None if final.get("reset_procedure") else case.procedure_id)
+        ),
         "pending_action": final.get("pending_action"),
         "pending_procedure_ids": final.get("pending_procedure_ids") or [],
         "pending_question_keys": final.get("pending_question_keys") or [],
+        "pending_switch_query": final.get("pending_switch_query"),
     }
     checklist_items = [
         ChecklistItem.model_validate(item) for item in final.get("checklist") or []
@@ -101,6 +107,9 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         updates["checklist"] = checklist_items
         if case.status == "draft":  # draft → collecting: đã có checklist
             updates["status"] = "collecting"
+    elif final.get("reset_procedure"):
+        updates["checklist"] = []
+        updates["status"] = "draft"
     reply = final.get("reply") or NO_SOURCE_WARNING
     case = await cases.commit_turn(
         case.model_copy(update=updates),

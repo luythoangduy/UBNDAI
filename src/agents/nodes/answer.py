@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.prompts import ANSWER_SYSTEM, answer_user_prompt
 from src.agents.state import GuidanceState
+from src.models import ChecklistItem
 from src.services import catalog
 from src.services import checklist as checklist_service
+from src.services.clarification import unresolved_questions
 from src.services.intent import detect_intents
 from src.services.llm import get_llm, llm_is_configured
 from src.services.retrieval import (
@@ -27,6 +30,14 @@ from src.services.retrieval import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StructuredAnswerResult:
+    reply: str
+    chunks: list[RetrievedChunk]
+    checklist: list[ChecklistItem] = field(default_factory=list)
+    pending_questions: list[str] = field(default_factory=list)
 
 
 async def run(state: GuidanceState) -> dict[str, Any]:
@@ -61,13 +72,13 @@ async def run(state: GuidanceState) -> dict[str, Any]:
 
     deterministic = _structured_answer(state, query, procedure, chunks, intents)
     if deterministic is not None:
-        reply, chunks = deterministic
+        reply, chunks = deterministic.reply, deterministic.chunks
     else:
         reply = await _llm_answer(query, chunks)
     if reply is None:
         reply = _extractive_answer(chunks)
 
-    return {
+    result = {
         "reply": reply,
         "reply_kind": "answer",
         "citations": [c.model_dump() for c in citations_from_chunks(chunks)],
@@ -76,6 +87,25 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             for c in chunks
         ],
     }
+    if deterministic is not None and deterministic.checklist:
+        result.update(
+            {
+                "checklist": [item.model_dump() for item in deterministic.checklist],
+                "pending_questions": deterministic.pending_questions,
+                "pending_action": (
+                    "answer_clarification"
+                    if deterministic.pending_questions
+                    else None
+                ),
+                "pending_question_keys": [
+                    question.key
+                    for question in unresolved_questions(
+                        procedure, state.get("answers") or {}
+                    )
+                ],
+            }
+        )
+    return result
 
 
 async def _llm_answer(query: str, chunks: list[RetrievedChunk]) -> str | None:
@@ -128,7 +158,7 @@ def _structured_answer(
     procedure: Any,
     chunks: list[RetrievedChunk],
     intents: list[str],
-) -> tuple[str, list[RetrievedChunk]] | None:
+) -> StructuredAnswerResult | None:
     """Trả một hoặc nhiều intent có cấu trúc trực tiếp từ Procedure."""
     if procedure is None:
         return None
@@ -143,6 +173,8 @@ def _structured_answer(
         )
     lines: list[str] = []
     used_chunks: list[RetrievedChunk] = []
+    checklist_items: list[ChecklistItem] = []
+    pending_questions: list[str] = []
 
     def cite(chunk: RetrievedChunk) -> int:
         if chunk not in used_chunks:
@@ -184,22 +216,44 @@ def _structured_answer(
             ),
             chunks_from_procedure(procedure)[1],
         )
-        items = checklist_service.build_checklist(
+        checklist_items = checklist_service.build_checklist(
             procedure, state.get("answers") or {}
         )
         names = []
-        for item in items:
+        answers = state.get("answers") or {}
+        for item in checklist_items:
             if item.status == "not_applicable":
                 continue
             requirement = checklist_service.requirement_by_code(
                 procedure, item.requirement_code
             )
-            if requirement:
+            if requirement and checklist_service.eval_condition(
+                requirement.condition, answers
+            ) is True:
                 names.append(requirement.name)
+        unanswered = unresolved_questions(procedure, answers)
+        pending_questions = [question.text for question in unanswered]
+        heading = "Checklist tạm thời" if pending_questions else "Checklist"
         lines.append(
-            "Checklist hiện tại: " + "; ".join(names) + f" [{cite(requirement_chunk)}]."
+            f"{heading}: " + "; ".join(names) + f" [{cite(requirement_chunk)}]."
         )
-    return ("\n".join(lines), used_chunks) if lines else None
+        if pending_questions:
+            lines.append(
+                "Để xác định chính xác các giấy tờ theo trường hợp của bạn, "
+                "vui lòng trả lời các câu hỏi làm rõ bên dưới."
+            )
+        for warning in checklist_service.guidance_warnings(procedure, answers):
+            lines.append(f"Lưu ý: {warning}")
+    return (
+        StructuredAnswerResult(
+            reply="\n".join(lines),
+            chunks=used_chunks,
+            checklist=checklist_items,
+            pending_questions=pending_questions,
+        )
+        if lines
+        else None
+    )
 
 
 def _special_intent_answer(
@@ -214,6 +268,8 @@ def _special_intent_answer(
         )
     if "thanks" in intent_set:
         return "Rất vui được hỗ trợ bạn.", "answer"
+    if "switch_confirmation" in intent_set:
+        return "Đã giữ nguyên thủ tục và dữ liệu hiện tại của case.", "answer"
     if "capabilities" in intent_set:
         return (
             "Mình có thể nhận diện thủ tục trong catalog, hỏi thông tin làm rõ, "

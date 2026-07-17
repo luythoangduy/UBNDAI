@@ -16,6 +16,16 @@ class IntentDetection:
 
 
 _PATTERNS: list[tuple[IntentName, tuple[str, ...]]] = [
+    (
+        "switch_procedure",
+        (
+            "doi sang",
+            "thu tuc khac",
+            "khong lam",
+            "gio toi muon lam",
+            "toi can lam them thu tuc",
+        ),
+    ),
     ("checklist", ("giay to gi", "can giay to", "ho so gom", "thanh phan ho so", "chuan bi gi", "checklist")),
     ("fee", ("le phi", "phi bao nhieu", "bao nhieu tien", "mat tien", "mien phi")),
     ("processing_time", ("thoi han", "bao lau", "may ngay", "khi nao xong")),
@@ -35,6 +45,13 @@ _ADMIN_HINTS = (
     "thu tuc", "dang ky", "ho so", "giay phep", "giay to", "khai sinh",
     "ket hon", "can cuoc", "cccd", "dat dai", "xay dung", "ho khau",
     "chung thuc", "cong chung", "ubnd", "dich vu cong",
+)
+_OTHER_PROCEDURE_HINTS = (
+    "dang ky ket hon",
+    "can cuoc cong dan",
+    "cccd",
+    "dat dai",
+    "giay phep xay dung",
 )
 _OUT_OF_SCOPE = (
     "thoi tiet", "nau an", "cong thuc mon", "viet code", "lap trinh",
@@ -60,6 +77,17 @@ def detect_intents(message: str, *, has_selected_procedure: bool) -> IntentDetec
             found.append(intent)
 
     has_admin_hint = any(hint in folded for hint in _ADMIN_HINTS)
+    if (
+        has_selected_procedure
+        and any(hint in folded for hint in _OTHER_PROCEDURE_HINTS)
+        and "switch_procedure" not in found
+    ):
+        found.insert(0, "switch_procedure")
+    if not has_selected_procedure and "switch_procedure" in found:
+        found = [
+            "procedure_discovery" if intent == "switch_procedure" else intent
+            for intent in found
+        ]
     navigation_intents = {
         "status_tracking", "submission", "document_upload", "capabilities",
     }
@@ -82,7 +110,8 @@ def detect_intents(message: str, *, has_selected_procedure: bool) -> IntentDetec
 
 def _choose_primary(intents: list[IntentName]) -> IntentName:
     precedence: tuple[IntentName, ...] = (
-        "out_of_scope", "status_tracking", "submission", "document_upload",
+        "out_of_scope", "switch_procedure", "switch_confirmation",
+        "status_tracking", "submission", "document_upload",
         "capabilities", "fee", "processing_time", "agency", "legal_basis",
         "forms", "checklist", "procedure_discovery", "general_question",
     )

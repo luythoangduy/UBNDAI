@@ -100,6 +100,29 @@ async def test_unrelated_query_does_not_select_birth_registration(query):
 
 
 @pytest.mark.asyncio
+async def test_student_query_does_not_select_birth_registration():
+    for query in (
+        "tôi là sinh viên cần giấy xác nhận",
+        "xin xác nhận sinh viên",
+    ):
+        result = await identify.run({"rewritten_query": query})
+        assert result.get("selected_procedure_id") is None
+        assert result["reply_kind"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_negative_context_does_not_block_explicit_positive_procedure():
+    result = await identify.run(
+        {
+            "rewritten_query": (
+                "không phải đăng ký kết hôn, tôi muốn đăng ký khai sinh cho con"
+            )
+        }
+    )
+    assert result["selected_procedure_id"] == "khai_sinh"
+
+
+@pytest.mark.asyncio
 async def test_planner_forces_identify_when_llm_returns_clarify_without_procedure(
     monkeypatch,
 ):
@@ -152,6 +175,27 @@ async def test_pending_candidate_can_be_selected_by_number():
     )
     assert result["selected_procedure_id"] == "khai_sinh"
     assert result["route"] == "clarify"
+
+
+@pytest.mark.asyncio
+async def test_switch_with_uploaded_document_requires_confirmation():
+    result = await planner.run(
+        {
+            "messages": [HumanMessage(content="đổi sang đăng ký kết hôn")],
+            "answers": {"ket_hon": True},
+            "selected_procedure_id": "khai_sinh",
+            "checklist": [
+                {
+                    "requirement_code": "cccd_cha_me",
+                    "status": "uploaded",
+                    "document_id": "doc-1",
+                }
+            ],
+        }
+    )
+    assert result["route"] == "clarify"
+    assert result["pending_action"] == "confirm_switch_procedure"
+    assert result.get("reset_procedure") is not True
 
 
 @pytest.mark.asyncio

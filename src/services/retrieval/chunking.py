@@ -88,8 +88,8 @@ def _requirements_text(procedure: Procedure) -> str:
     lines = [f"Thành phần hồ sơ của thủ tục {procedure.name}:"]
     for req in procedure.requirements:
         detail = req.name
-        if req.condition:
-            detail += f" (điều kiện áp dụng: {req.condition})"
+        if req.condition_label:
+            detail += f" ({req.condition_label})"
         if req.notes:
             detail += f" — {req.notes}"
         lines.append(f"- {detail}")

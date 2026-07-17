@@ -12,6 +12,20 @@ from src.services.retrieval import citations_from_chunks, retrieve
 
 async def run(state: GuidanceState) -> dict[str, Any]:
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
+    if state.get("pending_action") == "confirm_switch_procedure":
+        return {
+            "reply": (
+                "Case hiện đã có tài liệu được tải lên. Đổi thủ tục sẽ xoá answers và "
+                "checklist hiện tại. Bạn có chắc muốn đổi không?"
+            ),
+            "reply_kind": "clarify",
+            "pending_questions": ["Bạn có chắc muốn đổi thủ tục không?"],
+            "pending_action": "confirm_switch_procedure",
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
+            "pending_switch_query": state.get("pending_switch_query"),
+            "citations": [],
+        }
     if procedure is None:
         candidate_ids = state.get("pending_procedure_ids") or []
         if state.get("pending_action") == "select_procedure" and candidate_ids:

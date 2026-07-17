@@ -16,7 +16,11 @@ from src.agents.prompts import PLANNER_SYSTEM, planner_context
 from src.agents.state import GuidanceState
 from src.models import IntentName
 from src.services import catalog
-from src.services.clarification import extract_answers, unresolved_questions
+from src.services.clarification import (
+    extract_answers,
+    is_correction_message,
+    unresolved_questions,
+)
 from src.services.intent import IntentDetection, detect_intents
 from src.services.llm import get_llm, llm_is_configured
 from src.services.retrieval.common import fold_ascii
@@ -47,6 +51,57 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
     answers = dict(state.get("answers") or {})
     detection = detect_intents(message, has_selected_procedure=procedure is not None)
+
+    if state.get("pending_action") == "confirm_switch_procedure":
+        confirmation = _confirmation_value(message)
+        if confirmation is True:
+            switch_query = state.get("pending_switch_query") or message
+            return _switch_procedure_result(switch_query)
+        if confirmation is False:
+            return {
+                "route": "answer",
+                "rewritten_query": message,
+                "answers": answers,
+                "primary_intent": "switch_confirmation",
+                "detected_intents": ["switch_confirmation"],
+                "pending_action": None,
+                "pending_procedure_ids": [],
+                "pending_question_keys": [],
+                "pending_switch_query": None,
+            }
+        return {
+            "route": "clarify",
+            "rewritten_query": message,
+            "answers": answers,
+            "primary_intent": "switch_confirmation",
+            "detected_intents": ["switch_confirmation"],
+            "pending_action": "confirm_switch_procedure",
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
+            "pending_switch_query": state.get("pending_switch_query"),
+        }
+
+    if (
+        procedure
+        and detection.primary == "switch_procedure"
+        and not _message_affirms_current_procedure(message, procedure)
+    ):
+        has_uploaded_documents = any(
+            item.get("document_id") for item in state.get("checklist") or []
+        )
+        if has_uploaded_documents:
+            return {
+                "route": "clarify",
+                "rewritten_query": message,
+                "answers": answers,
+                "primary_intent": "switch_procedure",
+                "detected_intents": ["switch_procedure"],
+                "pending_action": "confirm_switch_procedure",
+                "pending_procedure_ids": [],
+                "pending_question_keys": [],
+                "pending_switch_query": message,
+            }
+        return _switch_procedure_result(message)
 
     if procedure is None and state.get("pending_action") == "select_procedure":
         candidate_ids = state.get("pending_procedure_ids") or []
@@ -79,6 +134,14 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     unresolved = [question.key for question in pending]
 
     deterministic = extract_answers(message, pending)
+    if procedure:
+        all_questions = procedure.clarifying_questions
+        correction_answers = extract_answers(
+            message,
+            all_questions,
+            allow_standalone=is_correction_message(message),
+        )
+        deterministic.update(correction_answers)
     if deterministic:
         answers.update(deterministic)
         remaining = unresolved_questions(procedure, answers)
@@ -99,7 +162,11 @@ async def run(state: GuidanceState) -> dict[str, Any]:
                 ),
                 "rewritten_query": message,
                 "answers": answers,
-                "primary_intent": detection.primary,
+                "primary_intent": (
+                    "clarification_answer"
+                    if intents == ["clarification_answer"]
+                    else detection.primary
+                ),
                 "detected_intents": intents,
                 "pending_action": "answer_clarification" if remaining else None,
                 "pending_procedure_ids": [],
@@ -282,3 +349,41 @@ def _parse_candidate_selection(message: str, candidate_ids: list[str]) -> str | 
         ):
             return procedure_id
     return None
+
+
+def _confirmation_value(message: str) -> bool | None:
+    folded = fold_ascii(message).strip()
+    if folded in {"co", "dong y", "xac nhan", "dung", "yes"}:
+        return True
+    if folded in {"khong", "huy", "giu nguyen", "no"}:
+        return False
+    return None
+
+
+def _switch_procedure_result(query: str) -> dict[str, Any]:
+    return {
+        "route": "identify",
+        "rewritten_query": query,
+        "selected_procedure_id": None,
+        "reset_procedure": True,
+        "answers": {},
+        "checklist": [],
+        "primary_intent": "switch_procedure",
+        "detected_intents": ["switch_procedure"],
+        "pending_action": None,
+        "pending_procedure_ids": [],
+        "pending_question_keys": [],
+        "pending_switch_query": None,
+    }
+
+
+def _message_affirms_current_procedure(message: str, procedure: Any) -> bool:
+    folded = fold_ascii(message)
+    for name in [procedure.name, *procedure.aliases]:
+        phrase = fold_ascii(name)
+        if phrase in folded and not any(
+            prefix + phrase in folded
+            for prefix in ("khong lam ", "khong phai ", "bo ")
+        ):
+            return True
+    return False

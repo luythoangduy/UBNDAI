@@ -24,6 +24,11 @@ def test_retrieve_returns_empty_for_gibberish():
     assert retrieve("xyzt qwerty lorem") == []
 
 
+def test_content_chunks_do_not_expose_internal_condition_expression():
+    chunks = retrieve("thành phần hồ sơ khai sinh")
+    assert all("answers." not in chunk.content for chunk in chunks)
+
+
 def test_citations_map_one_to_one_to_chunks_and_carry_source():
     chunks = retrieve("thành phần hồ sơ khai sinh")
     citations = citations_from_chunks(chunks)

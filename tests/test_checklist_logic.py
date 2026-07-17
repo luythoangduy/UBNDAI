@@ -55,7 +55,7 @@ def test_build_checklist_keeps_unresolved_items_with_note():
     items = build_checklist(_khai_sinh(), {})
     by_code = {item.requirement_code: item for item in items}
     assert by_code["giay_chung_sinh"].status == "missing"
-    assert "cần làm rõ" in (by_code["giay_chung_sinh"].note or "")
+    assert by_code["giay_chung_sinh"].note == "Áp dụng khi bé sinh tại cơ sở y tế"
 
 
 def test_every_item_traces_to_requirement_code():
@@ -113,3 +113,33 @@ def test_choice_and_single_text_have_deterministic_fallback():
     assert extract_answers("Cần hỗ trợ bản sao", [text]) == {
         "ghi_chu": "Cần hỗ trợ bản sao"
     }
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (
+            "Có, bé sinh ở bệnh viện",
+            {"ket_hon": True, "sinh_tai_co_so_y_te": True},
+        ),
+        (
+            "Đã kết hôn, không",
+            {"ket_hon": True, "sinh_tai_co_so_y_te": False},
+        ),
+    ],
+)
+def test_multi_clause_boolean_answers_are_consumed_once(message, expected):
+    assert extract_answers(message, _khai_sinh().clarifying_questions) == expected
+
+
+@pytest.mark.parametrize("message", ["5 ngày rồi", "bé 5 ngày tuổi", "mới sinh 5 ngày"])
+def test_common_age_phrases_are_parsed(message):
+    result = extract_answers(message, _khai_sinh().clarifying_questions)
+    assert result["so_ngay_tu_khi_sinh"] == 5
+
+
+def test_age_answer_produces_late_registration_warning():
+    from src.services.checklist import guidance_warnings
+
+    warnings = guidance_warnings(_khai_sinh(), {"so_ngay_tu_khi_sinh": 61})
+    assert warnings and "quá hạn" in warnings[0]

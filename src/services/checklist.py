@@ -55,7 +55,7 @@ def build_checklist(
             continue
         note = requirement.notes
         if applicable is None:
-            note = f"Tuỳ trường hợp — cần làm rõ: {requirement.condition}"
+            note = requirement.condition_label or "Tuỳ trường hợp — cần làm rõ thêm"
         items.append(
             ChecklistItem(requirement_code=requirement.code, status="missing", note=note)
         )
@@ -83,6 +83,19 @@ def requirement_by_code(
         if requirement.code == code:
             return requirement
     return None
+
+
+def guidance_warnings(procedure: Procedure, answers: dict[str, Any]) -> list[str]:
+    """Cảnh báo deterministic khai báo từ catalog, không hardcode pháp lý trong prompt."""
+    days = answers.get("so_ngay_tu_khi_sinh")
+    if (
+        isinstance(days, int)
+        and procedure.late_registration_after_days is not None
+        and days > procedure.late_registration_after_days
+        and procedure.late_registration_warning
+    ):
+        return [procedure.late_registration_warning]
+    return []
 
 
 def _parse_literal(raw: str) -> Any:

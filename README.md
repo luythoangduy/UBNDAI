@@ -95,6 +95,7 @@ rate limit, case expiration và idempotency key; `case_id` không được xem l
 | Nhóm | Intent | Hành vi |
 |---|---|---|
 | Điều hướng | `procedure_discovery`, `clarification_answer` | Identify hoặc cập nhật answers trước khi chọn response |
+| Chuyển thủ tục | `switch_procedure`, `switch_confirmation` | Reset answers/checklist; yêu cầu xác nhận trước nếu đã có document |
 | Thông tin | `fee`, `processing_time`, `agency`, `legal_basis`, `forms` | Đọc trực tiếp `Procedure`, hỗ trợ nhiều intent cùng lượt |
 | Hồ sơ | `checklist` | Sinh từ requirements; có thể ghép cùng câu trả lời thông tin |
 | Chưa tích hợp | `status_tracking`, `submission`, `document_upload` | Trả fallback minh bạch, không giả vờ đã tra cứu/nộp |
@@ -104,6 +105,12 @@ rate limit, case expiration và idempotency key; `case_id` không được xem l
 Precedence: pending candidate → deterministic answer extraction → intent rõ → LLM semantic
 fallback cho wording `unknown/general` → route. Với mixed intent, state update và response
 intent được xử lý độc lập để việc ghi nhận câu làm rõ không làm mất câu hỏi chính.
+
+Identity matching yêu cầu exact name/alias hoặc signature nhiều token; một token như `sinh`
+không đủ chọn `khai_sinh`. Negative phrase trong cấu trúc phủ định không chặn positive match.
+Clarification parser consume từng clause đúng một lần và vẫn cho phép câu explicit sửa answer
+đã lưu. Checklist khi chưa đủ dữ liệu chỉ hiển thị giấy tờ chắc chắn áp dụng, được persist như
+checklist tạm và trả lại các câu hỏi còn thiếu cho frontend.
 
 Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
 model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive

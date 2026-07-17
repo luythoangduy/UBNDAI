@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 
 IntentName = Literal[
     "procedure_discovery",
+    "switch_procedure",
+    "switch_confirmation",
     "clarification_answer",
     "checklist",
     "fee",

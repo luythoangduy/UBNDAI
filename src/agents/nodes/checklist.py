@@ -40,6 +40,10 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         name = requirement.name if requirement else item.requirement_code
         if item.status == "not_applicable":
             continue
+        if requirement and checklist_service.eval_condition(
+            requirement.condition, answers
+        ) is None:
+            continue
         order += 1
         line = f"{order}. {name}"
         if requirement and requirement.original_required:
@@ -66,6 +70,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "Một số mục còn tuỳ trường hợp — bạn trả lời thêm để checklist chính xác hơn:"
         )
         pending_questions = [question.text for question in unanswered]
+
+    for warning in checklist_service.guidance_warnings(procedure, answers):
+        lines.append(f"Lưu ý: {warning}")
 
     citations = citations_from_chunks(chunks_from_procedure(procedure))
     return {

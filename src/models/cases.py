@@ -18,7 +18,9 @@ CaseStatus = Literal[
     "done",
     "rejected",
 ]
-PendingAction = Literal["select_procedure", "answer_clarification"]
+PendingAction = Literal[
+    "select_procedure", "answer_clarification", "confirm_switch_procedure"
+]
 
 ChecklistItemStatus = Literal[
     "missing",  # chưa có giấy tờ
@@ -50,6 +52,7 @@ class Case(BaseModel):
     pending_action: PendingAction | None = None
     pending_procedure_ids: list[str] = Field(default_factory=list)
     pending_question_keys: list[str] = Field(default_factory=list)
+    pending_switch_query: str | None = None
     checklist: list[ChecklistItem] = Field(default_factory=list)
     form_data: dict[str, Any] = Field(
         default_factory=dict, description="Dữ liệu biểu mẫu đã autofill/người dân sửa"
@@ -78,3 +81,4 @@ class CaseUpdate(BaseModel):
     pending_action: PendingAction | None = None
     pending_procedure_ids: list[str] | None = None
     pending_question_keys: list[str] | None = None
+    pending_switch_query: str | None = None

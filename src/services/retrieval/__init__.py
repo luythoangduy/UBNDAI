@@ -14,6 +14,7 @@ Mỗi chunk giữ metadata procedure_id + section để trace citation (AGENTS.m
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from src.config import settings
@@ -97,29 +98,57 @@ def _identity_score(query: str, procedure: Procedure) -> float:
     from src.services.retrieval.common import fold_ascii, tokenize
 
     folded_query = fold_ascii(query)
-    if any(
-        fold_ascii(keyword) in folded_query
-        for keyword in getattr(procedure, "negative_keywords", [])
-    ):
-        return 0.0
     query_tokens = set(tokenize(query)) - _IDENTITY_GENERIC_TOKENS
     if not query_tokens:
         return 0.0
-    phrases = [
-        getattr(procedure, "name", ""),
-        *getattr(procedure, "aliases", []),
-        *getattr(procedure, "example_queries", []),
-    ]
+    explicit_phrases = [procedure.name, *procedure.aliases]
+    if any(
+        fold_ascii(phrase) in folded_query
+        and not _phrase_is_negated(folded_query, fold_ascii(phrase))
+        for phrase in explicit_phrases
+    ):
+        return 1.0
+    signature_match = any(
+        {fold_ascii(token) for token in group} <= query_tokens
+        for group in procedure.required_token_groups
+    )
+    signature_negated = any(
+        _phrase_is_negated(folded_query, " ".join(fold_ascii(token) for token in group))
+        for group in procedure.required_token_groups
+    )
+    if signature_match and not signature_negated:
+        return 0.95
+    if any(
+        fold_ascii(keyword) in folded_query
+        and not _phrase_is_negated(folded_query, fold_ascii(keyword))
+        for keyword in procedure.negative_keywords
+    ):
+        return 0.0
+    phrases = [*explicit_phrases, *procedure.example_queries]
     best = 0.0
     for phrase in phrases:
         folded_phrase = fold_ascii(phrase)
         phrase_tokens = set(tokenize(phrase)) - _IDENTITY_GENERIC_TOKENS
-        if not phrase_tokens:
+        if len(phrase_tokens) < 2:
             continue
         if folded_phrase in folded_query:
             return 1.0
-        best = max(best, len(query_tokens & phrase_tokens) / len(phrase_tokens))
+        overlap = len(query_tokens & phrase_tokens)
+        procedure_coverage = overlap / len(phrase_tokens)
+        query_coverage = overlap / len(query_tokens)
+        best = max(best, 0.7 * procedure_coverage + 0.3 * query_coverage)
     return round(best, 6)
+
+
+def _phrase_is_negated(text: str, phrase: str) -> bool:
+    escaped = re.escape(phrase)
+    return bool(
+        re.search(
+            rf"\b(?:khong\s+(?:phai|hoi|lam)|bo\s+qua)"
+            rf"(?:\s+\w+){{0,3}}\s+{escaped}\b",
+            text,
+        )
+    )
 
 
 def reset_caches() -> None:

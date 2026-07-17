@@ -21,28 +21,44 @@ def unresolved_questions(
 def extract_answers(
     message: str,
     questions: list[ClarifyingQuestion],
+    *,
+    allow_standalone: bool = True,
 ) -> dict[str, Any]:
-    """Mỗi thông tin trong message chỉ được dùng để trả lời một key."""
+    """Parse tuần tự; mỗi clause chỉ được consume một lần."""
     if not questions:
         return {}
     folded = fold_ascii(message)
     extracted: dict[str, Any] = {}
+    clauses = [
+        clause.strip()
+        for clause in re.split(r"[,;.!?\n]+|\bva\b", folded)
+        if clause.strip()
+    ]
+    question_cursor = 0
 
-    for question in questions:
-        value = _extract_for_key(folded, question)
-        if value is not None:
-            extracted[question.key] = value
-
-    # Generic boolean chỉ hợp lệ khi toàn bộ message là một câu trả lời ngắn.
-    # Không tái sử dụng "không" trong "không kết hôn" cho câu hỏi sinh tại đâu.
-    if not extracted:
-        generic = _standalone_boolean(folded)
-        first_boolean = next(
-            (question for question in questions if question.answer_type == "boolean"),
-            None,
-        )
-        if generic is not None and first_boolean:
-            extracted[first_boolean.key] = generic
+    for clause in clauses:
+        explicit = [
+            (index, value)
+            for index, question in enumerate(questions)
+            if (value := _extract_for_key(clause, question)) is not None
+        ]
+        if explicit:
+            # Clause semantic cụ thể chỉ map key rõ nhất/đầu tiên trong catalog.
+            index, value = explicit[0]
+            extracted[questions[index].key] = value
+            question_cursor = max(question_cursor, index + 1)
+            continue
+        if not allow_standalone:
+            continue
+        generic = _standalone_boolean(clause)
+        if generic is None:
+            continue
+        for index in range(question_cursor, len(questions)):
+            if questions[index].answer_type != "boolean":
+                continue
+            extracted[questions[index].key] = generic
+            question_cursor = index + 1
+            break
 
     if not extracted and len(questions) == 1 and questions[0].answer_type == "text":
         extracted[questions[0].key] = message.strip()
@@ -51,10 +67,14 @@ def extract_answers(
 
 def _extract_for_key(text: str, question: ClarifyingQuestion) -> Any | None:
     if question.answer_type == "integer":
-        match = re.search(
+        patterns = (
             r"\b(?:sinh\s+duoc|duoc|da\s+sinh)\s+(\d{1,4})\s+ngay\b",
-            text,
-        ) or re.fullmatch(r"\s*(\d{1,4})\s*(?:ngay)?\s*", text)
+            r"\b(\d{1,4})\s+ngay\s+roi\b",
+            r"\bbe\s+(\d{1,4})\s+ngay\s+tuoi\b",
+            r"\bmoi\s+sinh\s+(\d{1,4})\s+ngay\b",
+        )
+        match = next((match for pattern in patterns if (match := re.search(pattern, text))), None)
+        match = match or re.fullmatch(r"\s*(\d{1,4})\s*(?:ngay)?\s*", text)
         if not match:
             return None
         value = int(match.group(1))
@@ -97,3 +117,13 @@ def _standalone_boolean(text: str) -> bool | None:
     if any(token in _YES for token in tokens):
         return True
     return None
+
+
+def is_correction_message(message: str) -> bool:
+    folded = fold_ascii(message)
+    return any(
+        marker in folded
+        for marker in (
+            "sua lai", "dinh chinh", "nham", "khong dung", "thay doi", "thuc ra",
+        )
+    )

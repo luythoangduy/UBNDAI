@@ -54,6 +54,10 @@ class DocumentRequirement(BaseModel):
             "vd \"answers.ket_hon == false\". None = luôn bắt buộc."
         ),
     )
+    condition_label: str | None = Field(
+        default=None,
+        description="Mô tả điều kiện thân thiện với người dân; không lộ expression nội bộ",
+    )
     original_required: bool = True
     copies: int = 0
     accepted_doc_types: list[str] = Field(
@@ -93,12 +97,15 @@ class Procedure(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     example_queries: list[str] = Field(default_factory=list)
     negative_keywords: list[str] = Field(default_factory=list)
+    required_token_groups: list[list[str]] = Field(default_factory=list)
     agency: str = Field(description="Cơ quan thực hiện, vd 'UBND cấp xã'")
     legal_basis: list[str] = Field(
         default_factory=list, description="Căn cứ pháp lý (tên văn bản) — dùng cho citation"
     )
     processing_days: int | None = None
     fee_vnd: int | None = None
+    late_registration_after_days: int | None = Field(default=None, ge=0)
+    late_registration_warning: str | None = None
     clarifying_questions: list[ClarifyingQuestion] = Field(
         default_factory=list,
         description="Câu hỏi làm rõ có key/type để parse và chỉ hỏi phần còn thiếu",
@@ -137,4 +144,12 @@ class Procedure(BaseModel):
         template_ids = [template.id for template in self.form_templates]
         if len(template_ids) != len(set(template_ids)):
             raise ValueError("FormTemplate.id phải unique trong một thủ tục")
+        if any(len(set(group)) < 2 for group in self.required_token_groups):
+            raise ValueError("Mỗi required_token_group phải có ít nhất hai token")
+        if bool(self.late_registration_after_days is not None) != bool(
+            self.late_registration_warning
+        ):
+            raise ValueError(
+                "late_registration_after_days và warning phải được khai báo cùng nhau"
+            )
         return self

@@ -1,0 +1,77 @@
+{
+  "id": "khai_sinh",
+  "national_code": "1.001193",
+  "name": "Đăng ký khai sinh",
+  "agency": "UBND cấp xã",
+  "legal_basis": [
+    "Luật Hộ tịch 2014",
+    "Nghị định 123/2015/NĐ-CP",
+    "Thông tư 04/2020/TT-BTP"
+  ],
+  "processing_days": 1,
+  "fee_vnd": 0,
+  "clarifying_questions": [
+    "Cha mẹ bé đã đăng ký kết hôn chưa?",
+    "Bé sinh tại cơ sở y tế hay ngoài cơ sở y tế?",
+    "Bé sinh được bao nhiêu ngày rồi?"
+  ],
+  "requirements": [
+    {
+      "code": "to_khai_khai_sinh",
+      "name": "Tờ khai đăng ký khai sinh (mẫu TP/HT-2020)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": [],
+      "notes": "Hệ thống tự điền từ giấy tờ đã upload"
+    },
+    {
+      "code": "giay_chung_sinh",
+      "name": "Giấy chứng sinh",
+      "condition": "answers.sinh_tai_co_so_y_te == true",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["giay_chung_sinh"]
+    },
+    {
+      "code": "van_ban_nguoi_lam_chung",
+      "name": "Văn bản xác nhận của người làm chứng về việc sinh",
+      "condition": "answers.sinh_tai_co_so_y_te == false",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["van_ban_lam_chung"]
+    },
+    {
+      "code": "cccd_cha_me",
+      "name": "CCCD/hộ chiếu của cha, mẹ (xuất trình)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["cccd"]
+    },
+    {
+      "code": "giay_dang_ky_ket_hon",
+      "name": "Giấy chứng nhận kết hôn của cha mẹ (xuất trình)",
+      "condition": "answers.ket_hon == true",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["giay_dang_ky_ket_hon"]
+    }
+  ],
+  "form_templates": [
+    {
+      "id": "TP-HT-2020-KS",
+      "name": "Tờ khai đăng ký khai sinh",
+      "fields": [
+        {"key": "ho_ten_con", "label": "Họ, chữ đệm, tên của trẻ", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.ho_ten_con"]},
+        {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true, "ocr_sources": ["giay_chung_sinh.ngay_sinh"]},
+        {"key": "noi_sinh", "label": "Nơi sinh", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.noi_sinh"]},
+        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "ocr_sources": ["giay_chung_sinh.gioi_tinh"]},
+        {"key": "ho_ten_me", "label": "Họ tên mẹ", "type": "text", "required": true, "ocr_sources": ["cccd.ho_ten", "giay_chung_sinh.ho_ten_me"]},
+        {"key": "so_cccd_me", "label": "Số CCCD của mẹ", "type": "text", "required": true, "ocr_sources": ["cccd.so_cccd"]},
+        {"key": "ho_ten_cha", "label": "Họ tên cha", "type": "text", "required": false, "ocr_sources": ["cccd.ho_ten", "giay_dang_ky_ket_hon.ho_ten_chong"]}
+      ]
+    }
+  ],
+  "source_url": "https://dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=1.001193"
+}

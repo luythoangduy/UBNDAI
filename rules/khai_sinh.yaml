@@ -1,0 +1,33 @@
+# Luật kiểm tra hồ sơ Đăng ký khai sinh. Owner: Dev B.
+# severity=error chỉ tồn tại ở file rule (AI checker không được sinh error).
+# Field path: <doc_type>.<field_key> — khớp ExtractedDocument.field_map().
+
+procedure: khai_sinh
+rules:
+  - id: KS-R1
+    description: Phải có giấy chứng sinh khi sinh tại cơ sở y tế
+    when: answers.sinh_tai_co_so_y_te == true
+    check: exists(doc.giay_chung_sinh)
+    severity: error
+    message: "Hồ sơ thiếu Giấy chứng sinh. Vui lòng chụp/tải lên Giấy chứng sinh do cơ sở y tế cấp."
+
+  - id: KS-R2
+    description: Họ tên mẹ trên giấy chứng sinh phải khớp CCCD
+    when: exists(doc.giay_chung_sinh) and exists(doc.cccd)
+    check: match(giay_chung_sinh.ho_ten_me, cccd.ho_ten)
+    severity: error
+    message: "Họ tên mẹ trên Giấy chứng sinh không khớp với CCCD. Kiểm tra lại hai giấy tờ hoặc sửa trường trích xuất nếu hệ thống đọc sai."
+
+  - id: KS-R3
+    description: Quá 60 ngày kể từ ngày sinh là đăng ký khai sinh quá hạn
+    when: exists(doc.giay_chung_sinh)
+    check: days_since(giay_chung_sinh.ngay_sinh) <= 60
+    severity: warning
+    message: "Đã quá 60 ngày kể từ ngày sinh — thuộc diện đăng ký khai sinh quá hạn, cán bộ có thể yêu cầu giải trình thêm."
+
+  - id: KS-R4
+    description: Cha mẹ chưa kết hôn thì không yêu cầu giấy kết hôn, nhưng phần khai về cha cần thủ tục nhận cha con
+    when: answers.ket_hon == false
+    check: not filled(form.ho_ten_cha)
+    severity: warning
+    message: "Cha mẹ chưa đăng ký kết hôn: nếu muốn ghi tên cha, cần làm đồng thời thủ tục nhận cha, mẹ, con."

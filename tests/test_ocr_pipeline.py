@@ -172,3 +172,35 @@ async def test_paddle_fallback_flags_low_confidence(monkeypatch):
 
     assert document.doc_type == "cccd"
     assert document.needs_human_review is True
+
+
+async def test_illegible_regions_force_human_review(monkeypatch):
+    result = OcrResult(
+        raw_text="Họ tên: [ILLEGIBLE]",
+        fields=[OcrField(key="ho_ten", value="", confidence=0.9)],
+        doc_type_hint="giay_chung_sinh",
+        doc_type_confidence=0.95,
+        engine="fake",
+        illegible_regions=["dòng họ tên — mực nhòe"],
+    )
+    _install(monkeypatch, result)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.needs_human_review is True
+
+
+async def test_low_overall_ocr_confidence_forces_human_review(monkeypatch):
+    result = OcrResult(
+        raw_text="ok",
+        fields=[OcrField(key="ho_ten", value="A", confidence=0.95)],
+        doc_type_hint="giay_chung_sinh",
+        doc_type_confidence=0.95,
+        engine="fake",
+        ocr_confidence=0.5,
+    )
+    _install(monkeypatch, result)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.needs_human_review is True

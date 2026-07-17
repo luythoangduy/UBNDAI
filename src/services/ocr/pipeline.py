@@ -6,7 +6,8 @@ Bước:
 3. doc_type: hint từ engine (vision LLM tự nhận diện) cross-check với
    ``classifier.classify(raw_text)`` (keyword matching): khớp nhau → tin cậy hơn;
    lệch nhau khi classifier chắc chắn → needs_human_review.
-4. Trường/doc_type dưới ngưỡng OCR_CONFIDENCE_THRESHOLD → needs_human_review=True
+4. needs_human_review=True khi: trường/doc_type dưới ngưỡng OCR_CONFIDENCE_THRESHOLD,
+   HOẶC có vùng [ILLEGIBLE], HOẶC ocr_confidence tổng thể dưới ngưỡng
    (AGENTS §5: confidence thấp bắt buộc needs_human_review, không im lặng điền form).
 5. TODO(B) Sprint 1: lưu file qua upload_storage (port từ C2) → file_id thật.
 6. TODO(B) Sprint 2: form_filler.autofill(case) + cập nhật ChecklistItem khớp
@@ -87,6 +88,8 @@ async def process(
         or doc_type == "unknown"
         or doc_type_confidence < threshold
         or any(f.confidence < threshold for f in fields)
+        or bool(result.illegible_regions)
+        or result.ocr_confidence < threshold
     )
 
     return ExtractedDocument(

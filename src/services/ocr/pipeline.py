@@ -9,8 +9,21 @@ Bước:
 6. Cập nhật ChecklistItem khớp accepted_doc_types → status='uploaded'.
 """
 
-from src.models import ExtractedDocument
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from src.config import settings
+from src.models import ExtractedDocument, ExtractedField
+from src.services.ocr.classifier import classify
+from src.services.ocr.engine import get_engine
 
 
 async def process(case_id: str, filename: str, content: bytes) -> ExtractedDocument:
-    raise NotImplementedError  # TODO(B) Sprint 1
+    if len(content) > 10 * 1024 * 1024:
+        raise ValueError("File too large; maximum is 10 MB")
+    allowed = {".jpg", ".jpeg", ".png", ".pdf"}
+    if not any(filename.casefold().endswith(ext) for ext in allowed):
+        raise ValueError("Unsupported document extension")
+    result = get_engine().extract(content)
+    doc_type, type_confidence = classify(result.raw_text)
+    return ExtractedDocument(id=str(uuid4()), case_id=case_id, file_id=str(uuid4()), doc_type=doc_type, doc_type_confidence=type_confidence, fields=[ExtractedField(key="raw_text", value=result.raw_text, confidence=result.confidence)], raw_text=result.raw_text, needs_human_review=type_confidence < settings.ocr_confidence_threshold or result.confidence < settings.ocr_confidence_threshold, ocr_engine=settings.ocr_engine, created_at=datetime.now(timezone.utc))

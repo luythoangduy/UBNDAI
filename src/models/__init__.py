@@ -21,6 +21,28 @@ from src.models.procedures import (
     Procedure,
 )
 from src.models.validation import ValidationIssue, ValidationReport
+from src.models.citizen import (
+    CitizenCaseCreate,
+    CitizenCaseUpdate,
+    CitizenSubmitRequest,
+    ConsentRecord,
+    RoutingDecision,
+    UploadCompleteRequest,
+    UploadIntentRequest,
+    UploadIntentResponse,
+)
+from src.models.officer import (
+    ApplicationCase,
+    CaseAuditEvent,
+    CaseDocument,
+    CaseSubmissionVersion,
+    ExtractedFieldRecord,
+    OfficerDecision,
+    OfficerIdentity,
+    SupplementRequest,
+    TokenClaims,
+    ValidationFinding,
+)
 
 __all__ = [
     "AnomalyAlert",
@@ -46,4 +68,22 @@ __all__ = [
     "Procedure",
     "ValidationIssue",
     "ValidationReport",
+    "ApplicationCase",
+    "CaseAuditEvent",
+    "CaseDocument",
+    "CaseSubmissionVersion",
+    "ExtractedFieldRecord",
+    "OfficerDecision",
+    "OfficerIdentity",
+    "SupplementRequest",
+    "TokenClaims",
+    "ValidationFinding",
+    "CitizenCaseCreate",
+    "CitizenCaseUpdate",
+    "CitizenSubmitRequest",
+    "ConsentRecord",
+    "RoutingDecision",
+    "UploadCompleteRequest",
+    "UploadIntentRequest",
+    "UploadIntentResponse",
 ]

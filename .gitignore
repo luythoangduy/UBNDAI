@@ -12,6 +12,8 @@ logs/
 *.log
 node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
 .pytest_cache/
+.coverage
 .ruff_cache/
 secrets/

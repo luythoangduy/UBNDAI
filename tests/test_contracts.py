@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.models import ChatRequest, Procedure, ValidationIssue
+from src.models import ChatRequest, ClarifyingQuestion, Procedure, ValidationIssue
 
 PROCEDURES_DIR = Path(__file__).resolve().parents[1] / "data" / "procedures"
 
@@ -60,3 +60,17 @@ def test_chat_request_strips_and_rejects_blank_message():
     assert ChatRequest(message="  xin chào  ").message == "xin chào"
     with pytest.raises(ValidationError):
         ChatRequest(message="   ")
+
+
+def test_choice_question_requires_options():
+    with pytest.raises(ValidationError):
+        ClarifyingQuestion(key="loai", text="Chọn loại", answer_type="choice")
+
+
+@pytest.mark.parametrize("field", ["clarifying_questions", "requirements", "form_templates"])
+def test_procedure_rejects_duplicate_catalog_identifiers(field):
+    raw = json.loads((PROCEDURES_DIR / "khai_sinh.json").read_text(encoding="utf-8"))
+    source = raw[field][0]
+    raw[field].append(source)
+    with pytest.raises(ValidationError):
+        Procedure.model_validate(raw)

@@ -11,18 +11,25 @@ from typing import Any
 from src.agents.state import GuidanceState
 from src.config import settings
 from src.services import catalog
-from src.services.retrieval import NO_SOURCE_WARNING, citations_from_chunks, retrieve
+from src.services.retrieval import (
+    NO_SOURCE_WARNING,
+    citations_from_chunks,
+    retrieve_procedure_identity,
+)
 
 
 async def run(state: GuidanceState) -> dict[str, Any]:
     query = state.get("rewritten_query") or ""
-    chunks = retrieve(query)
+    chunks = retrieve_procedure_identity(query)
     if not chunks:
         return {
             "reply": NO_SOURCE_WARNING,
             "reply_kind": "fallback",
             "citations": [],
             "retrieved_chunks": [],
+            "pending_action": None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
         }
 
     scores: dict[str, float] = {}
@@ -39,6 +46,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "reply_kind": "fallback",
             "citations": [],
             "retrieved_chunks": [],
+            "pending_action": None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
         }
     candidates = [
         {"procedure_id": procedure_id, "score": round(score, 6)}
@@ -62,6 +72,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "reply_kind": "fallback",
             "citations": [],
             "retrieved_chunks": retrieved,
+            "pending_action": None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
         }
 
     is_distinct = len(ranked) == 1 or margin >= settings.identify_min_margin
@@ -77,6 +90,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
                 "reply_kind": "fallback",
                 "citations": [],
                 "retrieved_chunks": retrieved,
+                "pending_action": None,
+                "pending_procedure_ids": [],
+                "pending_question_keys": [],
             }
         questions = [question.text for question in procedure.clarifying_questions]
         reply = _procedure_intro(procedure)
@@ -88,6 +104,11 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "identify_confidence": round(confidence, 4),
             "candidate_procedures": candidates,
             "pending_questions": questions,
+            "pending_action": "answer_clarification" if questions else None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [
+                question.key for question in procedure.clarifying_questions
+            ],
             "reply": reply,
             "reply_kind": "clarify",
             "citations": [c.model_dump() for c in citations_from_chunks(proc_chunks)],
@@ -105,6 +126,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         "identify_confidence": round(confidence, 4),
         "candidate_procedures": candidates,
         "pending_questions": ["Bạn đang cần làm thủ tục nào trong số trên?"],
+        "pending_action": "select_procedure",
+        "pending_procedure_ids": [procedure_id for procedure_id, _ in ranked[:3]],
+        "pending_question_keys": [],
         "reply": "\n".join(lines),
         "reply_kind": "clarify",
         "citations": [c.model_dump() for c in citations_from_chunks(chunks)],

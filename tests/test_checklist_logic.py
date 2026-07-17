@@ -2,12 +2,14 @@
 
 import pytest
 
+from src.models import ClarifyingQuestion
 from src.services import catalog
 from src.services.checklist import (
     build_checklist,
     eval_condition,
     unresolved_condition_keys,
 )
+from src.services.clarification import extract_answers
 
 
 def _khai_sinh():
@@ -72,3 +74,42 @@ def test_unresolved_condition_keys():
     assert unresolved_condition_keys(
         procedure, {"sinh_tai_co_so_y_te": True, "ket_hon": True}
     ) == []
+
+
+def test_specific_negative_answer_does_not_fill_other_boolean():
+    questions = _khai_sinh().clarifying_questions
+    result = extract_answers("không kết hôn", questions)
+    assert result == {"ket_hon": False}
+    assert "sinh_tai_co_so_y_te" not in result
+
+
+def test_generic_boolean_only_answers_first_pending_question():
+    questions = _khai_sinh().clarifying_questions
+    assert extract_answers("có", questions) == {"ket_hon": True}
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Bé sinh ngày 12/7/2026", "CCCD của mẹ có đuôi 123456"],
+)
+def test_integer_parser_does_not_take_unrelated_number(message):
+    questions = _khai_sinh().clarifying_questions
+    assert "so_ngay_tu_khi_sinh" not in extract_answers(message, questions)
+
+
+def test_choice_and_single_text_have_deterministic_fallback():
+    choice = ClarifyingQuestion(
+        key="noi_nop",
+        text="Chọn nơi nộp",
+        answer_type="choice",
+        options=["Trực tuyến", "Trực tiếp"],
+    )
+    text = ClarifyingQuestion(
+        key="ghi_chu", text="Bạn cần ghi chú gì?", answer_type="text"
+    )
+    assert extract_answers("Tôi chọn trực tuyến", [choice]) == {
+        "noi_nop": "Trực tuyến"
+    }
+    assert extract_answers("Cần hỗ trợ bản sao", [text]) == {
+        "ghi_chu": "Cần hỗ trợ bản sao"
+    }

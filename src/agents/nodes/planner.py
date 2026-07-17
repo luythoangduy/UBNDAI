@@ -6,6 +6,7 @@ LLM-first, rule-based fallback khi LLM lỗi/thiếu key (AGENTS.md §6).
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -41,6 +42,30 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     message = _last_human_text(state)
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
     answers = dict(state.get("answers") or {})
+
+    if procedure is None and state.get("pending_action") == "select_procedure":
+        candidate_ids = state.get("pending_procedure_ids") or []
+        selected_id = _parse_candidate_selection(message, candidate_ids)
+        selected = catalog.get_procedure(selected_id)
+        if selected:
+            remaining = unresolved_questions(selected, answers)
+            return {
+                "route": "clarify" if remaining else "checklist",
+                "rewritten_query": message,
+                "selected_procedure_id": selected.id,
+                "answers": answers,
+                "pending_action": "answer_clarification" if remaining else None,
+                "pending_procedure_ids": [],
+                "pending_question_keys": [question.key for question in remaining],
+            }
+        return {
+            "route": "clarify",
+            "rewritten_query": message,
+            "answers": answers,
+            "pending_action": "select_procedure",
+            "pending_procedure_ids": candidate_ids,
+            "pending_question_keys": [],
+        }
     pending = unresolved_questions(procedure, answers) if procedure else []
     unresolved = [question.key for question in pending]
 
@@ -48,10 +73,14 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     if deterministic:
         answers.update(deterministic)
         remaining = unresolved_questions(procedure, answers)
+        explicit_route = _explicit_response_route(message)
         return {
-            "route": "clarify" if remaining else "checklist",
+            "route": explicit_route or ("clarify" if remaining else "checklist"),
             "rewritten_query": message,
             "answers": answers,
+            "pending_action": "answer_clarification" if remaining else None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [question.key for question in remaining],
         }
 
     decision = await _llm_decision(state, message, procedure, answers, unresolved)
@@ -71,15 +100,23 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             answers[extracted.key] = _coerce(extracted.value)
             accepted_answers += 1
 
-    if accepted_answers and procedure:
+    explicit_route = _explicit_response_route(message)
+    if explicit_route and procedure:
+        decision.route = explicit_route
+    elif accepted_answers and procedure:
         decision.route = (
             "clarify" if unresolved_questions(procedure, answers) else "checklist"
         )
+
+    remaining = unresolved_questions(procedure, answers) if procedure else []
 
     return {
         "route": decision.route,
         "rewritten_query": decision.rewritten_query.strip() or message,
         "answers": answers,
+        "pending_action": "answer_clarification" if remaining else None,
+        "pending_procedure_ids": [],
+        "pending_question_keys": [question.key for question in remaining],
     }
 
 
@@ -145,3 +182,34 @@ def _last_human_text(state: GuidanceState) -> str:
         if getattr(message, "type", "") == "human":
             return str(message.content)
     return ""
+
+
+def _explicit_response_route(message: str) -> Literal["answer", "checklist"] | None:
+    folded = fold_ascii(message)
+    if any(keyword in folded for keyword in _CHECKLIST_KEYWORDS):
+        return "checklist"
+    answer_keywords = (
+        "le phi", "bao nhieu tien", "thoi han", "may ngay", "bao lau",
+        "co quan", "noi nop", "nop o dau",
+    )
+    if any(keyword in folded for keyword in answer_keywords):
+        return "answer"
+    return None
+
+
+def _parse_candidate_selection(message: str, candidate_ids: list[str]) -> str | None:
+    folded = fold_ascii(message).strip()
+    numeric = re.fullmatch(r"(?:so\s*)?(\d+)", folded)
+    if numeric:
+        index = int(numeric.group(1)) - 1
+        return candidate_ids[index] if 0 <= index < len(candidate_ids) else None
+    if folded in {"thu tuc dau tien", "dau tien"} and candidate_ids:
+        return candidate_ids[0]
+    for procedure_id in candidate_ids:
+        procedure = catalog.get_procedure(procedure_id)
+        if procedure and any(
+            fold_ascii(name) in folded
+            for name in [procedure.name, *procedure.aliases]
+        ):
+            return procedure_id
+    return None

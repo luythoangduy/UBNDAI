@@ -13,6 +13,23 @@ from src.services.retrieval import citations_from_chunks, retrieve
 async def run(state: GuidanceState) -> dict[str, Any]:
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
     if procedure is None:
+        candidate_ids = state.get("pending_procedure_ids") or []
+        if state.get("pending_action") == "select_procedure" and candidate_ids:
+            lines = ["Bạn chọn giúp mình một thủ tục trong danh sách sau:"]
+            for index, procedure_id in enumerate(candidate_ids, start=1):
+                candidate = catalog.get_procedure(procedure_id)
+                if candidate:
+                    lines.append(f"{index}. {candidate.name} — {candidate.agency}")
+            lines.append("Bạn có thể trả lời bằng số thứ tự hoặc tên thủ tục.")
+            return {
+                "reply": "\n".join(lines),
+                "reply_kind": "clarify",
+                "pending_questions": ["Bạn chọn thủ tục số mấy?"],
+                "pending_action": "select_procedure",
+                "pending_procedure_ids": candidate_ids,
+                "pending_question_keys": [],
+                "citations": [],
+            }
         return {
             "reply": (
                 "Bạn mô tả giúp mình nhu cầu cụ thể (ví dụ: đăng ký khai sinh cho con, "
@@ -20,6 +37,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             ),
             "reply_kind": "clarify",
             "pending_questions": ["Bạn đang cần làm thủ tục hành chính nào?"],
+            "pending_action": None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
             "citations": [],
         }
 
@@ -38,6 +58,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             ),
             "reply_kind": "clarify",
             "pending_questions": [],
+            "pending_action": None,
+            "pending_procedure_ids": [],
+            "pending_question_keys": [],
             "citations": citations,
         }
 
@@ -49,5 +72,8 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         ),
         "reply_kind": "clarify",
         "pending_questions": questions,
+        "pending_action": "answer_clarification",
+        "pending_procedure_ids": [],
+        "pending_question_keys": [question.key for question in unanswered],
         "citations": citations,
     }

@@ -23,6 +23,7 @@ from src.services.retrieval import (
     chunks_from_procedure,
     retrieve,
 )
+from src.services.retrieval.common import fold_ascii
 
 logger = logging.getLogger(__name__)
 
@@ -114,17 +115,17 @@ def _structured_answer(
     """Thông tin có cấu trúc đọc thẳng từ Procedure, không cần LLM."""
     if procedure is None:
         return None
-    folded = query.casefold()
+    folded = fold_ascii(query)
     overview = next(
         (chunk for chunk in chunks if chunk.metadata.get("section") == "tong_quan"),
         chunks_from_procedure(procedure)[0],
     )
-    if any(term in folded for term in ("lệ phí", "le phi", "bao nhiêu tiền")):
+    if any(term in folded for term in ("le phi", "bao nhieu tien")):
         if procedure.fee_vnd is None:
             return None
         fee = "được miễn" if procedure.fee_vnd == 0 else f"là {procedure.fee_vnd:,} đồng"
         return f"Lệ phí thủ tục {procedure.name} {fee} [1].", [overview]
-    if any(term in folded for term in ("thời hạn", "thoi han", "mấy ngày", "bao lâu")):
+    if any(term in folded for term in ("thoi han", "may ngay", "bao lau")):
         if procedure.processing_days is None:
             return None
         return (
@@ -132,7 +133,7 @@ def _structured_answer(
             f"{procedure.processing_days} ngày làm việc [1].",
             [overview],
         )
-    if any(term in folded for term in ("cơ quan", "co quan", "nơi nộp", "noi nop")):
+    if any(term in folded for term in ("co quan", "noi nop", "nop o dau")):
         return f"Cơ quan thực hiện thủ tục {procedure.name}: {procedure.agency} [1].", [overview]
     return None
 

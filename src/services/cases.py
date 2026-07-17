@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import threading
 import uuid
-from collections import defaultdict
 from contextlib import asynccontextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,14 +23,30 @@ class ConcurrentCaseUpdateError(RuntimeError):
     pass
 
 
-_LOCKS: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+_LOCKS: dict[str, asyncio.Lock] = {}
+_LOCK_USERS: dict[str, int] = {}
+_LOCKS_GUARD = threading.Lock()
+_INITIALIZED_DATABASES: set[str] = set()
+_SCHEMA_GUARD = threading.Lock()
 
 
 @asynccontextmanager
 async def case_lock(case_id: str) -> AsyncIterator[None]:
     """Tuần tự hoá các lượt chat cùng case trong một process."""
-    async with _LOCKS[case_id]:
-        yield
+    with _LOCKS_GUARD:
+        lock = _LOCKS.setdefault(case_id, asyncio.Lock())
+        _LOCK_USERS[case_id] = _LOCK_USERS.get(case_id, 0) + 1
+    try:
+        async with lock:
+            yield
+    finally:
+        with _LOCKS_GUARD:
+            users = _LOCK_USERS[case_id] - 1
+            if users == 0:
+                _LOCK_USERS.pop(case_id, None)
+                _LOCKS.pop(case_id, None)
+            else:
+                _LOCK_USERS[case_id] = users
 
 
 async def create(payload: CaseCreate) -> Case:
@@ -164,7 +180,7 @@ def _get_messages_sync(case_id: str, limit: int) -> list[dict[str, str]]:
     with closing(_connect()) as connection:
         rows = connection.execute(
             "SELECT role, content FROM case_messages WHERE case_id = ? "
-            "ORDER BY rowid DESC LIMIT ?",
+            "ORDER BY id DESC LIMIT ?",
             (case_id, limit),
         ).fetchall()
     return [{"role": role, "content": content} for role, content in reversed(rows)]
@@ -181,23 +197,51 @@ def _connect() -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, timeout=5.0)
     connection.execute("PRAGMA busy_timeout = 5000")
-    connection.execute("PRAGMA journal_mode = WAL")
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS cases ("
-        "id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"
-    )
-    columns = {row[1] for row in connection.execute("PRAGMA table_info(cases)")}
-    if "version" not in columns:
-        connection.execute(
-            "ALTER TABLE cases ADD COLUMN version INTEGER NOT NULL DEFAULT 0"
-        )
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS case_messages ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, "
-        "role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)"
-    )
-    connection.execute(
-        "CREATE INDEX IF NOT EXISTS ix_case_messages_case_created "
-        "ON case_messages(case_id, created_at)"
-    )
+    _ensure_schema(connection, path)
     return connection
+
+
+def _ensure_schema(connection: sqlite3.Connection, path: Path) -> None:
+    database_key = str(path.resolve())
+    if database_key in _INITIALIZED_DATABASES:
+        return
+    with _SCHEMA_GUARD:
+        if database_key in _INITIALIZED_DATABASES:
+            return
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS cases ("
+            "id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"
+        )
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(cases)")}
+        if "version" not in columns:
+            connection.execute(
+                "ALTER TABLE cases ADD COLUMN version INTEGER NOT NULL DEFAULT 0"
+            )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS case_messages ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, "
+            "role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)"
+        )
+        message_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(case_messages)")
+        }
+        if "id" not in message_columns:
+            connection.execute("ALTER TABLE case_messages RENAME TO case_messages_legacy")
+            connection.execute(
+                "CREATE TABLE case_messages ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, "
+                "role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO case_messages (case_id, role, content, created_at) "
+                "SELECT case_id, role, content, created_at FROM case_messages_legacy "
+                "ORDER BY rowid"
+            )
+            connection.execute("DROP TABLE case_messages_legacy")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS ix_case_messages_case_id "
+            "ON case_messages(case_id, id)"
+        )
+        connection.commit()
+        _INITIALIZED_DATABASES.add(database_key)

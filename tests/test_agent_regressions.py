@@ -44,6 +44,18 @@ async def test_answer_retrieval_is_scoped_to_selected_procedure(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_mixed_clarification_and_agency_question_returns_agency_answer():
+    result = await answer.run(
+        {
+            "selected_procedure_id": "khai_sinh",
+            "rewritten_query": "Bé sinh ở bệnh viện, nộp ở đâu?",
+        }
+    )
+    assert result["reply_kind"] == "answer"
+    assert "UBND cấp xã" in result["reply"]
+
+
+@pytest.mark.asyncio
 async def test_weak_single_retrieval_result_is_not_auto_selected(monkeypatch):
     weak = RetrievedChunk(
         content="Thủ tục: Đăng ký khai sinh",
@@ -55,7 +67,7 @@ async def test_weak_single_retrieval_result_is_not_auto_selected(monkeypatch):
         },
         score=0.001,
     )
-    monkeypatch.setattr(identify, "retrieve", lambda query: [weak])
+    monkeypatch.setattr(identify, "retrieve_procedure_identity", lambda query: [weak])
     result = await identify.run({"rewritten_query": "mơ hồ"})
     assert "selected_procedure_id" not in result
 
@@ -64,10 +76,26 @@ async def test_weak_single_retrieval_result_is_not_auto_selected(monkeypatch):
 async def test_chunk_without_procedure_id_does_not_crash_identify(monkeypatch):
     monkeypatch.setattr(
         identify,
-        "retrieve",
+        "retrieve_procedure_identity",
         lambda query: [RetrievedChunk(content="x", metadata={}, score=1.0)],
     )
     result = await identify.run({"rewritten_query": "x"})
+    assert result["reply_kind"] == "fallback"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "đăng ký kết hôn",
+        "làm căn cước công dân",
+        "xin giấy phép xây dựng",
+        "thủ tục đất đai",
+    ],
+)
+@pytest.mark.asyncio
+async def test_unrelated_query_does_not_select_birth_registration(query):
+    result = await identify.run({"rewritten_query": query})
+    assert result.get("selected_procedure_id") is None
     assert result["reply_kind"] == "fallback"
 
 
@@ -87,6 +115,43 @@ async def test_planner_forces_identify_when_llm_returns_clarify_without_procedur
         }
     )
     assert result["route"] == "identify"
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_route"),
+    [
+        ("Bé sinh được 5 ngày, lệ phí bao nhiêu?", "answer"),
+        ("Bé sinh ở bệnh viện, nộp ở đâu?", "answer"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_extracted_answer_does_not_override_explicit_intent(
+    message, expected_route
+):
+    result = await planner.run(
+        {
+            "messages": [HumanMessage(content=message)],
+            "answers": {"ket_hon": True},
+            "selected_procedure_id": "khai_sinh",
+        }
+    )
+    assert result["route"] == expected_route
+    assert result["answers"]
+
+
+@pytest.mark.asyncio
+async def test_pending_candidate_can_be_selected_by_number():
+    result = await planner.run(
+        {
+            "messages": [HumanMessage(content="số 1")],
+            "answers": {},
+            "selected_procedure_id": None,
+            "pending_action": "select_procedure",
+            "pending_procedure_ids": ["khai_sinh"],
+        }
+    )
+    assert result["selected_procedure_id"] == "khai_sinh"
+    assert result["route"] == "clarify"
 
 
 @pytest.mark.asyncio

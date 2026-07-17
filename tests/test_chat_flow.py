@@ -78,7 +78,10 @@ def test_clarification_answer_is_extracted_and_persisted():
     second = _post(
         {
             "case_id": first["case_id"],
-            "message": "Có, bé sinh ở bệnh viện, bé sinh được 5 ngày",
+            "message": (
+                "Cha mẹ đã kết hôn, bé sinh ở bệnh viện, "
+                "bé sinh được 5 ngày"
+            ),
         }
     )
 
@@ -105,3 +108,15 @@ def test_only_unanswered_questions_are_returned():
 def test_empty_message_rejected():
     response = client.post("/api/v1/chat", json={"message": "   "})
     assert response.status_code == 422
+
+
+def test_concurrent_case_conflict_returns_409(monkeypatch):
+    from src.api.v1 import chat as chat_module
+    from src.services.cases import ConcurrentCaseUpdateError
+
+    async def conflict(payload):
+        raise ConcurrentCaseUpdateError("case-conflict")
+
+    monkeypatch.setattr(chat_module, "run_guidance", conflict)
+    response = client.post("/api/v1/chat", json={"message": "xin chào"})
+    assert response.status_code == 409

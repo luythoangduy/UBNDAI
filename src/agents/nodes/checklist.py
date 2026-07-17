@@ -71,6 +71,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     return {
         "checklist": [item.model_dump() for item in items],
         "pending_questions": pending_questions,
+        "pending_action": "answer_clarification" if unanswered else None,
+        "pending_procedure_ids": [],
+        "pending_question_keys": [question.key for question in unanswered],
         "reply": "\n".join(lines),
         "reply_kind": "checklist",
         "citations": [c.model_dump() for c in citations],

@@ -2,6 +2,22 @@
   "id": "khai_sinh",
   "national_code": "1.001193",
   "name": "Đăng ký khai sinh",
+  "aliases": [
+    "làm giấy khai sinh",
+    "đăng ký giấy khai sinh",
+    "khai sinh cho con"
+  ],
+  "example_queries": [
+    "tôi muốn đăng ký khai sinh cho con",
+    "tôi mới sinh con, giờ cần làm giấy tờ gì",
+    "làm khai sinh cho bé mới sinh"
+  ],
+  "negative_keywords": [
+    "đăng ký kết hôn",
+    "căn cước công dân",
+    "giấy phép xây dựng",
+    "đất đai"
+  ],
   "agency": "UBND cấp xã",
   "legal_basis": [
     "Luật Hộ tịch 2014",
@@ -24,7 +40,9 @@
     {
       "key": "so_ngay_tu_khi_sinh",
       "text": "Bé sinh được bao nhiêu ngày rồi?",
-      "answer_type": "integer"
+      "answer_type": "integer",
+      "minimum": 0,
+      "maximum": 3650
     }
   ],
   "requirements": [

@@ -22,7 +22,7 @@ def extract_answers(
     message: str,
     questions: list[ClarifyingQuestion],
 ) -> dict[str, Any]:
-    """Trích xuất chắc chắn trước; câu có/không ngắn gán theo thứ tự câu hỏi."""
+    """Mỗi thông tin trong message chỉ được dùng để trả lời một key."""
     if not questions:
         return {}
     folded = fold_ascii(message)
@@ -33,23 +33,44 @@ def extract_answers(
         if value is not None:
             extracted[question.key] = value
 
-    # "Có, bé sinh ở bệnh viện": location đã map key sinh; "có" trả lời
-    # câu boolean đầu tiên còn lại theo đúng thứ tự catalog.
-    clauses = [part.strip() for part in re.split(r"[,;.!?\n]+", folded) if part.strip()]
-    short_booleans = [_generic_boolean(clause) for clause in clauses]
-    short_booleans = [value for value in short_booleans if value is not None]
-    remaining = [
-        q for q in questions if q.answer_type == "boolean" and q.key not in extracted
-    ]
-    for question, value in zip(remaining, short_booleans, strict=False):
-        extracted[question.key] = value
+    # Generic boolean chỉ hợp lệ khi toàn bộ message là một câu trả lời ngắn.
+    # Không tái sử dụng "không" trong "không kết hôn" cho câu hỏi sinh tại đâu.
+    if not extracted:
+        generic = _standalone_boolean(folded)
+        first_boolean = next(
+            (question for question in questions if question.answer_type == "boolean"),
+            None,
+        )
+        if generic is not None and first_boolean:
+            extracted[first_boolean.key] = generic
+
+    if not extracted and len(questions) == 1 and questions[0].answer_type == "text":
+        extracted[questions[0].key] = message.strip()
     return extracted
 
 
 def _extract_for_key(text: str, question: ClarifyingQuestion) -> Any | None:
     if question.answer_type == "integer":
-        match = re.search(r"(?<!\d)(\d{1,6})(?!\d)(?:\s*ngay)?", text)
-        return int(match.group(1)) if match else None
+        match = re.search(
+            r"\b(?:sinh\s+duoc|duoc|da\s+sinh)\s+(\d{1,4})\s+ngay\b",
+            text,
+        ) or re.fullmatch(r"\s*(\d{1,4})\s*(?:ngay)?\s*", text)
+        if not match:
+            return None
+        value = int(match.group(1))
+        if question.minimum is not None and value < question.minimum:
+            return None
+        if question.maximum is not None and value > question.maximum:
+            return None
+        return value
+
+    if question.answer_type == "choice":
+        matches = [
+            option
+            for option in question.options
+            if fold_ascii(option) in text
+        ]
+        return matches[0] if len(matches) == 1 else None
 
     if question.answer_type != "boolean":
         return None
@@ -67,9 +88,9 @@ def _extract_for_key(text: str, question: ClarifyingQuestion) -> Any | None:
     return None
 
 
-def _generic_boolean(clause: str) -> bool | None:
-    tokens = clause.split()
-    if len(tokens) > 3:
+def _standalone_boolean(text: str) -> bool | None:
+    tokens = text.strip().split()
+    if len(tokens) > 2:
         return None
     if any(token in _NO for token in tokens):
         return False

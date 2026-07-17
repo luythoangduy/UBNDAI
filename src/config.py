@@ -22,8 +22,8 @@ class Settings(BaseSettings):
 
     retrieval_top_k: int = 6
     identify_confidence_threshold: float = 0.55
-    identify_min_relevance: float = 0.01
-    identify_min_margin: float = 0.005
+    identify_min_relevance: float = 0.6
+    identify_min_margin: float = 0.15
 
     ocr_engine: str = "paddleocr"  # 'paddleocr' | 'google_vision'
     ocr_confidence_threshold: float = 0.85

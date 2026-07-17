@@ -17,10 +17,15 @@ import logging
 from pathlib import Path
 
 from src.config import settings
+from src.models import Procedure
 from src.services import catalog
 from src.services.retrieval.bm25 import Bm25Index
 from src.services.retrieval.chroma_client import get_chroma_persistent_client
-from src.services.retrieval.chunking import chunks_from_catalog, chunks_from_procedure
+from src.services.retrieval.chunking import (
+    chunks_from_catalog,
+    chunks_from_procedure,
+    identity_chunk_from_procedure,
+)
 from src.services.retrieval.common import (
     NO_SOURCE_WARNING,
     RetrievedChunk,
@@ -36,6 +41,7 @@ __all__ = [
     "citations_from_chunks",
     "reset_caches",
     "retrieve",
+    "retrieve_procedure_identity",
 ]
 
 logger = logging.getLogger(__name__)
@@ -63,6 +69,57 @@ def retrieve(
     else:
         fused = dense or sparse
     return fused[:limit]
+
+
+_IDENTITY_GENERIC_TOKENS = {
+    "toi", "can", "muon", "lam", "xin", "thu", "tuc", "dang", "ky",
+    "giay", "to", "cho", "con", "be", "moi", "the", "nao", "gi", "ho",
+    "so", "va", "cua", "mot", "viec", "gio",
+}
+
+
+def retrieve_procedure_identity(query: str) -> list[RetrievedChunk]:
+    """Search identity metadata trên cùng thang điểm lexical [0, 1]."""
+    ranked: list[RetrievedChunk] = []
+    for procedure in catalog.load_catalog().values():
+        score = _identity_score(query, procedure)
+        if score <= 0:
+            continue
+        chunk = identity_chunk_from_procedure(procedure)
+        ranked.append(
+            RetrievedChunk(content=chunk.content, metadata=chunk.metadata, score=score)
+        )
+    ranked.sort(key=lambda chunk: float(chunk.score or 0), reverse=True)
+    return ranked
+
+
+def _identity_score(query: str, procedure: Procedure) -> float:
+    from src.services.retrieval.common import fold_ascii, tokenize
+
+    folded_query = fold_ascii(query)
+    if any(
+        fold_ascii(keyword) in folded_query
+        for keyword in getattr(procedure, "negative_keywords", [])
+    ):
+        return 0.0
+    query_tokens = set(tokenize(query)) - _IDENTITY_GENERIC_TOKENS
+    if not query_tokens:
+        return 0.0
+    phrases = [
+        getattr(procedure, "name", ""),
+        *getattr(procedure, "aliases", []),
+        *getattr(procedure, "example_queries", []),
+    ]
+    best = 0.0
+    for phrase in phrases:
+        folded_phrase = fold_ascii(phrase)
+        phrase_tokens = set(tokenize(phrase)) - _IDENTITY_GENERIC_TOKENS
+        if not phrase_tokens:
+            continue
+        if folded_phrase in folded_query:
+            return 1.0
+        best = max(best, len(query_tokens & phrase_tokens) / len(phrase_tokens))
+    return round(best, 6)
 
 
 def reset_caches() -> None:

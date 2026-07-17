@@ -81,12 +81,18 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         "case_id": case.id,
         "answers": dict(case.answers),
         "selected_procedure_id": case.procedure_id,
+        "pending_action": case.pending_action,
+        "pending_procedure_ids": list(case.pending_procedure_ids),
+        "pending_question_keys": list(case.pending_question_keys),
     }
     final = await _compiled_graph().ainvoke(initial)
 
     updates: dict[str, Any] = {
         "answers": final.get("answers", case.answers),
         "procedure_id": final.get("selected_procedure_id") or case.procedure_id,
+        "pending_action": final.get("pending_action"),
+        "pending_procedure_ids": final.get("pending_procedure_ids") or [],
+        "pending_question_keys": final.get("pending_question_keys") or [],
     }
     checklist_items = [
         ChecklistItem.model_validate(item) for item in final.get("checklist") or []

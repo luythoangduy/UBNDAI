@@ -39,6 +39,23 @@ def chunks_from_catalog(catalog: dict[str, Procedure]) -> list[RetrievedChunk]:
     return chunks
 
 
+def identity_chunk_from_procedure(procedure: Procedure) -> RetrievedChunk:
+    """Chunk riêng cho identify; tuyệt đối không chứa hồ sơ/biểu mẫu."""
+    lines = [f"Tên thủ tục: {procedure.name}"]
+    if procedure.aliases:
+        lines.append(f"Tên gọi khác: {'; '.join(procedure.aliases)}")
+    if procedure.example_queries:
+        lines.append(f"Nhu cầu ví dụ: {'; '.join(procedure.example_queries)}")
+    return _chunk(procedure, "identity", "\n".join(lines), {
+        "procedure_id": procedure.id,
+        "procedure_name": procedure.name,
+        "national_code": procedure.national_code or "",
+        "agency": procedure.agency,
+        "legal_basis": "; ".join(procedure.legal_basis),
+        "source_url": procedure.source_url or "",
+    })
+
+
 def _chunk(
     procedure: Procedure, section: str, text: str, base_metadata: dict[str, str]
 ) -> RetrievedChunk:

@@ -79,6 +79,15 @@ Response (`ChatResponse`): `reply`, `kind` (`clarify` | `checklist` | `answer` |
 trong `reply` khớp với `citations[].index`. Tin nhắn được strip và giới hạn 4.000 ký tự.
 Mọi câu trả lời về thủ tục đều kèm nguồn; thiếu nguồn thì trả cảnh báo "chưa đủ căn cứ".
 
+Nhận diện thủ tục chỉ dùng identity metadata (`name`, `aliases`, `example_queries`,
+`negative_keywords`), tách biệt với content index chứa hồ sơ/lệ phí/biểu mẫu. Trạng thái
+chờ chọn thủ tục và chờ trả lời làm rõ được persist trong `Case`, nên người dùng có thể
+trả lời bằng số thứ tự ở lượt kế tiếp.
+
+SQLite là cấu hình MVP và chỉ nên chạy một worker. Optimistic-lock conflict trả HTTP 409
+thay vì 500. Trước khi public deployment vẫn phải nối JWT ownership (`case.citizen_id`),
+rate limit, case expiration và idempotency key; `case_id` không được xem là cơ chế auth.
+
 Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
 model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive
 fallback, luồng vẫn chạy); `EMBEDDING_PROVIDER` (`auto`/`google`/`bge-m3`/`fake` — phải khớp

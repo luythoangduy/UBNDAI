@@ -17,9 +17,12 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "chroma_persist_dir", str(tmp_path / "chroma"))
     monkeypatch.setattr(settings, "bm25_index_path", str(tmp_path / "bm25.json"))
     monkeypatch.setattr(settings, "llm_api_key", "")
+    monkeypatch.setattr(settings, "ocr_engine", "paddleocr")
+    monkeypatch.setattr(settings, "ocr_llm_api_key", "")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OCR_LLM_API_KEY", raising=False)
     retrieval.reset_caches()
     yield
     retrieval.reset_caches()

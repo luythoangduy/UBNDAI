@@ -18,6 +18,7 @@ _DOC_TYPE_KEYWORDS: dict[str, list[tuple[str, float]]] = {
     "cccd": [
         ("can cuoc cong dan", 0.9),
         ("citizen identity", 0.9),
+        ("cccd", 0.7),
         ("can cuoc", 0.7),
         ("so dinh danh ca nhan", 0.3),
         ("quoc tich", 0.1),

@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+import pytest
 
 from src.models import ExtractedDocument
 from src.services.ocr import pipeline
@@ -150,3 +151,24 @@ async def test_engine_unknown_falls_back_to_classifier(monkeypatch):
 
     assert doc.doc_type == "cccd"
     assert doc.needs_human_review is False
+
+
+async def test_pipeline_rejects_unsafe_upload_extension():
+    with pytest.raises(ValueError, match="Unsupported document extension"):
+        await pipeline.process("case_1", "payload.exe", b"x")
+
+
+async def test_pipeline_rejects_file_over_size_limit():
+    with pytest.raises(ValueError, match="maximum is 10 MB"):
+        await pipeline.process("case_1", "document.png", b"x" * (10 * 1024 * 1024 + 1))
+
+
+async def test_paddle_fallback_flags_low_confidence(monkeypatch):
+    monkeypatch.setattr(pipeline.settings, "ocr_engine", "paddleocr")
+
+    document = await pipeline.process(
+        "case_1", "document.png", "CCCD\nNguyen Van A".encode()
+    )
+
+    assert document.doc_type == "cccd"
+    assert document.needs_human_review is True

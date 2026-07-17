@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from src.config import settings
@@ -26,6 +27,8 @@ from src.services.ocr.engine import OcrResult, VisionLlmEngine, get_engine
 from src.services.ocr.preprocessing import preprocess_document_image
 
 _CLASSIFIER_STRONG_CONFIDENCE = 0.8
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 
 
 def _resolve_doc_type(result: OcrResult) -> tuple[str, float, bool]:
@@ -58,6 +61,11 @@ async def process(
     ``field_keys``: danh sách trường chuẩn hoá cần trích (vd từ FormField.ocr_sources
     của thủ tục) — hiện chỉ VisionLlmEngine tận dụng được.
     """
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise ValueError("File too large; maximum is 10 MB")
+    if Path(filename).suffix.casefold() not in _ALLOWED_EXTENSIONS:
+        raise ValueError("Unsupported document extension")
+
     preprocessed = preprocess_document_image(content)
     image_bytes = preprocessed.content if preprocessed.mime_type else content
 

@@ -1,9 +1,11 @@
 """Cấu hình tập trung (pydantic-settings). Owner: Dev C. Xem .env.example."""
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file=".env", extra="ignore")
     database_url: str = "sqlite:///./data/app.db"
     chroma_persist_dir: str = "./data/chroma"
     procedures_collection: str = "tthc_procedures"
@@ -37,9 +39,18 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "change-me"
     jwt_access_ttl_minutes: int = 30
-
-    class Config:
-        env_file = ".env"
-
+    demo_password: str = "ChangeMe123!"
+    app_env: str = "development"
+    enable_demo_auth: bool = True
+    persistence_enabled: bool = False
+    storage_backend: str = "local"
+    storage_root: str = "./uploads/private"
+    oidc_issuer_url: str = ""
+    oidc_client_id: str = ""
+    oidc_audience: str = ""
+    oidc_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/oidc/callback"
+    oidc_required_mfa_claim: str = "amr:mfa"
+    upload_max_files: int = 10
+    upload_max_bytes: int = 20 * 1024 * 1024
 
 settings = Settings()

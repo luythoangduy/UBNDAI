@@ -6,6 +6,16 @@
 from src.models.cases import Case, CaseCreate, CaseStatus, CaseUpdate, ChecklistItem
 from src.models.chat import ChatRequest, ChatResponse, Citation, IntentName
 from src.models.documents import ExtractedDocument, ExtractedField
+from src.models.drafts import (
+    DraftDocxStyle,
+    DraftFieldSpec,
+    DraftGenerateRequest,
+    DraftLayoutBlock,
+    DraftLegalSource,
+    DraftTemplate,
+    DraftTemplateInfo,
+    GeneratedDraft,
+)
 from src.models.ops import (
     AnomalyAlert,
     Assignment,
@@ -21,6 +31,28 @@ from src.models.procedures import (
     Procedure,
 )
 from src.models.validation import ValidationIssue, ValidationReport
+from src.models.citizen import (
+    CitizenCaseCreate,
+    CitizenCaseUpdate,
+    CitizenSubmitRequest,
+    ConsentRecord,
+    RoutingDecision,
+    UploadCompleteRequest,
+    UploadIntentRequest,
+    UploadIntentResponse,
+)
+from src.models.officer import (
+    ApplicationCase,
+    CaseAuditEvent,
+    CaseDocument,
+    CaseSubmissionVersion,
+    ExtractedFieldRecord,
+    OfficerDecision,
+    OfficerIdentity,
+    SupplementRequest,
+    TokenClaims,
+    ValidationFinding,
+)
 
 __all__ = [
     "AnomalyAlert",
@@ -37,13 +69,39 @@ __all__ = [
     "Citation",
     "DailyDigest",
     "DocumentRequirement",
+    "DraftDocxStyle",
+    "DraftFieldSpec",
+    "DraftGenerateRequest",
+    "DraftLayoutBlock",
+    "DraftLegalSource",
+    "DraftTemplate",
+    "DraftTemplateInfo",
     "ExtractedDocument",
     "ExtractedField",
     "FormField",
     "FormTemplate",
+    "GeneratedDraft",
     "IntentName",
     "MetricPoint",
     "Procedure",
     "ValidationIssue",
     "ValidationReport",
+    "ApplicationCase",
+    "CaseAuditEvent",
+    "CaseDocument",
+    "CaseSubmissionVersion",
+    "ExtractedFieldRecord",
+    "OfficerDecision",
+    "OfficerIdentity",
+    "SupplementRequest",
+    "TokenClaims",
+    "ValidationFinding",
+    "CitizenCaseCreate",
+    "CitizenCaseUpdate",
+    "CitizenSubmitRequest",
+    "ConsentRecord",
+    "RoutingDecision",
+    "UploadCompleteRequest",
+    "UploadIntentRequest",
+    "UploadIntentResponse",
 ]

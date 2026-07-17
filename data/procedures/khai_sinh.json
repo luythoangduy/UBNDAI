@@ -26,7 +26,8 @@
   "legal_basis": [
     "Luật Hộ tịch 2014",
     "Nghị định 123/2015/NĐ-CP",
-    "Thông tư 04/2020/TT-BTP"
+    "Thông tư 04/2020/TT-BTP",
+    "Thông tư 04/2024/TT-BTP"
   ],
   "processing_days": 1,
   "fee_vnd": 0,
@@ -54,7 +55,7 @@
   "requirements": [
     {
       "code": "to_khai_khai_sinh",
-      "name": "Tờ khai đăng ký khai sinh (mẫu TP/HT-2020)",
+      "name": "Tờ khai đăng ký khai sinh (mẫu theo Thông tư 04/2024/TT-BTP)",
       "condition": null,
       "original_required": true,
       "copies": 0,
@@ -99,7 +100,7 @@
   ],
   "form_templates": [
     {
-      "id": "TP-HT-2020-KS",
+      "id": "TT-04-2024-BTP-KHAI-SINH",
       "name": "Tờ khai đăng ký khai sinh",
       "fields": [
         {"key": "ho_ten_con", "label": "Họ, chữ đệm, tên của trẻ", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.ho_ten_con"]},

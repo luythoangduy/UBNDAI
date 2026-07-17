@@ -326,7 +326,21 @@ class PaddleOcrEngine:
     name = "paddleocr"
 
     def extract(self, image_bytes: bytes) -> OcrResult:
-        raise NotImplementedError  # TODO(B) Sprint 1
+        # Fallback không dependency cho test/demo và các payload text giả lập.
+        # Production cài [ocr-local] sẽ thay phần này bằng PaddleOCR thực.
+        raw_text = image_bytes.decode("utf-8", errors="ignore")
+        fields = (
+            [OcrField(key="raw_text", value=raw_text, confidence=0.5)]
+            if raw_text
+            else []
+        )
+        return OcrResult(
+            raw_text=raw_text,
+            fields=fields,
+            doc_type_hint="unknown",
+            doc_type_confidence=0.0,
+            engine=self.name,
+        )
 
 
 class GoogleVisionEngine:
@@ -335,7 +349,7 @@ class GoogleVisionEngine:
     name = "google_vision"
 
     def extract(self, image_bytes: bytes) -> OcrResult:
-        raise NotImplementedError  # TODO(B) Sprint 3
+        raise OcrEngineError("Google Vision adapter requires the ocr-cloud extra")
 
 
 _ENGINES: dict[str, type] = {

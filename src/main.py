@@ -1,11 +1,47 @@
 """FastAPI entrypoint. Owner: Dev C (chỉ C sửa trực tiếp — TEAM_PLAN §4)."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 
 from src.api.v1 import router as v1_router
+from src.config import settings
+from src.services.persistence import create_async_database
+
+if settings.app_env == "production" and (settings.enable_demo_auth or len(settings.jwt_secret) < 32 or settings.jwt_secret == "change-me"):
+    raise RuntimeError("Production requires a strong JWT_SECRET and demo auth disabled")
 
 app = FastAPI(title="TTHC Assist", version="0.1.0")
 app.include_router(v1_router)
+
+@app.on_event("startup")
+async def initialize_persistence() -> None:
+    if settings.persistence_enabled:
+        database = create_async_database(settings.database_url)
+        await database.create_schema()
+        await database.engine.dispose()
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next) -> Response:
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"
+    return response
+
+frontend_dir = Path(__file__).resolve().parents[1] / "frontend"
+frontend_dist = frontend_dir / "dist"
+if frontend_dist.exists():
+    assets_dir = frontend_dist / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="portal-assets")
+    app.mount("/citizen", StaticFiles(directory=frontend_dist, html=True), name="citizen-portal")
+    app.mount("/officer", StaticFiles(directory=frontend_dist, html=True), name="officer-portal")
+elif frontend_dir.exists():
+    app.mount("/officer", StaticFiles(directory=frontend_dir, html=True), name="officer-portal")
 
 
 @app.get("/health")

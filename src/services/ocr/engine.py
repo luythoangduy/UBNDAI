@@ -50,6 +50,7 @@ OCR_OUTPUT_SCHEMA = {
                 "giay_dang_ky_ket_hon",
                 "giay_xac_nhan_cu_tru",
                 "don_viet_tay",
+                "van_ban_hanh_chinh",
                 "unknown",
             ],
         },
@@ -64,14 +65,50 @@ OCR_OUTPUT_SCHEMA = {
                     "confidence": {"type": "number"},
                     "note": {"type": "string"},
                 },
-                # note bắt buộc trong schema (OpenAI strict mode yêu cầu mọi key
-                # đều required) — model trả chuỗi rỗng khi không có ghi chú.
+                # Mọi key đều required (OpenAI strict mode) — model trả chuỗi rỗng
+                # khi không có giá trị.
                 "required": ["key", "value", "confidence", "note"],
                 "additionalProperties": False,
             },
         },
+        "handwriting_notes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "content": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "alternatives": {
+                        "type": "string",
+                        "description": "Tối đa 3 phương án kèm %, phân cách ' | '; rỗng nếu chắc chắn",
+                    },
+                },
+                "required": ["location", "content", "confidence", "alternatives"],
+                "additionalProperties": False,
+            },
+        },
+        "illegible_regions": {"type": "array", "items": {"type": "string"}},
+        "quality": {
+            "type": "object",
+            "properties": {
+                "ocr_confidence": {"type": "number"},
+                "handwriting_confidence": {"type": "number"},
+                "issues": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["ocr_confidence", "handwriting_confidence", "issues"],
+            "additionalProperties": False,
+        },
     },
-    "required": ["raw_text", "doc_type", "doc_type_confidence", "fields"],
+    "required": [
+        "raw_text",
+        "doc_type",
+        "doc_type_confidence",
+        "fields",
+        "handwriting_notes",
+        "illegible_regions",
+        "quality",
+    ],
     "additionalProperties": False,
 }
 
@@ -89,6 +126,16 @@ class OcrField:
 
 
 @dataclass(frozen=True)
+class HandwritingNote:
+    """Một phần viết tay đọc riêng: ghi chú lề, phê duyệt, chữ ký, ngày viết tay..."""
+
+    location: str
+    content: str
+    confidence: float
+    alternatives: str = ""  # tối đa 3 phương án kèm %, phân cách ' | '
+
+
+@dataclass(frozen=True)
 class OcrResult:
     """Raw OCR output, engine-agnostic. Pipeline maps this onto ExtractedDocument."""
 
@@ -97,6 +144,11 @@ class OcrResult:
     doc_type_hint: str = "unknown"
     doc_type_confidence: float = 0.0
     engine: str = ""
+    handwriting_notes: list[HandwritingNote] = field(default_factory=list)
+    illegible_regions: list[str] = field(default_factory=list)
+    ocr_confidence: float = 1.0  # đánh giá tổng thể của model, 0.0–1.0
+    handwriting_confidence: float = 1.0
+    quality_issues: list[str] = field(default_factory=list)  # mờ / nghiêng / che khuất...
 
 
 class OcrEngine(Protocol):
@@ -311,12 +363,34 @@ class VisionLlmEngine:
             for item in (parsed.get("fields") or [])
             if isinstance(item, dict) and str(item.get("key", "")).strip()
         ]
+        handwriting_notes = [
+            HandwritingNote(
+                location=str(item.get("location") or ""),
+                content=str(item.get("content") or ""),
+                confidence=_clamp_confidence(item.get("confidence")),
+                alternatives=str(item.get("alternatives") or ""),
+            )
+            for item in (parsed.get("handwriting_notes") or [])
+            if isinstance(item, dict) and str(item.get("content", "")).strip()
+        ]
+        quality = parsed.get("quality") if isinstance(parsed.get("quality"), dict) else {}
         return OcrResult(
             raw_text=str(parsed.get("raw_text") or ""),
             fields=fields,
             doc_type_hint=str(parsed.get("doc_type") or "unknown"),
             doc_type_confidence=_clamp_confidence(parsed.get("doc_type_confidence")),
             engine=self.name,
+            handwriting_notes=handwriting_notes,
+            illegible_regions=[
+                str(r) for r in (parsed.get("illegible_regions") or []) if str(r).strip()
+            ],
+            ocr_confidence=_clamp_confidence(quality.get("ocr_confidence", 1.0)),
+            handwriting_confidence=_clamp_confidence(
+                quality.get("handwriting_confidence", 1.0)
+            ),
+            quality_issues=[
+                str(q) for q in (quality.get("issues") or []) if str(q).strip()
+            ],
         )
 
 

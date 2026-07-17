@@ -255,6 +255,48 @@ def test_openai_refusal_raises():
         engine.extract(FAKE_IMAGE)
 
 
+def test_handwriting_notes_and_quality_are_parsed():
+    engine, _ = _engine_with_mock(
+        {
+            "raw_text": "QUYẾT ĐỊNH\nSố: 123/QĐ-UBND\n[ILLEGIBLE] ngày 12/03/2026",
+            "doc_type": "van_ban_hanh_chinh",
+            "doc_type_confidence": 0.9,
+            "fields": [{"key": "so_van_ban", "value": "123/QĐ-UBND", "confidence": 0.95, "note": ""}],
+            "handwriting_notes": [
+                {
+                    "location": "góc trên phải",
+                    "content": "Kính chuyển phòng TP xử lý",
+                    "confidence": 0.7,
+                    "alternatives": "1. Kính chuyển phòng TP xử lý (70%) | 2. Kính chuyển phòng TC xử lý (30%)",
+                }
+            ],
+            "illegible_regions": ["dòng 3 — mực nhòe trước ngày tháng"],
+            "quality": {"ocr_confidence": 0.82, "handwriting_confidence": 0.6, "issues": ["ảnh nghiêng nhẹ"]},
+        }
+    )
+
+    result = engine.extract(FAKE_IMAGE)
+
+    assert result.doc_type_hint == "van_ban_hanh_chinh"
+    assert "[ILLEGIBLE]" in result.raw_text
+    note = result.handwriting_notes[0]
+    assert note.location == "góc trên phải" and "Kính chuyển" in note.content
+    assert "70%" in note.alternatives
+    assert result.illegible_regions == ["dòng 3 — mực nhòe trước ngày tháng"]
+    assert result.ocr_confidence == 0.82
+    assert result.quality_issues == ["ảnh nghiêng nhẹ"]
+
+
+def test_missing_quality_sections_default_to_confident():
+    engine, _ = _engine_with_mock({"raw_text": "x", "fields": []})
+
+    result = engine.extract(FAKE_IMAGE)
+
+    assert result.handwriting_notes == []
+    assert result.illegible_regions == []
+    assert result.ocr_confidence == 1.0
+
+
 def test_factory_resolves_all_engines():
     assert isinstance(get_engine("vision_llm"), VisionLlmEngine)
     assert isinstance(get_engine("paddleocr"), PaddleOcrEngine)

@@ -64,13 +64,18 @@ OCR_OUTPUT_SCHEMA = {
                     "value": {"type": "string"},
                     "confidence": {"type": "number"},
                     "note": {"type": "string"},
+                    # OpenAI strict mode: field tùy chọn phải khai anyOf [.., null]
+                    # VÀ vẫn nằm trong required — thiếu trong required là 400.
                     "bbox": {
-                        "type": "array",
-                        "items": {"type": "number"}
+                        "anyOf": [
+                            {"type": "array", "items": {"type": "number"}},
+                            {"type": "null"},
+                        ],
+                        "description": "Tọa độ tương đối [x, y, width, height] 0.0–1.0; null nếu không xác định",
                     },
                 },
-                # Mọi key đều required (OpenAI strict mode) — model trả chuỗi rỗng
-                # khi không có giá trị.
+                # Mọi key đều required (OpenAI strict mode): model trả chuỗi rỗng
+                # cho văn bản thiếu và null cho bbox không xác định.
                 "required": ["key", "value", "confidence", "note", "bbox"],
                 "additionalProperties": False,
             },
@@ -165,6 +170,16 @@ def _clamp_confidence(value: object) -> float:
         return min(1.0, max(0.0, float(value)))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return 0.0
+
+
+def _parse_bbox(value: object) -> list[float] | None:
+    """Chỉ nhận đúng [x, y, width, height] dạng số, clamp 0–1; còn lại → None."""
+    if not isinstance(value, list) or len(value) != 4:
+        return None
+    try:
+        return [min(1.0, max(0.0, float(v))) for v in value]
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_json_object(raw_text: str) -> dict:
@@ -374,7 +389,7 @@ class VisionLlmEngine:
                 value=str(item.get("value") or ""),
                 confidence=_clamp_confidence(item.get("confidence")),
                 note=str(item.get("note") or ""),
-                bbox=item.get("bbox") or None,
+                bbox=_parse_bbox(item.get("bbox")),
             )
             for item in (parsed.get("fields") or [])
             if isinstance(item, dict) and str(item.get("key", "")).strip()

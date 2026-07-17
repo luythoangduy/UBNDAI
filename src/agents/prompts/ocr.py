@@ -30,6 +30,8 @@ vd "1. Nguyễn Văn An (80%) | 2. Nguyễn Văn Ân (15%) | 3. Nguyễn Văn An
 để chuỗi rỗng nếu chắc chắn.
 
 ## 3. Trường thông tin (fields)
+Mỗi trường kèm ``bbox`` = vị trí giá trị trên ảnh dạng [x, y, width, height] TƯƠNG ĐỐI \
+0.0–1.0 (x,y là góc trên-trái). Chỉ điền khi xác định được vùng rõ ràng; không chắc → null.
 Trích các trường được yêu cầu trong tin nhắn người dùng. Với VBHC, LUÔN trích thêm \
 (nếu xuất hiện) các key chuẩn: so_van_ban, ngay_ban_hanh, co_quan_ban_hanh, nguoi_ky, \
 chuc_vu, noi_nhan, trich_yeu. Trường không thấy trong ảnh → value rỗng, confidence 0.0.

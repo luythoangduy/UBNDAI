@@ -41,6 +41,12 @@ ocr-local = [
 ocr-cloud = [
     "google-cloud-vision>=3.7",
 ]
+legal-data = [
+    "pyarrow>=17.0",
+]
+local-embeddings = [
+    "sentence-transformers>=5.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["src*"]

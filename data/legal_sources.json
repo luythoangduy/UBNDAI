@@ -1,0 +1,11 @@
+{
+  "source_id": "yuitc_vietnamese_legal_documents",
+  "dataset_id": "YuITC/Vietnamese-Legal-Documents",
+  "revision": "main",
+  "license": "MIT",
+  "dataset_url": "https://huggingface.co/datasets/YuITC/Vietnamese-Legal-Documents",
+  "corpus_file": "corpus.parquet",
+  "evaluation_file": "test.parquet",
+  "purpose": "Vietnamese legal retrieval corpus. Results are reference material and must be verified against official legal sources before legal conclusions are presented.",
+  "official_validation_required": true
+}

@@ -73,6 +73,36 @@ python scripts/index_procedures.py --source data/procedures --build-bm25
 python scripts/seed_db.py
 ```
 
+### RAG văn bản pháp luật (dùng index C2 có sẵn)
+
+Chat tách hai nguồn dữ liệu: catalog thủ tục là nguồn duy nhất để sinh checklist,
+còn corpus VBPL chỉ dùng để trả lời câu hỏi pháp luật chung và luôn đính kèm link
+văn bản gốc. Không dùng corpus này để suy ra giấy tờ, lệ phí hoặc thời hạn của một
+thủ tục.
+
+Repo hiện có thể dùng lại collection Chroma đã build ở sibling repo C2 mà không
+copy hay index lại. Cả hai cùng dùng embedding local `BAAI/bge-m3` 1024 chiều:
+
+```env
+EMBEDDING_PROVIDER=bge-m3
+LOCAL_EMBEDDING_OFFLINE=true
+LEGAL_CHROMA_PERSIST_DIR=../C2-App-108/data/chroma_hybrid/chroma_hybrid
+LEGAL_COLLECTION=vbpl_legal_documents
+LEGAL_BM25_INDEX_PATH=
+```
+
+`LEGAL_BM25_INDEX_PATH` để trống là chủ đích: cache C2 hiện rất lớn và dense Chroma
+đã đủ cho demo. Chỉ cấu hình BM25 nếu cache được build từ đúng collection đó. Khi
+không có index C2, có thể tải dataset Hugging Face và build collection độc lập:
+
+```powershell
+python scripts/build_legal_index.py --download --limit 1000 --batch-size 32 --embedding-provider bge-m3
+```
+
+Sau khi build độc lập, đặt `LEGAL_CHROMA_PERSIST_DIR=./data/chroma`,
+`LEGAL_COLLECTION=legal_documents`; nếu muốn hybrid thì thêm `--build-bm25` và đặt
+`LEGAL_BM25_INDEX_PATH=./data/legal_bm25_index.json`.
+
 ### Chat guidance (luồng người dân)
 
 ```bash

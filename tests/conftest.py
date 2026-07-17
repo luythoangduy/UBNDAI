@@ -9,13 +9,17 @@ import pytest
 
 from src.config import settings
 from src.services import retrieval
+from src.services.retrieval import legal
 
 
 @pytest.fixture(autouse=True)
 def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "database_url", f"sqlite:///{tmp_path / 'app.db'}")
     monkeypatch.setattr(settings, "chroma_persist_dir", str(tmp_path / "chroma"))
+    monkeypatch.setattr(settings, "legal_chroma_persist_dir", "")
     monkeypatch.setattr(settings, "bm25_index_path", str(tmp_path / "bm25.json"))
+    monkeypatch.setattr(settings, "legal_bm25_index_path", str(tmp_path / "legal_bm25.json"))
+    monkeypatch.setattr(settings, "legal_collection", "legal_documents_test")
     monkeypatch.setattr(settings, "llm_api_key", "")
     monkeypatch.setattr(settings, "ocr_engine", "paddleocr")
     monkeypatch.setattr(settings, "ocr_llm_api_key", "")
@@ -24,5 +28,7 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("OCR_LLM_API_KEY", raising=False)
     retrieval.reset_caches()
+    legal.reset_caches()
     yield
     retrieval.reset_caches()
+    legal.reset_caches()

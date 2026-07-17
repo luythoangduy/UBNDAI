@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./data/chroma"
     procedures_collection: str = "tthc_procedures"
     bm25_index_path: str = "./data/bm25_index.json"
+    # Tách index VBPL khỏi catalog thủ tục để có thể dùng lại index dựng sẵn.
+    # Rỗng = dùng cùng CHROMA_PERSIST_DIR với catalog.
+    legal_chroma_persist_dir: str = ""
+    legal_collection: str = "legal_documents"
+    # BM25 là tuỳ chọn; chỉ cấu hình khi nó được build từ đúng legal collection.
+    legal_bm25_index_path: str = ""
 
     # LLM cho chatbot/agent — tách riêng với LLM cho OCR bên dưới.
     llm_provider: str = "anthropic"  # 'anthropic' | 'gemini'
@@ -19,9 +25,11 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
     llm_timeout_s: int = 30
 
-    # 'auto' | 'google' | 'bge-m3' | 'fake' — phải khớp provider lúc index Chroma
+    # 'auto' | 'google' | 'bge-m3' | 'hashing' | 'fake' — phải khớp provider lúc index Chroma
     embedding_provider: str = "auto"
     local_embedding_model_name: str = "BAAI/bge-m3"
+    local_embedding_offline: bool = True
+    hash_embedding_dimension: int = 384
 
     retrieval_top_k: int = 6
     identify_confidence_threshold: float = 0.55

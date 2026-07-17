@@ -28,6 +28,7 @@ from src.services.retrieval import (
     chunks_from_procedure,
     retrieve,
 )
+from src.services.retrieval.legal import retrieve_legal
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,14 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "retrieved_chunks": [],
         }
 
-    chunks = retrieve(query, procedure_id=selected) if selected else retrieve(query)
+    if selected:
+        chunks = retrieve(query, procedure_id=selected)
+    elif "legal_basis" in intents:
+        # Không có thủ tục được chọn: trả lời ở mức văn bản pháp luật, không
+        # biến các đoạn VBPL thành checklist hay yêu cầu hồ sơ cụ thể.
+        chunks = retrieve_legal(query)
+    else:
+        chunks = retrieve(query)
     if procedure and not chunks:
         chunks = chunks_from_procedure(procedure)
 
@@ -77,6 +85,11 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         reply = await _llm_answer(query, chunks)
     if reply is None:
         reply = _extractive_answer(chunks)
+    if _uses_legal_corpus(chunks):
+        reply += (
+            "\n\nLưu ý: đây là thông tin tra cứu từ corpus VBPL; hãy đối chiếu "
+            "văn bản gốc tại liên kết trích dẫn và quy định còn hiệu lực trước khi thực hiện."
+        )
 
     result = {
         "reply": reply,
@@ -142,14 +155,27 @@ async def _llm_answer(query: str, chunks: list[RetrievedChunk]) -> str | None:
 
 
 def _extractive_answer(chunks: list[RetrievedChunk]) -> str:
-    """Không tổng hợp được bằng LLM → trả nguyên văn đoạn catalog liên quan nhất."""
+    """Không tổng hợp được bằng LLM → trả nguyên văn các đoạn nguồn liên quan nhất."""
+    legal = _uses_legal_corpus(chunks)
     lines = [
         "Mình chưa thể tổng hợp câu trả lời tự động lúc này. "
-        "Dưới đây là thông tin chính thức liên quan từ catalog thủ tục:"
+        + (
+            "Dưới đây là các đoạn văn bản pháp luật liên quan:"
+            if legal
+            else "Dưới đây là thông tin chính thức liên quan từ catalog thủ tục:"
+        )
     ]
     for index, chunk in enumerate(chunks[:3], start=1):
         lines.append(f"[{index}] {chunk.excerpt()}")
     return "\n\n".join(lines)
+
+
+def _uses_legal_corpus(chunks: list[RetrievedChunk]) -> bool:
+    return any(
+        chunk.metadata.get("source_type") in {"huggingface_dataset", "legal_corpus"}
+        or chunk.metadata.get("source_scope") == "public_vbpl"
+        for chunk in chunks
+    )
 
 
 def _structured_answer(

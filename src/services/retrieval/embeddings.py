@@ -13,6 +13,7 @@ import os
 from typing import Any
 
 from src.config import settings
+from src.services.retrieval.common import tokenize
 
 _LOCAL_MODEL_CACHE: dict[str, Any] = {}
 _FAKE_DIMENSION = 32
@@ -48,6 +49,33 @@ class FakeEmbeddingModel:
         return [v / norm for v in values]
 
 
+class HashingEmbeddingModel:
+    """Embedding lexical offline, deterministic cho corpus lớn khi chưa có model thật.
+
+    Đây không phải embedding semantic. Nó dùng feature hashing trên token để Chroma
+    có thể vận hành không cần tải model/khóa API; BM25 vẫn là tín hiệu chính trong
+    chế độ này. Collection luôn ghi rõ provider ``hashing`` để không bị nhầm với
+    vector semantic khi triển khai production.
+    """
+
+    def __init__(self, dimension: int) -> None:
+        self.dimension = dimension
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.embed_query(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        values = [0.0] * self.dimension
+        for token in tokenize(text):
+            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+            raw = int.from_bytes(digest, "big")
+            index = raw % self.dimension
+            sign = 1.0 if raw & 1 else -1.0
+            values[index] += sign
+        norm = math.sqrt(sum(value * value for value in values)) or 1.0
+        return [value / norm for value in values]
+
+
 class BgeM3EmbeddingModel:
     """Wrapper sentence-transformers cho BGE-M3 local (pattern từ C2)."""
 
@@ -65,13 +93,18 @@ class BgeM3EmbeddingModel:
 
     def _model(self) -> Any:
         if self.model_name not in _LOCAL_MODEL_CACHE:
+            if settings.local_embedding_offline:
+                # Bảo đảm model đã cache không phát sinh HTTP request khi chạy index/chat.
+                os.environ.setdefault("HF_HUB_OFFLINE", "1")
             try:
                 from sentence_transformers import SentenceTransformer
             except ImportError as exc:
                 raise RuntimeError(
                     "BGE-M3 cần sentence-transformers: pip install sentence-transformers"
                 ) from exc
-            _LOCAL_MODEL_CACHE[self.model_name] = SentenceTransformer(self.model_name)
+            _LOCAL_MODEL_CACHE[self.model_name] = SentenceTransformer(
+                self.model_name, local_files_only=settings.local_embedding_offline
+            )
         return _LOCAL_MODEL_CACHE[self.model_name]
 
 
@@ -88,6 +121,8 @@ def get_embedding_model(provider: str | None = None) -> Any:
     resolved = resolve_embedding_provider(provider)
     if resolved == "fake":
         return FakeEmbeddingModel()
+    if resolved == "hashing":
+        return HashingEmbeddingModel(settings.hash_embedding_dimension)
     if resolved == "bge-m3":
         return BgeM3EmbeddingModel(settings.local_embedding_model_name)
     if resolved == "google":

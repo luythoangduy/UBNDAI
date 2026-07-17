@@ -85,7 +85,15 @@ def citations_from_chunks(chunks: list[RetrievedChunk]) -> list[Citation]:
             continue
         name = str(chunk.metadata.get("procedure_name") or procedure_id)
         legal_basis = str(chunk.metadata.get("legal_basis") or "").strip()
-        label = f"Thủ tục {name}" + (f" — {legal_basis}" if legal_basis else "")
+        if (
+            chunk.metadata.get("source_type") == "legal_corpus"
+            or chunk.metadata.get("source_scope") == "public_vbpl"
+        ):
+            label = f"Văn bản pháp luật — {name}"
+        elif chunk.metadata.get("source_type") == "huggingface_dataset":
+            label = f"Corpus pháp luật tham khảo — {name}"
+        else:
+            label = f"Thủ tục {name}" + (f" — {legal_basis}" if legal_basis else "")
         citations.append(
             Citation(
                 index=index,

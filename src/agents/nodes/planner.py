@@ -319,6 +319,8 @@ def _route_for_intents(
     if any(intent in non_procedural for intent in intents):
         return "answer"
     if not procedure_exists:
+        if "legal_basis" in intents:
+            return "answer"
         if "procedure_discovery" in intents:
             return "identify"
         if any(intent in informational or intent == "checklist" for intent in intents):

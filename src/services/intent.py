@@ -53,6 +53,9 @@ _OTHER_PROCEDURE_HINTS = (
     "dat dai",
     "giay phep xay dung",
 )
+_LEGAL_QUERY_HINTS = (
+    "luat ", "nghi dinh", "thong tu", "van ban phap luat", "vbpl", "dieu ",
+)
 _OUT_OF_SCOPE = (
     "thoi tiet", "nau an", "cong thuc mon", "viet code", "lap trinh",
     "bong da", "phim", "am nhac", "chung khoan", "tien ao", "benh gi",
@@ -76,6 +79,11 @@ def detect_intents(message: str, *, has_selected_procedure: bool) -> IntentDetec
         if any(_is_active_pattern(folded, pattern) for pattern in patterns):
             found.append(intent)
 
+    # Câu hỏi về văn bản pháp luật chung không cần ép chọn một thủ tục trước.
+    # Retrieval sẽ dùng legal corpus riêng, không suy diễn checklist thủ tục.
+    if not has_selected_procedure and any(hint in folded for hint in _LEGAL_QUERY_HINTS):
+        found.append("legal_basis")
+
     has_admin_hint = any(hint in folded for hint in _ADMIN_HINTS)
     if (
         has_selected_procedure
@@ -94,6 +102,7 @@ def detect_intents(message: str, *, has_selected_procedure: bool) -> IntentDetec
     if (
         not has_selected_procedure
         and has_admin_hint
+        and "legal_basis" not in found
         and not navigation_intents.intersection(found)
     ):
         found.insert(0, "procedure_discovery")

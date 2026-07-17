@@ -58,6 +58,12 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     if decision is None:
         decision = _rule_decision(message, procedure)
 
+    # Invariant của graph: chưa có thủ tục thì mọi route nghiệp vụ khác đều
+    # thiếu context. LLM có thể hiểu "cần làm rõ" theo nghĩa hội thoại và trả
+    # clarify, nhưng lượt này bắt buộc phải qua retrieval để identify trước.
+    if procedure is None:
+        decision.route = "identify"
+
     allowed_keys = set(unresolved)
     accepted_answers = 0
     for extracted in decision.extracted_answers:

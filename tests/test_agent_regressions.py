@@ -3,9 +3,11 @@
 import asyncio
 
 import pytest
+from langchain_core.messages import HumanMessage
 
 from src.agents.graph import run_guidance
-from src.agents.nodes import answer, identify
+from src.agents.nodes import answer, identify, planner
+from src.agents.nodes.planner import PlannerDecision
 from src.models import ChatRequest
 from src.services import cases
 from src.services.retrieval.common import RetrievedChunk
@@ -67,6 +69,24 @@ async def test_chunk_without_procedure_id_does_not_crash_identify(monkeypatch):
     )
     result = await identify.run({"rewritten_query": "x"})
     assert result["reply_kind"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_planner_forces_identify_when_llm_returns_clarify_without_procedure(
+    monkeypatch,
+):
+    async def wrong_llm_route(*args, **kwargs):
+        return PlannerDecision(route="clarify", rewritten_query="đăng ký khai sinh")
+
+    monkeypatch.setattr(planner, "_llm_decision", wrong_llm_route)
+    result = await planner.run(
+        {
+            "messages": [HumanMessage(content="Tôi muốn đăng ký khai sinh cho con")],
+            "answers": {},
+            "selected_procedure_id": None,
+        }
+    )
+    assert result["route"] == "identify"
 
 
 @pytest.mark.asyncio

@@ -25,6 +25,8 @@ class GuidanceState(TypedDict, total=False):
     # Retrieval + citation
     retrieved_chunks: list[dict[str, Any]]
     citations: list[dict[str, Any]]
+    # Checklist sinh ra trong lượt này (ChecklistItem.model_dump), persist về Case
+    checklist: list[dict[str, Any]]
     # Output
     reply: str
     reply_kind: Literal["clarify", "checklist", "answer", "fallback"]

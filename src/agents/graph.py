@@ -1,25 +1,103 @@
-"""Guidance graph: ingest → planner → (clarify | identify | checklist | answer).
+"""Guidance graph: planner → (clarify | identify | checklist | answer).
 
 Owner: Dev A. Bài học từ C2-App-108: planner LLM-first + rule-based fallback,
-few-shot cho follow-up routing, decompose query trước khi RRF.
+few-shot cho follow-up routing (trong prompts/planner.py).
 """
 
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.graph import END, StateGraph
+
+from src.agents.nodes import answer, checklist, clarify, identify, planner
 from src.agents.state import GuidanceState
-from src.models import ChatRequest, ChatResponse
+from src.models import CaseCreate, ChatRequest, ChatResponse, ChecklistItem, Citation
+from src.services import cases
+from src.services.retrieval import NO_SOURCE_WARNING
 
 
-def build_graph():
-    """Lắp graph LangGraph. TODO(A) Sprint 1."""
-    # from langgraph.graph import StateGraph, END
-    # g = StateGraph(GuidanceState)
-    # g.add_node("planner", nodes.planner.run)        # route + rewrite, 1 LLM call structured
-    # g.add_node("clarify", nodes.clarify.run)        # sinh câu hỏi làm rõ từ catalog
-    # g.add_node("identify", nodes.identify.run)      # hybrid retrieval → chọn thủ tục
-    # g.add_node("checklist", nodes.checklist.run)    # DocumentRequirement + answers → checklist
-    # g.add_node("answer", nodes.answer.run)          # hỏi đáp kèm citation
-    raise NotImplementedError
+def build_graph() -> Any:
+    """Lắp graph LangGraph — planner định tuyến, mỗi node nghiệp vụ kết thúc lượt."""
+    graph = StateGraph(GuidanceState)
+    graph.add_node("planner", planner.run)
+    graph.add_node("clarify", clarify.run)
+    graph.add_node("identify", identify.run)
+    graph.add_node("checklist", checklist.run)
+    graph.add_node("answer", answer.run)
+
+    graph.set_entry_point("planner")
+    graph.add_conditional_edges(
+        "planner",
+        lambda state: state.get("route") or "answer",
+        {
+            "clarify": "clarify",
+            "identify": "identify",
+            "checklist": "checklist",
+            "answer": "answer",
+            "fallback": "answer",
+        },
+    )
+    for node in ("clarify", "identify", "checklist", "answer"):
+        graph.add_edge(node, END)
+    return graph.compile()
+
+
+@lru_cache(maxsize=1)
+def _compiled_graph() -> Any:
+    return build_graph()
 
 
 async def run_guidance(payload: ChatRequest) -> ChatResponse:
     """Entrypoint cho src/api/v1/chat.py: load Case, chạy graph, persist state về Case."""
-    raise NotImplementedError  # TODO(A)
+    if payload.case_id:
+        case = await cases.get(payload.case_id)
+    else:
+        # TODO(C): citizen_id lấy từ auth sau khi port JWT từ C2-App-108
+        case = await cases.create(CaseCreate(citizen_id="anonymous"))
+
+    history = await cases.get_messages(case.id)
+    messages: list[Any] = [
+        HumanMessage(content=m["content"])
+        if m["role"] == "user"
+        else AIMessage(content=m["content"])
+        for m in history
+    ]
+    messages.append(HumanMessage(content=payload.message))
+
+    initial: GuidanceState = {
+        "messages": messages,
+        "case_id": case.id,
+        "answers": dict(case.answers),
+        "selected_procedure_id": case.procedure_id,
+    }
+    final = await _compiled_graph().ainvoke(initial)
+
+    updates: dict[str, Any] = {
+        "answers": final.get("answers", case.answers),
+        "procedure_id": final.get("selected_procedure_id") or case.procedure_id,
+    }
+    checklist_items = [
+        ChecklistItem.model_validate(item) for item in final.get("checklist") or []
+    ]
+    if checklist_items:
+        updates["checklist"] = checklist_items
+        if case.status == "draft":  # draft → collecting: đã có checklist
+            updates["status"] = "collecting"
+    case = await cases.save(case.model_copy(update=updates))
+
+    reply = final.get("reply") or NO_SOURCE_WARNING
+    await cases.append_message(case.id, "user", payload.message)
+    await cases.append_message(case.id, "assistant", reply)
+
+    return ChatResponse(
+        case_id=case.id,
+        reply=reply,
+        kind=final.get("reply_kind") or "fallback",
+        clarifying_questions=final.get("pending_questions") or [],
+        citations=[
+            Citation.model_validate(item) for item in final.get("citations") or []
+        ],
+    )

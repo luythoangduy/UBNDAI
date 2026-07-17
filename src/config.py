@@ -9,8 +9,19 @@ class Settings(BaseSettings):
     procedures_collection: str = "tthc_procedures"
     bm25_index_path: str = "./data/bm25_index.json"
 
-    llm_provider: str = "gemini"  # cùng stack với C2
-    llm_api_key: str = ""
+    llm_provider: str = "anthropic"  # Claude — cùng stack với C2
+    llm_api_key: str = ""  # hoặc đặt ANTHROPIC_API_KEY
+    # Haiku: tier Claude rẻ/nhanh nhất — cố định theo quyết định dự án (như C2)
+    llm_model: str = "claude-haiku-4-5"
+    llm_temperature: float = 0.1
+    llm_timeout_s: int = 30
+
+    # 'auto' | 'google' | 'bge-m3' | 'fake' — phải khớp provider lúc index Chroma
+    embedding_provider: str = "auto"
+    local_embedding_model_name: str = "BAAI/bge-m3"
+
+    retrieval_top_k: int = 6
+    identify_confidence_threshold: float = 0.55
 
     ocr_engine: str = "paddleocr"  # 'paddleocr' | 'google_vision'
     ocr_confidence_threshold: float = 0.85

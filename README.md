@@ -51,12 +51,36 @@ pytest tests/ -v --tb=short
 # Lint (CI gate)
 ruff check src/ tests/
 
-# Index catalog thủ tục vào Chroma
-python scripts/index_procedures.py --source data/procedures --collection-name tthc_procedures
+# Index catalog thủ tục vào Chroma + build BM25 cache (tuỳ chọn —
+# không index vẫn chat được: retrieval tự fallback BM25 in-memory từ catalog)
+python scripts/index_procedures.py --source data/procedures --build-bm25
 
 # Seed DB demo
 python scripts/seed_db.py
 ```
+
+### Chat guidance (luồng người dân)
+
+```bash
+# Lượt 1 — nhận diện thủ tục (không cần case_id, hệ thống tự tạo Case)
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "tôi muốn đăng ký khai sinh cho con mới sinh"}'
+
+# Các lượt sau — kèm case_id nhận được từ lượt 1
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"case_id": "<case_id>", "message": "cần chuẩn bị giấy tờ gì?"}'
+```
+
+Response (`ChatResponse`): `reply`, `kind` (`clarify` | `checklist` | `answer` | `fallback`),
+`clarifying_questions`, và `citations` (mã thủ tục + căn cứ pháp lý + link Cổng DVC) —
+mọi câu trả lời về thủ tục đều kèm nguồn; thiếu nguồn thì trả cảnh báo "chưa đủ căn cứ".
+
+Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
+model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive
+fallback, luồng vẫn chạy); `EMBEDDING_PROVIDER` (`auto`/`google`/`bge-m3`/`fake` — phải khớp
+lúc index; `google` cần `GOOGLE_API_KEY` riêng); `DATABASE_URL`, `CHROMA_PERSIST_DIR`.
 
 ## 6. Cấu trúc repo
 

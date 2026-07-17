@@ -1,0 +1,103 @@
+"""Identify node — hybrid retrieval trên catalog → chọn thủ tục + độ tin cậy.
+
+Deterministic (không LLM): điểm tin cậy từ rank retrieval, thông tin thủ tục
+lấy từ catalog (AGENTS.md §5 — không lấy từ prompt).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from src.agents.state import GuidanceState
+from src.config import settings
+from src.services import catalog
+from src.services.retrieval import NO_SOURCE_WARNING, citations_from_chunks, retrieve
+from src.services.retrieval.common import RRF_K
+
+
+async def run(state: GuidanceState) -> dict[str, Any]:
+    query = state.get("rewritten_query") or ""
+    chunks = retrieve(query)
+    if not chunks:
+        return {
+            "reply": NO_SOURCE_WARNING,
+            "reply_kind": "fallback",
+            "citations": [],
+            "retrieved_chunks": [],
+        }
+
+    scores: dict[str, float] = {}
+    for rank, chunk in enumerate(chunks, start=1):
+        if chunk.procedure_id:
+            scores[chunk.procedure_id] = scores.get(chunk.procedure_id, 0.0) + 1.0 / (
+                RRF_K + rank
+            )
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    candidates = [
+        {"procedure_id": procedure_id, "score": round(score, 6)}
+        for procedure_id, score in ranked
+    ]
+    total = sum(scores.values()) or 1.0
+    top_id, top_score = ranked[0]
+    confidence = top_score / total
+
+    retrieved = [
+        {"content": c.content, "metadata": c.metadata, "score": c.score} for c in chunks
+    ]
+
+    if confidence >= settings.identify_confidence_threshold or len(ranked) == 1:
+        procedure = catalog.get_procedure(top_id)
+        if procedure is None:  # index lệch catalog — không đoán
+            return {
+                "reply": NO_SOURCE_WARNING,
+                "reply_kind": "fallback",
+                "citations": [],
+                "retrieved_chunks": retrieved,
+            }
+        questions = procedure.clarifying_questions
+        reply = _procedure_intro(procedure)
+        if questions:
+            reply += "\n\nĐể lên checklist đúng trường hợp của bạn, cho mình hỏi thêm:"
+        proc_chunks = [c for c in chunks if c.procedure_id == top_id]
+        return {
+            "selected_procedure_id": top_id,
+            "identify_confidence": round(confidence, 4),
+            "candidate_procedures": candidates,
+            "pending_questions": questions,
+            "reply": reply,
+            "reply_kind": "clarify",
+            "citations": [c.model_dump() for c in citations_from_chunks(proc_chunks)],
+            "retrieved_chunks": retrieved,
+        }
+
+    # Chưa đủ tin cậy → liệt kê ứng viên cho người dân chọn
+    lines = ["Mình tìm thấy vài thủ tục có thể phù hợp, bạn xác nhận giúp nhé:"]
+    for index, (procedure_id, _) in enumerate(ranked[:3], start=1):
+        procedure = catalog.get_procedure(procedure_id)
+        if procedure:
+            lines.append(f"{index}. {procedure.name} — {procedure.agency}")
+    lines.append("Bạn đang cần làm thủ tục nào trong số trên?")
+    return {
+        "identify_confidence": round(confidence, 4),
+        "candidate_procedures": candidates,
+        "pending_questions": ["Bạn đang cần làm thủ tục nào trong số trên?"],
+        "reply": "\n".join(lines),
+        "reply_kind": "clarify",
+        "citations": [c.model_dump() for c in citations_from_chunks(chunks)],
+        "retrieved_chunks": retrieved,
+    }
+
+
+def _procedure_intro(procedure: Any) -> str:
+    lines = [f"Bạn cần làm thủ tục: {procedure.name}"]
+    if procedure.national_code:
+        lines[0] += f" (mã {procedure.national_code})"
+    lines.append(f"- Cơ quan thực hiện: {procedure.agency}")
+    if procedure.processing_days is not None:
+        lines.append(f"- Thời hạn xử lý: {procedure.processing_days} ngày làm việc")
+    if procedure.fee_vnd is not None:
+        fee = "miễn phí" if procedure.fee_vnd == 0 else f"{procedure.fee_vnd:,}đ"
+        lines.append(f"- Lệ phí: {fee}")
+    if procedure.legal_basis:
+        lines.append(f"- Căn cứ pháp lý: {'; '.join(procedure.legal_basis)}")
+    return "\n".join(lines)

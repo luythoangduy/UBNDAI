@@ -103,7 +103,14 @@ async def complete_upload(document_id: str, payload: UploadCompleteRequest, clai
         ocr = await process_ocr(document.case_id, document.original_filename or "document.bin", content)
     except (StorageError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    completed = store.complete_document(document_id, claims.user_id, payload.sha256, ocr.doc_type, ocr.needs_human_review)
+    completed = store.complete_document(
+        document_id,
+        claims.user_id,
+        payload.sha256,
+        ocr.doc_type,
+        ocr.needs_human_review,
+        [field.model_dump() for field in ocr.fields],
+    )
     return {"success": True, "data": completed.model_dump(mode="json")}
 
 

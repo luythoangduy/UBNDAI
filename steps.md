@@ -8,8 +8,9 @@
 | Auth/RBAC/organization scope | Done for local P0 | HMAC/JWT-compatible token path, demo identities and scope checks; production identity store still required. |
 | Case workflow/queue | Done for local P0 | Queue, detail, claim lock, transition guard, timeline and dashboard summary. |
 | Findings/OCR/validation | Done for local P0 | Rule engine, AI invariant, OCR fallback/classifier and finding decisions. |
-| Supplement/versioning | Partial | Supplement request and version-scoped finding contract are present; persistent resubmission migration remains. |
-| Officer frontend | Done for local P0 | Static officer portal at `/officer`; safe DOM rendering. |
+| Supplement/versioning | Partial | Supplement create/list and version-scoped finding contract are present; persistent resubmission migration remains. |
+| Officer frontend | Done for local P0 | Filterable dashboard/queue, three-column evidence/OCR/finding workspace, decisions, OCR edit/rerun and audit timeline at `/officer`. |
+| Citizen frontend | Done for local P0 | Grounded chat assistant plus create/update/upload/consent/submit flow at `/citizen`. |
 | PostgreSQL/migrations/deployment hardening | Deferred | Current store is in-memory for the runnable demo; production rollout must complete repository/migration work before deployment. |
 
 ## Cách dùng

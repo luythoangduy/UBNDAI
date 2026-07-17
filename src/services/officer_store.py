@@ -11,6 +11,7 @@ from src.models import (
     CaseDocument,
     CaseSubmissionVersion,
     ConsentRecord,
+    ExtractedFieldRecord,
     OfficerDecision,
     RoutingDecision,
     SupplementRequest,
@@ -34,6 +35,7 @@ class OfficerStore:
         self.audit: list[CaseAuditEvent] = []
         self.supplements: list[SupplementRequest] = []
         self.documents: dict[str, CaseDocument] = {}
+        self.extracted_fields: dict[str, ExtractedFieldRecord] = {}
         self.routing_decisions: dict[str, RoutingDecision] = {}
         self.consents: list[ConsentRecord] = []
         self.idempotency_results: dict[tuple[str, str], dict] = {}
@@ -92,10 +94,19 @@ class OfficerStore:
         self.cases[case.id] = case
         self.cases[other.id] = other
         submission = CaseSubmissionVersion(id="submission-demo-001", case_id=case.id, version=1, form_data={"applicant_full_name": "Nguyen Van A"}, checklist_snapshot={"birth_certificate": "uploaded"}, procedure_version_id=case.procedure_version_id, procedure_rule_version="ruleset-v1", created_at=timestamp, created_by=case.citizen_id)
+        other_submission = submission.model_copy(
+            update={
+                "id": "submission-other-001",
+                "case_id": other.id,
+                "created_by": other.citizen_id,
+            }
+        )
         self.submissions[submission.id] = submission
+        self.submissions[other_submission.id] = other_submission
         self._save_case(case)
         self._save_case(other)
         self._save_submission(submission)
+        self._save_submission(other_submission)
         finding = ValidationFinding(id="finding-demo-001", case_id=case.id, submission_version_id=submission.id, type="missing_required_document", severity="error", source="rule", message="Thiếu giấy tờ bắt buộc trong checklist.", suggestion="Bổ sung giấy tờ còn thiếu.", rule_id="khai_sinh.required_document", rule_version=1, confidence=1.0, field_keys=["birth_certificate"], created_at=timestamp)
         self.findings[finding.id] = finding
 
@@ -143,9 +154,14 @@ class OfficerStore:
                 raise ValueError("case_not_editable")
             if case.version != expected_version:
                 raise ValueError("version_conflict")
-            merged_answers = {**case.answers, **(answers or {})}
             merged_form_data = {**case.form_data, **(form_data or {})}
-            updated = case.model_copy(update={"answers": merged_answers, "form_data": merged_form_data, "version": case.version + 1, "updated_at": now()})
+            if answers is not None:
+                existing_answers = case.form_data.get("_answers", {})
+                merged_form_data["_answers"] = {
+                    **(existing_answers if isinstance(existing_answers, dict) else {}),
+                    **answers,
+                }
+            updated = case.model_copy(update={"form_data": merged_form_data, "version": case.version + 1, "updated_at": now()})
             self.cases[case_id] = updated
             self._audit(updated, citizen_id, "case_updated", "application_case", case_id)
             self._save_case(updated)
@@ -182,7 +198,15 @@ class OfficerStore:
             case = self.cases.get(document.case_id) if document else None
             return deepcopy(document) if document and case and case.citizen_id == citizen_id else None
 
-    def complete_document(self, document_id: str, citizen_id: str, sha256: str, document_type: str, manual_review: bool) -> CaseDocument:
+    def complete_document(
+        self,
+        document_id: str,
+        citizen_id: str,
+        sha256: str,
+        document_type: str,
+        manual_review: bool,
+        fields: list[dict] | None = None,
+    ) -> CaseDocument:
         with self._lock:
             document = self.documents.get(document_id)
             case = self.cases.get(document.case_id) if document else None
@@ -190,6 +214,18 @@ class OfficerStore:
                 raise KeyError("document_not_found")
             updated = document.model_copy(update={"sha256": sha256, "document_type": document_type, "ocr_status": "manual_review_required" if manual_review else "ready", "file_uri": f"private://{document.object_key}", "ocr_engine": "paddleocr", "ocr_version": "local-v1"})
             self.documents[document_id] = updated
+            for item in fields or []:
+                confidence = float(item.get("confidence", 0.0))
+                record = ExtractedFieldRecord(
+                    id=str(uuid4()),
+                    document_id=document_id,
+                    field_key=str(item.get("key", "unknown")),
+                    raw_value=str(item.get("value", "")),
+                    normalized_value=str(item.get("value", "")),
+                    confidence=confidence,
+                    review_status="needs_human_review" if confidence < settings.ocr_confidence_threshold else "unreviewed",
+                )
+                self.extracted_fields[record.id] = record
             self._audit(case, citizen_id, "document_completed", "case_document", document_id)
             self._save_document(updated)
             return deepcopy(updated)
@@ -299,6 +335,93 @@ class OfficerStore:
         current = self.submission_for(case_id).id
         with self._lock:
             return [deepcopy(f) for f in self.findings.values() if f.case_id == case_id and f.submission_version_id == current]
+
+    def fields_for_document(self, document_id: str, organization_id: str) -> list[ExtractedFieldRecord]:
+        with self._lock:
+            document = self.documents.get(document_id)
+            case = self.cases.get(document.case_id) if document else None
+            if document is None or case is None or case.organization_id != organization_id:
+                raise KeyError("document_not_found")
+            return [deepcopy(field) for field in self.extracted_fields.values() if field.document_id == document_id]
+
+    def update_field(
+        self,
+        field_id: str,
+        organization_id: str,
+        officer_id: str,
+        normalized_value: str,
+        reason: str,
+    ) -> ExtractedFieldRecord:
+        with self._lock:
+            field = self.extracted_fields.get(field_id)
+            document = self.documents.get(field.document_id) if field else None
+            case = self.cases.get(document.case_id) if document else None
+            if field is None or document is None or case is None or case.organization_id != organization_id:
+                raise KeyError("field_not_found")
+            previous = field.normalized_value or field.raw_value
+            updated = field.model_copy(
+                update={
+                    "normalized_value": normalized_value.strip(),
+                    "previous_value": previous,
+                    "review_status": "edited",
+                }
+            )
+            self.extracted_fields[field_id] = updated
+            self._audit(
+                case,
+                officer_id,
+                "ocr_field_edited",
+                "extracted_field",
+                field_id,
+                {"field_key": field.field_key, "reason": reason},
+            )
+            return deepcopy(updated)
+
+    def rerun_validation(self, case_id: str, organization_id: str, officer_id: str) -> list[ValidationFinding]:
+        """Refresh deterministic field-review findings for the local P0 store.
+
+        Full rule execution remains in ``services.validation``. This method only
+        maintains the version-scoped OCR review finding required by the officer
+        workspace and never manufactures a rule-engine error.
+        """
+        with self._lock:
+            case = self.cases.get(case_id)
+            if case is None or case.organization_id != organization_id:
+                raise KeyError("case_not_found")
+            submission = self.submission_for(case_id)
+            document_ids = {item.id for item in self.documents.values() if item.case_id == case_id}
+            needs_review = [
+                field
+                for field in self.extracted_fields.values()
+                if field.document_id in document_ids and field.review_status == "needs_human_review"
+            ]
+            for finding_id, finding in list(self.findings.items()):
+                if finding.case_id == case_id and finding.type == "ocr_human_review" and finding.status == "open":
+                    self.findings[finding_id] = finding.model_copy(update={"status": "superseded"})
+            if needs_review:
+                finding = ValidationFinding(
+                    id=str(uuid4()),
+                    case_id=case_id,
+                    submission_version_id=submission.id,
+                    type="ocr_human_review",
+                    severity="warning",
+                    source="rule",
+                    message=f"Có {len(needs_review)} trường OCR cần cán bộ xác minh.",
+                    suggestion="Đối chiếu tài liệu gốc và xác nhận hoặc chỉnh sửa các trường có độ tin cậy thấp.",
+                    rule_id="ocr.confidence_threshold",
+                    rule_version="local-v1",
+                    field_keys=[field.field_key for field in needs_review],
+                    created_at=now(),
+                )
+                self.findings[finding.id] = finding
+            self._audit(case, officer_id, "validation_rerun", "case_submission_version", submission.id)
+            return self.findings_for(case_id, organization_id)
+
+    def supplements_for(self, case_id: str, organization_id: str) -> list[SupplementRequest]:
+        if self.get_case(case_id, organization_id) is None:
+            raise KeyError("case_not_found")
+        with self._lock:
+            return [deepcopy(item) for item in self.supplements if item.case_id == case_id]
 
     def decide(self, finding_id: str, organization_id: str, officer_id: str, decision: str, reason: str | None = None) -> ValidationFinding:
         with self._lock:

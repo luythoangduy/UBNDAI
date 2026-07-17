@@ -66,6 +66,10 @@ async def get(case_id: str) -> Case:
     return await asyncio.to_thread(_get_sync, case_id)
 
 
+async def list_all() -> list[Case]:
+    return await asyncio.to_thread(_list_all_sync)
+
+
 async def update(case_id: str, payload: CaseUpdate) -> Case:
     async with case_lock(case_id):
         case = await get(case_id)
@@ -126,6 +130,12 @@ def _get_sync(case_id: str) -> Case:
     if row is None:
         raise CaseNotFoundError(case_id)
     return Case.model_validate_json(row[0])
+
+
+def _list_all_sync() -> list[Case]:
+    with closing(_connect()) as connection:
+        rows = connection.execute("SELECT data FROM cases").fetchall()
+    return [Case.model_validate_json(row[0]) for row in rows]
 
 
 def _update_sync(case: Case, expected_version: int) -> None:

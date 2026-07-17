@@ -1,11 +1,13 @@
 """Thin FastAPI routes for the officer portal."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.models import TokenClaims
 from src.services.auth import issue_token, require_role, verify_credentials
 from src.services.officer_store import store
+from src.services.storage import StorageError, storage
 
 router = APIRouter(tags=["auth", "officer"])
 
@@ -54,6 +56,11 @@ class SupplementRequestPayload(BaseModel):
     finding_ids: list[str] = Field(min_length=1, max_length=20)
 
 
+class FieldEditRequest(BaseModel):
+    normalized_value: str = Field(min_length=1, max_length=2000)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
 @router.post("/auth/login")
 async def login(payload: LoginRequest):
     identity = verify_credentials(payload.username, payload.password)
@@ -63,9 +70,30 @@ async def login(payload: LoginRequest):
 
 
 @router.get("/officer/cases")
-async def list_cases(claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+async def list_cases(
+    q: str | None = Query(default=None, max_length=100),
+    case_status: str | None = Query(default=None, alias="status", max_length=64),
+    sort: str = Query(default="priority_desc", pattern="^(priority_desc|newest|oldest)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor")),
+):
     cases = store.list_cases(claims.organization_id)
-    return {"success": True, "data": [_masked_case(case) for case in cases], "pagination": {"page": 1, "page_size": len(cases), "total": len(cases)}}
+    if case_status:
+        cases = [case for case in cases if case.status == case_status]
+    if q:
+        needle = q.casefold().strip()
+        cases = [case for case in cases if needle in case.case_code.casefold() or needle in case.procedure_id.casefold()]
+    if sort == "priority_desc":
+        cases.sort(key=lambda item: (item.priority, item.updated_at), reverse=True)
+    elif sort == "newest":
+        cases.sort(key=lambda item: item.updated_at, reverse=True)
+    else:
+        cases.sort(key=lambda item: item.updated_at)
+    total = len(cases)
+    start = (page - 1) * page_size
+    cases = cases[start:start + page_size]
+    return {"success": True, "data": [_masked_case(case) for case in cases], "pagination": {"page": page, "page_size": page_size, "total": total}}
 
 
 @router.get("/officer/cases/{case_id}")
@@ -75,12 +103,20 @@ async def get_case(case_id: str, claims: TokenClaims = Depends(require_role("off
         raise HTTPException(status_code=404, detail="Case not found")
     findings = store.findings_for(case_id, claims.organization_id)
     timeline = store.timeline(case_id, claims.organization_id)
+    submission = store.submission_for(case_id)
     documents = [
         _masked_document(document)
         for document in store.documents.values()
         if document.case_id == case_id
     ]
-    return {"success": True, "data": {"case": _masked_case(case), "documents": documents, "findings": [item.model_dump(mode="json") for item in findings], "timeline": [item.model_dump(mode="json") for item in timeline]}}
+    return {"success": True, "data": {"case": _masked_case(case), "submission": submission.model_dump(mode="json"), "documents": documents, "findings": [item.model_dump(mode="json") for item in findings], "timeline": [item.model_dump(mode="json") for item in timeline]}}
+
+
+@router.get("/officer/cases/{case_id}/timeline")
+async def case_timeline(case_id: str, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    if store.get_case(case_id, claims.organization_id) is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return {"success": True, "data": [item.model_dump(mode="json") for item in store.timeline(case_id, claims.organization_id)]}
 
 
 @router.post("/officer/cases/{case_id}/claim")
@@ -91,7 +127,7 @@ async def claim_case(case_id: str, claims: TokenClaims = Depends(require_role("o
         raise HTTPException(status_code=409, detail="Case is already claimed") from exc
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
-    return {"success": True, "data": case.model_dump(mode="json")}
+    return {"success": True, "data": _masked_case(case)}
 
 
 @router.post("/officer/cases/{case_id}/transition")
@@ -105,7 +141,7 @@ async def transition_case(case_id: str, payload: TransitionRequest, claims: Toke
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
-    return {"success": True, "data": case.model_dump(mode="json")}
+    return {"success": True, "data": _masked_case(case)}
 
 
 @router.get("/officer/cases/{case_id}/findings")
@@ -144,6 +180,69 @@ async def dismiss_finding(finding_id: str, payload: DecisionRequest, claims: Tok
     return {"success": True, "data": finding.model_dump(mode="json")}
 
 
+@router.post("/officer/findings/{finding_id}/escalate")
+async def escalate_finding(finding_id: str, payload: DecisionRequest, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    case = store.case_for_finding(finding_id, claims.organization_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    _assert_case_mutation(case.id, claims)
+    try:
+        finding = store.decide(finding_id, claims.organization_id, claims.user_id, "escalated", payload.reason)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"success": True, "data": finding.model_dump(mode="json")}
+
+
+@router.get("/officer/documents/{document_id}/fields")
+async def document_fields(document_id: str, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    try:
+        fields = store.fields_for_document(document_id, claims.organization_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    return {"success": True, "data": [item.model_dump(mode="json") for item in fields]}
+
+
+@router.get("/officer/documents/{document_id}/content")
+async def document_content(document_id: str, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    document = store.documents.get(document_id)
+    case = store.get_case(document.case_id, claims.organization_id) if document else None
+    if document is None or case is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        content = storage.get(document.object_key or "")
+    except StorageError as exc:
+        raise HTTPException(status_code=404, detail="Document content is unavailable") from exc
+    return Response(
+        content=content,
+        media_type=document.content_type or "application/octet-stream",
+        headers={"Content-Disposition": "inline", "Cache-Control": "private, no-store"},
+    )
+
+
+@router.patch("/officer/extracted-fields/{field_id}")
+async def edit_field(field_id: str, payload: FieldEditRequest, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    field_record = store.extracted_fields.get(field_id)
+    document = store.documents.get(field_record.document_id) if field_record else None
+    if document is None:
+        raise HTTPException(status_code=404, detail="Field not found")
+    _assert_case_mutation(document.case_id, claims)
+    try:
+        field = store.update_field(field_id, claims.organization_id, claims.user_id, payload.normalized_value, payload.reason)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Field not found") from exc
+    return {"success": True, "data": field.model_dump(mode="json")}
+
+
+@router.post("/officer/cases/{case_id}/rerun-validation")
+async def rerun_validation(case_id: str, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    _assert_case_mutation(case_id, claims)
+    try:
+        findings = store.rerun_validation(case_id, claims.organization_id, claims.user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Case not found") from exc
+    return {"success": True, "data": [item.model_dump(mode="json") for item in findings]}
+
+
 @router.post("/officer/cases/{case_id}/supplement-requests")
 async def create_supplement(case_id: str, payload: SupplementRequestPayload, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
     _assert_case_mutation(case_id, claims)
@@ -154,6 +253,15 @@ async def create_supplement(case_id: str, payload: SupplementRequestPayload, cla
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"success": True, "data": request.model_dump(mode="json")}
+
+
+@router.get("/officer/cases/{case_id}/supplement-requests")
+async def list_supplements(case_id: str, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    try:
+        requests = store.supplements_for(case_id, claims.organization_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Case not found") from exc
+    return {"success": True, "data": [item.model_dump(mode="json") for item in requests]}
 
 
 @router.get("/officer/dashboard/summary")

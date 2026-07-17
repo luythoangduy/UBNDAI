@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from src.main import app
-from src.models import CaseDocument
+from src.models import CaseDocument, ExtractedFieldRecord
 from src.services.officer_store import store
 
 
@@ -36,6 +36,9 @@ def test_claim_and_finding_decision_are_audited():
     case_id = cases[0]["id"]
     claim = client.post(f"/api/v1/officer/cases/{case_id}/claim", headers=headers)
     assert claim.status_code in (200, 409)
+    if claim.status_code == 200:
+        assert claim.json()["data"]["citizen_id"] == "***"
+        assert "form_data" not in claim.json()["data"]
     detail = client.get(f"/api/v1/officer/cases/{case_id}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["data"]["timeline"]
@@ -96,3 +99,64 @@ def test_officer_detail_contains_authorized_case_documents():
         assert "object_key" not in documents[0]
     finally:
         store.documents.pop(document.id, None)
+
+
+def test_queue_supports_search_status_and_sort_parameters():
+    token = login()
+    response = client.get(
+        "/api/v1/officer/cases?q=UBNDAI-2026-000001&status=awaiting_officer_review&sort=newest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["pagination"]["page_size"] == 20
+    assert all(item["id"] == "case-demo-001" for item in response.json()["data"])
+
+
+def test_officer_can_read_and_edit_extracted_field_then_rerun_validation():
+    document = CaseDocument(
+        id="document-field-review",
+        case_id="case-demo-001",
+        submission_version_id="submission-demo-001",
+        document_type="giay_chung_sinh",
+        file_uri="private://case-demo-001/document-field-review",
+        original_filename="giay-chung-sinh.png",
+        content_type="image/png",
+        size_bytes=1024,
+        ocr_status="manual_review_required",
+        uploaded_at=datetime.now(timezone.utc),
+    )
+    field = ExtractedFieldRecord(
+        id="field-review-name",
+        document_id=document.id,
+        field_key="ho_ten_con",
+        raw_value="Nguyen An",
+        normalized_value="Nguyen An",
+        confidence=0.62,
+        page=1,
+        review_status="needs_human_review",
+    )
+    store.documents[document.id] = document
+    store.extracted_fields[field.id] = field
+    try:
+        token = login()
+        headers = {"Authorization": f"Bearer {token}"}
+        listed = client.get(f"/api/v1/officer/documents/{document.id}/fields", headers=headers)
+        assert listed.status_code == 200
+        assert listed.json()["data"][0]["review_status"] == "needs_human_review"
+
+        edited = client.patch(
+            f"/api/v1/officer/extracted-fields/{field.id}",
+            headers=headers,
+            json={"normalized_value": "Nguyễn An", "reason": "Đối chiếu bản gốc"},
+        )
+        assert edited.status_code == 200
+        assert edited.json()["data"]["previous_value"] == "Nguyen An"
+        assert edited.json()["data"]["review_status"] == "edited"
+
+        rerun = client.post("/api/v1/officer/cases/case-demo-001/rerun-validation", headers=headers)
+        assert rerun.status_code == 200
+        assert all(item["type"] != "ocr_human_review" for item in rerun.json()["data"])
+        assert any(event.event_type == "ocr_field_edited" for event in store.audit)
+    finally:
+        store.documents.pop(document.id, None)
+        store.extracted_fields.pop(field.id, None)

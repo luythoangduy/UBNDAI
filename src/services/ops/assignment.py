@@ -1,12 +1,23 @@
-"""Auto-assignment hồ sơ cho cán bộ. Owner: Dev C.
+"""Deterministic local-P0 assignment for legacy cases."""
 
-Round-robin có trọng số: lọc officer theo lĩnh vực thủ tục, chọn người ít việc nhất.
-Priority: +N nếu có ChecklistItem 'uncertain' hoặc needs_human_review (AI không chắc → người xem sớm).
-reason luôn ghi rõ để giải thích được với cán bộ.
-"""
+from datetime import datetime, timezone
 
-from src.models import Assignment
+from src.models import Assignment, CaseUpdate
+from src.services import cases
 
 
 async def auto_assign(case_id: str) -> Assignment:
-    raise NotImplementedError  # TODO(C) Sprint 1
+    case = await cases.get(case_id)
+    # The production identity directory/workload allocator is deferred. Keeping
+    # this explicit makes the local demo deterministic and explainable.
+    officer_id = case.assigned_officer_id or "officer.demo"
+    priority = 50 + min(50, sum(item.status == "uncertain" for item in case.checklist) * 10)
+    if case.assigned_officer_id != officer_id:
+        await cases.update(case_id, CaseUpdate(assigned_officer_id=officer_id))
+    return Assignment(
+        case_id=case_id,
+        officer_id=officer_id,
+        assigned_at=datetime.now(timezone.utc),
+        reason="local_p0:default_officer;uncertain_items_first",
+        priority=priority,
+    )

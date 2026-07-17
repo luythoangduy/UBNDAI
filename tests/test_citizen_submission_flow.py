@@ -73,6 +73,28 @@ def test_citizen_cannot_access_another_citizens_case():
     assert client.get(f"/api/v1/citizen/cases/{case_id}", headers=second).status_code == 404
 
 
+def test_citizen_can_update_form_data_and_clarification_answers():
+    headers = auth("citizen.demo")
+    created = client.post(
+        "/api/v1/citizen/cases",
+        headers=headers,
+        json={"procedure_id": "khai_sinh", "locality_code": "00001"},
+    ).json()["data"]
+    updated = client.patch(
+        f"/api/v1/citizen/cases/{created['id']}",
+        headers=headers,
+        json={
+            "expected_version": created["version"],
+            "form_data": {"full_name": "Nguyen An"},
+            "answers": {"ket_hon": True},
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["data"]["form_data"]["full_name"] == "Nguyen An"
+    assert updated.json()["data"]["form_data"]["_answers"] == {"ket_hon": True}
+    assert updated.json()["data"]["version"] == created["version"] + 1
+
+
 def test_upload_policy_rejects_invalid_type_and_oversized_file():
     headers = auth("citizen.demo")
     case = client.post("/api/v1/citizen/cases", headers=headers, json={"procedure_id": "khai_sinh", "locality_code": "00001"}).json()["data"]

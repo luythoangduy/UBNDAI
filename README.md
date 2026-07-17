@@ -51,12 +51,71 @@ pytest tests/ -v --tb=short
 # Lint (CI gate)
 ruff check src/ tests/
 
-# Index catalog thủ tục vào Chroma
-python scripts/index_procedures.py --source data/procedures --collection-name tthc_procedures
+# Index catalog thủ tục vào Chroma + build BM25 cache (tuỳ chọn —
+# không index vẫn chat được: retrieval tự fallback BM25 in-memory từ catalog)
+python scripts/index_procedures.py --source data/procedures --build-bm25
 
 # Seed DB demo
 python scripts/seed_db.py
 ```
+
+### Chat guidance (luồng người dân)
+
+```bash
+# Lượt 1 — nhận diện thủ tục (không cần case_id, hệ thống tự tạo Case)
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "tôi muốn đăng ký khai sinh cho con mới sinh"}'
+
+# Các lượt sau — kèm case_id nhận được từ lượt 1
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"case_id": "<case_id>", "message": "đã kết hôn, bé sinh ở bệnh viện, được 5 ngày"}'
+```
+
+Response (`ChatResponse`): `reply`, `kind` (`clarify` | `checklist` | `answer` | `fallback`),
+`primary_intent`, `detected_intents`, `clarifying_questions`, và `citations`. Một message
+có thể mang nhiều intent (ví dụ `fee` + `processing_time` + `agency` + `checklist`).
+Mỗi citation ánh xạ đúng một chunk nguồn qua
+`index`, `procedure_id`, `chunk_id`, `section`, `excerpt` và `source_url`; chỉ dấu `[n]`
+trong `reply` khớp với `citations[].index`. Tin nhắn được strip và giới hạn 4.000 ký tự.
+Mọi câu trả lời về thủ tục đều kèm nguồn; thiếu nguồn thì trả cảnh báo "chưa đủ căn cứ".
+
+Nhận diện thủ tục chỉ dùng identity metadata (`name`, `aliases`, `example_queries`,
+`negative_keywords`), tách biệt với content index chứa hồ sơ/lệ phí/biểu mẫu. Trạng thái
+chờ chọn thủ tục và chờ trả lời làm rõ được persist trong `Case`, nên người dùng có thể
+trả lời bằng số thứ tự ở lượt kế tiếp.
+
+SQLite là cấu hình MVP và chỉ nên chạy một worker. Optimistic-lock conflict trả HTTP 409
+thay vì 500. Trước khi public deployment vẫn phải nối JWT ownership (`case.citizen_id`),
+rate limit, case expiration và idempotency key; `case_id` không được xem là cơ chế auth.
+
+### Intent routing
+
+| Nhóm | Intent | Hành vi |
+|---|---|---|
+| Điều hướng | `procedure_discovery`, `clarification_answer` | Identify hoặc cập nhật answers trước khi chọn response |
+| Chuyển thủ tục | `switch_procedure`, `switch_confirmation` | Reset answers/checklist; yêu cầu xác nhận trước nếu đã có document |
+| Thông tin | `fee`, `processing_time`, `agency`, `legal_basis`, `forms` | Đọc trực tiếp `Procedure`, hỗ trợ nhiều intent cùng lượt |
+| Hồ sơ | `checklist` | Sinh từ requirements; có thể ghép cùng câu trả lời thông tin |
+| Chưa tích hợp | `status_tracking`, `submission`, `document_upload` | Trả fallback minh bạch, không giả vờ đã tra cứu/nộp |
+| Hội thoại | `greeting`, `thanks`, `capabilities` | Trả lời không qua procedure RAG |
+| Ngoài phạm vi | `out_of_scope`, `unknown` | Không retrieve thủ tục; hướng người dùng mô tả lại nhu cầu hành chính |
+
+Precedence: pending candidate → deterministic answer extraction → intent rõ → LLM semantic
+fallback cho wording `unknown/general` → route. Với mixed intent, state update và response
+intent được xử lý độc lập để việc ghi nhận câu làm rõ không làm mất câu hỏi chính.
+
+Identity matching yêu cầu exact name/alias hoặc signature nhiều token; một token như `sinh`
+không đủ chọn `khai_sinh`. Negative phrase trong cấu trúc phủ định không chặn positive match.
+Clarification parser consume từng clause đúng một lần và vẫn cho phép câu explicit sửa answer
+đã lưu. Checklist khi chưa đủ dữ liệu chỉ hiển thị giấy tờ chắc chắn áp dụng, được persist như
+checklist tạm và trả lại các câu hỏi còn thiếu cho frontend.
+
+Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
+model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive
+fallback, luồng vẫn chạy); `EMBEDDING_PROVIDER` (`auto`/`google`/`bge-m3`/`fake` — phải khớp
+lúc index; `google` cần `GOOGLE_API_KEY` riêng); `DATABASE_URL`, `CHROMA_PERSIST_DIR`.
 
 ## 6. Cấu trúc repo
 

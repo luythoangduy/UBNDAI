@@ -1,13 +1,15 @@
 """Kiểm tra contract models + dữ liệu mẫu hợp lệ — guard cho Sprint 0."""
 
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from src.models import Procedure, ValidationIssue
+from src.models import ChatRequest, ClarifyingQuestion, Procedure, ValidationIssue
+from src.services import catalog
 
 PROCEDURES_DIR = Path(__file__).resolve().parents[1] / "data" / "procedures"
 
@@ -54,3 +56,42 @@ def test_extracted_document_field_map():
         created_at=datetime.now(timezone.utc),
     )
     assert doc.field_map() == {"cccd.ho_ten": "Nguyễn Văn A"}
+
+
+def test_chat_request_strips_and_rejects_blank_message():
+    assert ChatRequest(message="  xin chào  ").message == "xin chào"
+    with pytest.raises(ValidationError):
+        ChatRequest(message="   ")
+
+
+def test_choice_question_requires_options():
+    with pytest.raises(ValidationError):
+        ClarifyingQuestion(key="loai", text="Chọn loại", answer_type="choice")
+
+
+@pytest.mark.parametrize("field", ["clarifying_questions", "requirements", "form_templates"])
+def test_procedure_rejects_duplicate_catalog_identifiers(field):
+    raw = json.loads((PROCEDURES_DIR / "khai_sinh.json").read_text(encoding="utf-8"))
+    source = raw[field][0]
+    raw[field].append(source)
+    with pytest.raises(ValidationError):
+        Procedure.model_validate(raw)
+
+
+@pytest.mark.parametrize("duplicate_field", ["id", "national_code"])
+def test_catalog_rejects_duplicate_procedure_identity(tmp_path, duplicate_field):
+    source = PROCEDURES_DIR / "khai_sinh.json"
+    shutil.copy2(source, tmp_path / "a.json")
+    raw = json.loads(source.read_text(encoding="utf-8"))
+    if duplicate_field == "id":
+        raw["national_code"] = "different-code"
+    else:
+        raw["id"] = "different-id"
+    (tmp_path / "b.json").write_text(
+        json.dumps(raw, ensure_ascii=False), encoding="utf-8"
+    )
+    catalog.clear_cache()
+    expected = "Duplicate procedure id" if duplicate_field == "id" else "Duplicate national_code"
+    with pytest.raises(ValueError, match=expected):
+        catalog.load_catalog(tmp_path)
+    catalog.clear_cache()

@@ -2,6 +2,26 @@
   "id": "khai_sinh",
   "national_code": "1.001193",
   "name": "Đăng ký khai sinh",
+  "aliases": [
+    "làm giấy khai sinh",
+    "đăng ký giấy khai sinh",
+    "khai sinh cho con"
+  ],
+  "example_queries": [
+    "tôi muốn đăng ký khai sinh cho con",
+    "tôi mới sinh con, giờ cần làm giấy tờ gì",
+    "làm khai sinh cho bé mới sinh"
+  ],
+  "negative_keywords": [
+    "đăng ký kết hôn",
+    "căn cước công dân",
+    "giấy phép xây dựng",
+    "đất đai"
+  ],
+  "required_token_groups": [
+    ["khai", "sinh"],
+    ["giấy", "khai", "sinh"]
+  ],
   "agency": "UBND cấp xã",
   "legal_basis": [
     "Luật Hộ tịch 2014",
@@ -10,10 +30,26 @@
   ],
   "processing_days": 1,
   "fee_vnd": 0,
+  "late_registration_after_days": 60,
+  "late_registration_warning": "Bé đã sinh trên 60 ngày. Đây là trường hợp đăng ký khai sinh quá hạn; bạn nên liên hệ UBND cấp xã để được hướng dẫn hồ sơ phù hợp.",
   "clarifying_questions": [
-    "Cha mẹ bé đã đăng ký kết hôn chưa?",
-    "Bé sinh tại cơ sở y tế hay ngoài cơ sở y tế?",
-    "Bé sinh được bao nhiêu ngày rồi?"
+    {
+      "key": "ket_hon",
+      "text": "Cha mẹ bé đã đăng ký kết hôn chưa?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "sinh_tai_co_so_y_te",
+      "text": "Bé sinh tại cơ sở y tế phải không?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "so_ngay_tu_khi_sinh",
+      "text": "Bé sinh được bao nhiêu ngày rồi?",
+      "answer_type": "integer",
+      "minimum": 0,
+      "maximum": 3650
+    }
   ],
   "requirements": [
     {
@@ -29,6 +65,7 @@
       "code": "giay_chung_sinh",
       "name": "Giấy chứng sinh",
       "condition": "answers.sinh_tai_co_so_y_te == true",
+      "condition_label": "Áp dụng khi bé sinh tại cơ sở y tế",
       "original_required": true,
       "copies": 0,
       "accepted_doc_types": ["giay_chung_sinh"]
@@ -37,6 +74,7 @@
       "code": "van_ban_nguoi_lam_chung",
       "name": "Văn bản xác nhận của người làm chứng về việc sinh",
       "condition": "answers.sinh_tai_co_so_y_te == false",
+      "condition_label": "Áp dụng khi bé sinh ngoài cơ sở y tế",
       "original_required": true,
       "copies": 0,
       "accepted_doc_types": ["van_ban_lam_chung"]
@@ -53,6 +91,7 @@
       "code": "giay_dang_ky_ket_hon",
       "name": "Giấy chứng nhận kết hôn của cha mẹ (xuất trình)",
       "condition": "answers.ket_hon == true",
+      "condition_label": "Áp dụng khi cha mẹ bé đã đăng ký kết hôn",
       "original_required": true,
       "copies": 0,
       "accepted_doc_types": ["giay_dang_ky_ket_hon"]

@@ -4,7 +4,7 @@
 """
 
 from src.models.cases import Case, CaseCreate, CaseStatus, CaseUpdate, ChecklistItem
-from src.models.chat import ChatRequest, ChatResponse, Citation
+from src.models.chat import ChatRequest, ChatResponse, Citation, IntentName
 from src.models.documents import ExtractedDocument, ExtractedField
 from src.models.ops import (
     AnomalyAlert,
@@ -14,6 +14,7 @@ from src.models.ops import (
     MetricPoint,
 )
 from src.models.procedures import (
+    ClarifyingQuestion,
     DocumentRequirement,
     FormField,
     FormTemplate,
@@ -32,6 +33,7 @@ __all__ = [
     "ChatRequest",
     "ChatResponse",
     "ChecklistItem",
+    "ClarifyingQuestion",
     "Citation",
     "DailyDigest",
     "DocumentRequirement",
@@ -39,6 +41,7 @@ __all__ = [
     "ExtractedField",
     "FormField",
     "FormTemplate",
+    "IntentName",
     "MetricPoint",
     "Procedure",
     "ValidationIssue",

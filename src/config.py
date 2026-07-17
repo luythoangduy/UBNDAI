@@ -9,10 +9,22 @@ class Settings(BaseSettings):
     procedures_collection: str = "tthc_procedures"
     bm25_index_path: str = "./data/bm25_index.json"
 
-    # LLM cho chatbot/agent (Dev A) — TÁCH RIÊNG với LLM cho OCR bên dưới.
-    llm_provider: str = "anthropic"  # 'anthropic' | 'gemini'
-    llm_api_key: str = ""
+    # LLM cho chatbot/agent (Dev A) — TÁCH RIÊNG với LLM cho OCR bên dưới (OCR_LLM_*).
+    llm_provider: str = "anthropic"  # Claude — cùng stack với C2
+    llm_api_key: str = ""  # hoặc đặt ANTHROPIC_API_KEY
+    # Haiku: tier Claude rẻ/nhanh nhất — cố định theo quyết định dự án (như C2)
     llm_model: str = "claude-haiku-4-5"
+    llm_temperature: float = 0.1
+    llm_timeout_s: int = 30
+
+    # 'auto' | 'google' | 'bge-m3' | 'fake' — phải khớp provider lúc index Chroma
+    embedding_provider: str = "auto"
+    local_embedding_model_name: str = "BAAI/bge-m3"
+
+    retrieval_top_k: int = 6
+    identify_confidence_threshold: float = 0.55
+    identify_min_relevance: float = 0.6
+    identify_min_margin: float = 0.15
 
     ocr_engine: str = "paddleocr"  # 'paddleocr' | 'google_vision' | 'vision_llm'
     ocr_confidence_threshold: float = 0.85

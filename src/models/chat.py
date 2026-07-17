@@ -2,18 +2,52 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+IntentName = Literal[
+    "procedure_discovery",
+    "switch_procedure",
+    "switch_confirmation",
+    "clarification_answer",
+    "checklist",
+    "fee",
+    "processing_time",
+    "agency",
+    "legal_basis",
+    "forms",
+    "status_tracking",
+    "submission",
+    "document_upload",
+    "capabilities",
+    "greeting",
+    "thanks",
+    "out_of_scope",
+    "general_question",
+    "unknown",
+]
 
 
 class Citation(BaseModel):
+    index: int = Field(ge=1)
     procedure_id: str
+    chunk_id: str
+    section: str
     label: str = Field(description="Vd 'Thủ tục Đăng ký khai sinh — Luật Hộ tịch 2014'")
+    excerpt: str
     source_url: str | None = None
 
 
 class ChatRequest(BaseModel):
     case_id: str | None = Field(default=None, description="None = mở hội thoại/case mới")
-    message: str
+    message: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("message")
+    @classmethod
+    def strip_message(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Tin nhắn không được để trống")
+        return value
 
 
 class ChatResponse(BaseModel):
@@ -22,5 +56,7 @@ class ChatResponse(BaseModel):
     kind: Literal["clarify", "checklist", "answer", "fallback"] = Field(
         description="Node cuối cùng của graph sinh ra reply — frontend render khác nhau"
     )
+    primary_intent: IntentName = "unknown"
+    detected_intents: list[IntentName] = Field(default_factory=list)
     clarifying_questions: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)

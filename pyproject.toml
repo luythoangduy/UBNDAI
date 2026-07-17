@@ -2,7 +2,7 @@
 name = "c3-tthc-assistant"
 version = "0.1.0"
 description = "Trợ lý AI hướng dẫn và kiểm tra hồ sơ thủ tục hành chính"
-requires-python = ">=3.11.9,<3.12"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",

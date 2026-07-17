@@ -29,10 +29,10 @@
 
 Kế thừa trực tiếp từ `C2-App-108` (xem `ARCHITECTURE.md §5` — bản đồ tái sử dụng):
 
-- Backend: FastAPI, Python `>=3.11.9,<3.12`
+- Backend: FastAPI, Python `>=3.11` (đang phát triển trên 3.12)
 - AI orchestration: LangGraph (một LLM call structured cho rewrite + route + clarify, rule-based fallback)
 - Retrieval: Chroma dense + BM25, reciprocal rank fusion (hybrid mặc định)
-- OCR: adapter pattern (PaddleOCR local / Google Vision cloud)
+- OCR: vision LLM (mặc định OpenAI `gpt-5-mini`, đổi được sang Anthropic/Gemini qua env `OCR_LLM_*`) — đọc cả chữ in lẫn viết tay, structured output + bbox; PaddleOCR/Google Vision là adapter dự phòng. Xem `ARCHITECTURE.md §6`.
 - DB: SQLite dev / PostgreSQL prod, SQLAlchemy + Alembic
 - Frontend: React + Vite + TypeScript
 - Test/lint: pytest, ruff
@@ -116,6 +116,16 @@ Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — AP
 model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive
 fallback, luồng vẫn chạy); `EMBEDDING_PROVIDER` (`auto`/`google`/`bge-m3`/`fake` — phải khớp
 lúc index; `google` cần `GOOGLE_API_KEY` riêng); `DATABASE_URL`, `CHROMA_PERSIST_DIR`.
+
+OCR dùng **bộ env riêng, không chung với chatbot**: `OCR_ENGINE=vision_llm`,
+`OCR_LLM_PROVIDER` (`openai`/`anthropic`/`gemini`) + `OCR_LLM_API_KEY` + `OCR_LLM_MODEL`
+(mặc định `gpt-5-mini`), `OCR_LLM_REASONING_EFFORT=minimal` (nhanh/rẻ, nâng `low`/`medium`
+nếu ảnh quá xấu), `OCR_CACHE_SIZE` (cache theo hash ảnh, 0 = tắt),
+`OCR_CONFIDENCE_THRESHOLD` (dưới ngưỡng → `needs_human_review`). Thiếu `OCR_LLM_API_KEY`
+thì upload giấy tờ trả lỗi engine — các luồng khác không ảnh hưởng.
+
+Tài khoản demo (bật qua `ENABLE_DEMO_AUTH`, mật khẩu chung `ChangeMe123!`):
+`citizen.demo` / `officer.demo` (+ `citizen.other` / `officer.other` để test phân quyền).
 
 ### Sinh bản nháp kết quả thủ tục
 

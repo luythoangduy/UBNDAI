@@ -77,10 +77,26 @@ Bài học mang từ C2 sang: planner LLM-first với rule-based fallback; cần
 
 ## 6. OCR (Dev B)
 
-- `OcrEngine` protocol trong `services/ocr/engine.py`; adapter: PaddleOCR (local, mặc định dev) và Google Vision (cloud, production). Chọn qua env `OCR_ENGINE`.
-- Pipeline: ảnh → phân loại loại giấy tờ (`classifier.py`) → trích trường theo template loại giấy tờ → `ExtractedDocument` với confidence từng trường.
-- Trường có confidence dưới ngưỡng → `needs_human_review=True` → hiện UI cho người dân sửa, và vào hàng chờ cán bộ xác nhận.
-- Autofill (`form_filler.py`): map `ExtractedField.key` → `FormField` qua `ocr_sources`, không hardcode theo thủ tục.
+- `OcrEngine` protocol trong `services/ocr/engine.py`; engine chính là **`VisionLlmEngine`**
+  (chọn qua `OCR_ENGINE=vision_llm`) — vision LLM đọc cả chữ in lẫn chữ viết tay tiếng Việt,
+  trả structured JSON được API đảm bảo đúng schema (`OCR_OUTPUT_SCHEMA`). Provider/model/key
+  cấu hình qua bộ env `OCR_LLM_*` (openai `gpt-5-mini` mặc định | anthropic | gemini),
+  **tách riêng hoàn toàn với LLM chatbot (`LLM_*`)**. `PaddleOcrEngine`/`GoogleVisionEngine`
+  là adapter dự phòng.
+- Tiền xử lý (`preprocessing.py`): EXIF → downscale → warp chính diện (perspective) →
+  deskew → CLAHE; mọi bước fail đều fallback ảnh gốc, không bao giờ chặn OCR.
+- Prompt chuẩn chuyên gia VBHC (`agents/prompts/ocr.py`): trích nguyên văn, không suy đoán
+  chữ mờ (`[ILLEGIBLE]`/`[UNCERTAIN: ...]`), tách bút phê viết tay riêng (vị trí + tối đa
+  3 phương án kèm %), trường chuẩn văn bản hành chính, `bbox` tương đối 0–1 cho UI highlight.
+- Pipeline (`pipeline.py`): ảnh → tiền xử lý → engine (có cache theo hash ảnh —
+  `OCR_CACHE_SIZE`) → cross-check doc_type giữa engine hint và keyword `classifier.py` →
+  `ExtractedDocument`. Tối ưu tốc độ/chi phí qua `OCR_LLM_REASONING_EFFORT=minimal`.
+- `needs_human_review=True` khi: trường/doc_type dưới `OCR_CONFIDENCE_THRESHOLD`, doc_type
+  xung đột giữa 2 nguồn, có vùng `[ILLEGIBLE]`, hoặc ocr_confidence tổng thể thấp →
+  hiện UI cho người dân sửa, và vào hàng chờ cán bộ xác nhận.
+- Autofill (`form_filler.py`): map `ExtractedField.key` → `FormField` qua `ocr_sources`,
+  không hardcode theo thủ tục; bỏ qua trường dưới ngưỡng confidence trừ khi người dân đã
+  sửa tay (`edited_by_user`); không ghi đè giá trị người dân đã nhập.
 
 ## 7. Validation (Dev B)
 

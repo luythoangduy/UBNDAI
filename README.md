@@ -70,12 +70,14 @@ curl -X POST http://localhost:8000/api/v1/chat \
 # Các lượt sau — kèm case_id nhận được từ lượt 1
 curl -X POST http://localhost:8000/api/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"case_id": "<case_id>", "message": "cần chuẩn bị giấy tờ gì?"}'
+  -d '{"case_id": "<case_id>", "message": "đã kết hôn, bé sinh ở bệnh viện, được 5 ngày"}'
 ```
 
 Response (`ChatResponse`): `reply`, `kind` (`clarify` | `checklist` | `answer` | `fallback`),
-`clarifying_questions`, và `citations` (mã thủ tục + căn cứ pháp lý + link Cổng DVC) —
-mọi câu trả lời về thủ tục đều kèm nguồn; thiếu nguồn thì trả cảnh báo "chưa đủ căn cứ".
+`clarifying_questions`, và `citations`. Mỗi citation ánh xạ đúng một chunk nguồn qua
+`index`, `procedure_id`, `chunk_id`, `section`, `excerpt` và `source_url`; chỉ dấu `[n]`
+trong `reply` khớp với `citations[].index`. Tin nhắn được strip và giới hạn 4.000 ký tự.
+Mọi câu trả lời về thủ tục đều kèm nguồn; thiếu nguồn thì trả cảnh báo "chưa đủ căn cứ".
 
 Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
 model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive

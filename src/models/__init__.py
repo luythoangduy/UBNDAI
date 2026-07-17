@@ -14,6 +14,7 @@ from src.models.ops import (
     MetricPoint,
 )
 from src.models.procedures import (
+    ClarifyingQuestion,
     DocumentRequirement,
     FormField,
     FormTemplate,
@@ -32,6 +33,7 @@ __all__ = [
     "ChatRequest",
     "ChatResponse",
     "ChecklistItem",
+    "ClarifyingQuestion",
     "Citation",
     "DailyDigest",
     "DocumentRequirement",

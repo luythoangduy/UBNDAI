@@ -55,6 +55,7 @@ class Case(BaseModel):
     )
     status: CaseStatus = "draft"
     assigned_officer_id: str | None = None
+    version: int = Field(default=0, ge=0, description="Optimistic locking cho cập nhật case")
     created_at: datetime
     updated_at: datetime
     due_at: datetime | None = Field(default=None, description="Hạn xử lý — đầu vào cho late_rate")

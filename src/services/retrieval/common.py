@@ -77,21 +77,23 @@ def reciprocal_rank_fusion(
 
 
 def citations_from_chunks(chunks: list[RetrievedChunk]) -> list[Citation]:
-    """Citation dedupe theo procedure_id — label lấy từ metadata đã index từ catalog."""
+    """Một citation cho mỗi chunk; ``index`` khớp trực tiếp chỉ dấu [n]."""
     citations: list[Citation] = []
-    seen: set[str] = set()
-    for chunk in chunks:
+    for index, chunk in enumerate(chunks, start=1):
         procedure_id = chunk.procedure_id
-        if not procedure_id or procedure_id in seen:
+        if not procedure_id or not chunk.chunk_id:
             continue
-        seen.add(procedure_id)
         name = str(chunk.metadata.get("procedure_name") or procedure_id)
         legal_basis = str(chunk.metadata.get("legal_basis") or "").strip()
         label = f"Thủ tục {name}" + (f" — {legal_basis}" if legal_basis else "")
         citations.append(
             Citation(
+                index=index,
                 procedure_id=procedure_id,
+                chunk_id=chunk.chunk_id,
+                section=str(chunk.metadata.get("section") or ""),
                 label=label,
+                excerpt=chunk.excerpt(),
                 source_url=str(chunk.metadata.get("source_url") or "") or None,
             )
         )

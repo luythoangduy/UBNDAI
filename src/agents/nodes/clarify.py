@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from src.agents.state import GuidanceState
-from src.services import catalog, checklist as checklist_service
+from src.services import catalog
+from src.services.clarification import unresolved_questions
 from src.services.retrieval import citations_from_chunks, retrieve
 
 
@@ -23,13 +24,13 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         }
 
     answers = state.get("answers") or {}
-    unresolved = checklist_service.unresolved_condition_keys(procedure, answers)
+    unanswered = unresolved_questions(procedure, answers)
     proc_chunks = [
         c for c in retrieve(procedure.name) if c.procedure_id == procedure.id
     ]
     citations = [c.model_dump() for c in citations_from_chunks(proc_chunks)]
 
-    if not unresolved:
+    if not unanswered:
         return {
             "reply": (
                 f"Mình đã đủ thông tin cho thủ tục {procedure.name}. "
@@ -40,9 +41,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "citations": citations,
         }
 
-    questions = procedure.clarifying_questions or [
-        f"Bạn cho mình biết thêm về: {key}?" for key in unresolved
-    ]
+    questions = [question.text for question in unanswered]
     return {
         "reply": (
             f"Để lên checklist đúng trường hợp của bạn cho thủ tục {procedure.name}, "

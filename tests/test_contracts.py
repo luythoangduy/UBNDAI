@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.models import Procedure, ValidationIssue
+from src.models import ChatRequest, Procedure, ValidationIssue
 
 PROCEDURES_DIR = Path(__file__).resolve().parents[1] / "data" / "procedures"
 
@@ -54,3 +54,9 @@ def test_extracted_document_field_map():
         created_at=datetime.now(timezone.utc),
     )
     assert doc.field_map() == {"cccd.ho_ten": "Nguyễn Văn A"}
+
+
+def test_chat_request_strips_and_rejects_blank_message():
+    assert ChatRequest(message="  xin chào  ").message == "xin chào"
+    with pytest.raises(ValidationError):
+        ChatRequest(message="   ")

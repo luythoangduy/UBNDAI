@@ -68,3 +68,40 @@ def test_case_persists_procedure_and_status_after_checklist():
     assert case.procedure_id == "khai_sinh"
     assert case.status == "collecting"
     assert case.checklist, "checklist phải được persist về Case"
+
+
+def test_clarification_answer_is_extracted_and_persisted():
+    from src.services import cases as cases_service
+    import asyncio
+
+    first = _post({"message": "Tôi muốn đăng ký khai sinh cho con"})
+    second = _post(
+        {
+            "case_id": first["case_id"],
+            "message": "Có, bé sinh ở bệnh viện, bé sinh được 5 ngày",
+        }
+    )
+
+    assert second["kind"] == "checklist"
+    case = asyncio.run(cases_service.get(first["case_id"]))
+    assert case.answers == {
+        "ket_hon": True,
+        "sinh_tai_co_so_y_te": True,
+        "so_ngay_tu_khi_sinh": 5,
+    }
+
+
+def test_only_unanswered_questions_are_returned():
+    first = _post({"message": "Tôi muốn đăng ký khai sinh cho con"})
+    second = _post(
+        {"case_id": first["case_id"], "message": "Cha mẹ đã kết hôn"}
+    )
+
+    assert second["kind"] == "clarify"
+    assert "kết hôn" not in " ".join(second["clarifying_questions"]).casefold()
+    assert len(second["clarifying_questions"]) == 2
+
+
+def test_empty_message_rejected():
+    response = client.post("/api/v1/chat", json={"message": "   "})
+    assert response.status_code == 422

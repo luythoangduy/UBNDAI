@@ -9,6 +9,7 @@ from typing import Any
 
 from src.agents.state import GuidanceState
 from src.services import catalog, checklist as checklist_service
+from src.services.clarification import unresolved_questions
 from src.services.retrieval.chunking import chunks_from_procedure
 from src.services.retrieval.common import citations_from_chunks
 
@@ -28,7 +29,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
 
     answers = state.get("answers") or {}
     items = checklist_service.build_checklist(procedure, answers)
-    unresolved = checklist_service.unresolved_condition_keys(procedure, answers)
+    unanswered = unresolved_questions(procedure, answers)
 
     lines = [f"Checklist hồ sơ cho thủ tục {procedure.name}:"]
     order = 0
@@ -60,13 +61,11 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         lines.append(f"Không áp dụng cho trường hợp của bạn: {'; '.join(names)}.")
 
     pending_questions: list[str] = []
-    if unresolved:
+    if unanswered:
         lines.append(
             "Một số mục còn tuỳ trường hợp — bạn trả lời thêm để checklist chính xác hơn:"
         )
-        pending_questions = procedure.clarifying_questions or [
-            f"Bạn cho mình biết thêm về: {key}?" for key in unresolved
-        ]
+        pending_questions = [question.text for question in unanswered]
 
     citations = citations_from_chunks(chunks_from_procedure(procedure))
     return {

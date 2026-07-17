@@ -12,7 +12,6 @@ from src.agents.state import GuidanceState
 from src.config import settings
 from src.services import catalog
 from src.services.retrieval import NO_SOURCE_WARNING, citations_from_chunks, retrieve
-from src.services.retrieval.common import RRF_K
 
 
 async def run(state: GuidanceState) -> dict[str, Any]:
@@ -29,23 +28,48 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     scores: dict[str, float] = {}
     for rank, chunk in enumerate(chunks, start=1):
         if chunk.procedure_id:
-            scores[chunk.procedure_id] = scores.get(chunk.procedure_id, 0.0) + 1.0 / (
-                RRF_K + rank
+            relevance = float(chunk.score or (1.0 / (60 + rank)))
+            scores[chunk.procedure_id] = max(
+                scores.get(chunk.procedure_id, float("-inf")), relevance
             )
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    if not ranked:
+        return {
+            "reply": NO_SOURCE_WARNING,
+            "reply_kind": "fallback",
+            "citations": [],
+            "retrieved_chunks": [],
+        }
     candidates = [
         {"procedure_id": procedure_id, "score": round(score, 6)}
         for procedure_id, score in ranked
     ]
-    total = sum(scores.values()) or 1.0
     top_id, top_score = ranked[0]
-    confidence = top_score / total
+    second_score = ranked[1][1] if len(ranked) > 1 else 0.0
+    margin = top_score - second_score
+    confidence = top_score / (top_score + second_score) if second_score > 0 else 1.0
+    is_relevant = top_score >= settings.identify_min_relevance
 
     retrieved = [
         {"content": c.content, "metadata": c.metadata, "score": c.score} for c in chunks
     ]
 
-    if confidence >= settings.identify_confidence_threshold or len(ranked) == 1:
+    if not is_relevant:
+        return {
+            "identify_confidence": round(confidence, 4),
+            "candidate_procedures": candidates,
+            "reply": NO_SOURCE_WARNING,
+            "reply_kind": "fallback",
+            "citations": [],
+            "retrieved_chunks": retrieved,
+        }
+
+    is_distinct = len(ranked) == 1 or margin >= settings.identify_min_margin
+    if (
+        is_relevant
+        and is_distinct
+        and confidence >= settings.identify_confidence_threshold
+    ):
         procedure = catalog.get_procedure(top_id)
         if procedure is None:  # index lệch catalog — không đoán
             return {
@@ -54,7 +78,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
                 "citations": [],
                 "retrieved_chunks": retrieved,
             }
-        questions = procedure.clarifying_questions
+        questions = [question.text for question in procedure.clarifying_questions]
         reply = _procedure_intro(procedure)
         if questions:
             reply += "\n\nĐể lên checklist đúng trường hợp của bạn, cho mình hỏi thêm:"

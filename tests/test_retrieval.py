@@ -24,12 +24,16 @@ def test_retrieve_returns_empty_for_gibberish():
     assert retrieve("xyzt qwerty lorem") == []
 
 
-def test_citations_dedupe_by_procedure_and_carry_source():
+def test_citations_map_one_to_one_to_chunks_and_carry_source():
     chunks = retrieve("thành phần hồ sơ khai sinh")
     citations = citations_from_chunks(chunks)
-    assert len(citations) == 1
+    assert len(citations) == len(chunks)
     citation = citations[0]
+    assert citation.index == 1
     assert citation.procedure_id == "khai_sinh"
+    assert citation.chunk_id == chunks[0].chunk_id
+    assert citation.section == chunks[0].metadata["section"]
+    assert citation.excerpt
     assert "Đăng ký khai sinh" in citation.label
     assert "Luật Hộ tịch 2014" in citation.label
     assert citation.source_url and citation.source_url.startswith("https://")

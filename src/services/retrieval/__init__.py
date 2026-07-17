@@ -43,9 +43,19 @@ logger = logging.getLogger(__name__)
 _BM25_CACHE: dict[str, Bm25Index] = {}
 
 
-def retrieve(query: str, *, top_k: int | None = None) -> list[RetrievedChunk]:
+def retrieve(
+    query: str,
+    *,
+    top_k: int | None = None,
+    procedure_id: str | None = None,
+) -> list[RetrievedChunk]:
     """Entrypoint duy nhất cho các node agent: trả về chunks đã fuse, tốt nhất trước."""
     limit = top_k or settings.retrieval_top_k
+    if procedure_id:
+        procedure = catalog.get_procedure(procedure_id)
+        if procedure is None:
+            return []
+        return Bm25Index(chunks_from_procedure(procedure)).search(query, top_k=limit)
     sparse = _bm25_index().search(query, top_k=limit * 2)
     dense = _dense_search(query, top_k=limit * 2)
     if dense and sparse:

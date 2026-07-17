@@ -53,10 +53,19 @@ def _compiled_graph() -> Any:
 async def run_guidance(payload: ChatRequest) -> ChatResponse:
     """Entrypoint cho src/api/v1/chat.py: load Case, chạy graph, persist state về Case."""
     if payload.case_id:
-        case = await cases.get(payload.case_id)
+        case_id = payload.case_id
     else:
         # TODO(C): citizen_id lấy từ auth sau khi port JWT từ C2-App-108
         case = await cases.create(CaseCreate(citizen_id="anonymous"))
+        case_id = case.id
+
+    async with cases.case_lock(case_id):
+        case = await cases.get(case_id)
+        return await _run_locked_turn(case, payload.message)
+
+
+async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
+    """Chạy và commit trọn một lượt trong critical section của case."""
 
     history = await cases.get_messages(case.id)
     messages: list[Any] = [
@@ -65,7 +74,7 @@ async def run_guidance(payload: ChatRequest) -> ChatResponse:
         else AIMessage(content=m["content"])
         for m in history
     ]
-    messages.append(HumanMessage(content=payload.message))
+    messages.append(HumanMessage(content=message))
 
     initial: GuidanceState = {
         "messages": messages,
@@ -86,11 +95,12 @@ async def run_guidance(payload: ChatRequest) -> ChatResponse:
         updates["checklist"] = checklist_items
         if case.status == "draft":  # draft → collecting: đã có checklist
             updates["status"] = "collecting"
-    case = await cases.save(case.model_copy(update=updates))
-
     reply = final.get("reply") or NO_SOURCE_WARNING
-    await cases.append_message(case.id, "user", payload.message)
-    await cases.append_message(case.id, "assistant", reply)
+    case = await cases.commit_turn(
+        case.model_copy(update=updates),
+        message,
+        reply,
+    )
 
     return ChatResponse(
         case_id=case.id,

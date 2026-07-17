@@ -11,9 +11,21 @@
   "processing_days": 1,
   "fee_vnd": 0,
   "clarifying_questions": [
-    "Cha mẹ bé đã đăng ký kết hôn chưa?",
-    "Bé sinh tại cơ sở y tế hay ngoài cơ sở y tế?",
-    "Bé sinh được bao nhiêu ngày rồi?"
+    {
+      "key": "ket_hon",
+      "text": "Cha mẹ bé đã đăng ký kết hôn chưa?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "sinh_tai_co_so_y_te",
+      "text": "Bé sinh tại cơ sở y tế phải không?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "so_ngay_tu_khi_sinh",
+      "text": "Bé sinh được bao nhiêu ngày rồi?",
+      "answer_type": "integer"
+    }
   ],
   "requirements": [
     {

@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field
 
 from src.agents.prompts import PLANNER_SYSTEM, planner_context
 from src.agents.state import GuidanceState
-from src.services import catalog, checklist as checklist_service
-from src.services.llm import get_llm
+from src.services import catalog
+from src.services.clarification import extract_answers, unresolved_questions
+from src.services.llm import get_llm, llm_is_configured
 from src.services.retrieval.common import fold_ascii
 
 logger = logging.getLogger(__name__)
@@ -40,18 +41,34 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     message = _last_human_text(state)
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
     answers = dict(state.get("answers") or {})
-    unresolved = (
-        checklist_service.unresolved_condition_keys(procedure, answers)
-        if procedure
-        else []
-    )
+    pending = unresolved_questions(procedure, answers) if procedure else []
+    unresolved = [question.key for question in pending]
+
+    deterministic = extract_answers(message, pending)
+    if deterministic:
+        answers.update(deterministic)
+        remaining = unresolved_questions(procedure, answers)
+        return {
+            "route": "clarify" if remaining else "checklist",
+            "rewritten_query": message,
+            "answers": answers,
+        }
 
     decision = await _llm_decision(state, message, procedure, answers, unresolved)
     if decision is None:
         decision = _rule_decision(message, procedure)
 
+    allowed_keys = set(unresolved)
+    accepted_answers = 0
     for extracted in decision.extracted_answers:
-        answers[extracted.key] = _coerce(extracted.value)
+        if extracted.key in allowed_keys:
+            answers[extracted.key] = _coerce(extracted.value)
+            accepted_answers += 1
+
+    if accepted_answers and procedure:
+        decision.route = (
+            "clarify" if unresolved_questions(procedure, answers) else "checklist"
+        )
 
     return {
         "route": decision.route,
@@ -67,6 +84,8 @@ async def _llm_decision(
     answers: dict[str, Any],
     unresolved: list[str],
 ) -> PlannerDecision | None:
+    if not llm_is_configured():
+        return None
     try:
         summary = "\n".join(
             f"- {p.id}: {p.name} ({p.agency})" for p in catalog.load_catalog().values()
@@ -95,7 +114,7 @@ async def _llm_decision(
 
 
 def _rule_decision(message: str, procedure: Any) -> PlannerDecision:
-    """Fallback deterministic: không extract được answers, chỉ route thô."""
+    """Fallback deterministic sau khi answer extraction không tìm thấy dữ liệu."""
     if procedure is None:
         return PlannerDecision(route="identify", rewritten_query=message)
     folded = fold_ascii(message)

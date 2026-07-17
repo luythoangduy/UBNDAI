@@ -4,11 +4,22 @@ Dữ liệu thật nằm ở ``data/procedures/*.json``, validate bằng các mo
 Owner: Dev A (schema), cả team review khi thay đổi (contract).
 """
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 FieldType = Literal["text", "date", "number", "select", "checkbox"]
+AnswerType = Literal["boolean", "integer", "text", "choice"]
+
+
+class ClarifyingQuestion(BaseModel):
+    """Câu hỏi làm rõ gắn trực tiếp với key được lưu trong ``Case.answers``."""
+
+    key: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    text: str = Field(min_length=1)
+    answer_type: AnswerType
+    options: list[str] = Field(default_factory=list)
 
 
 class DocumentRequirement(BaseModel):
@@ -65,10 +76,33 @@ class Procedure(BaseModel):
     )
     processing_days: int | None = None
     fee_vnd: int | None = None
-    clarifying_questions: list[str] = Field(
+    clarifying_questions: list[ClarifyingQuestion] = Field(
         default_factory=list,
-        description="Câu hỏi làm rõ để xác định điều kiện áp dụng requirement",
+        description="Câu hỏi làm rõ có key/type để parse và chỉ hỏi phần còn thiếu",
     )
     requirements: list[DocumentRequirement]
     form_templates: list[FormTemplate] = Field(default_factory=list)
     source_url: str | None = None
+
+    @model_validator(mode="after")
+    def condition_keys_have_questions(self) -> "Procedure":
+        question_keys = {question.key for question in self.clarifying_questions}
+        condition_keys = {
+            match.group(1)
+            for requirement in self.requirements
+            if requirement.condition
+            for match in [
+                re.match(
+                    r"^\s*answers\.([A-Za-z_][A-Za-z0-9_]*)\s*(?:==|!=)",
+                    requirement.condition,
+                )
+            ]
+            if match
+        }
+        missing = condition_keys - question_keys
+        if missing:
+            raise ValueError(
+                "Các condition key chưa có clarifying question: "
+                + ", ".join(sorted(missing))
+            )
+        return self

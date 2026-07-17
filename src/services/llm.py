@@ -20,9 +20,13 @@ def anthropic_api_key() -> str:
     return settings.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
 
 
+def llm_is_configured() -> bool:
+    return has_real_api_key(anthropic_api_key())
+
+
 def get_llm(*, temperature: float | None = None) -> Any:
     key = anthropic_api_key()
-    if not has_real_api_key(key):
+    if not llm_is_configured():
         raise RuntimeError("Thiếu LLM_API_KEY/ANTHROPIC_API_KEY hợp lệ cho Claude.")
     try:
         from langchain_anthropic import ChatAnthropic

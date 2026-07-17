@@ -4,7 +4,6 @@ Owner: Dev A. Bài học từ C2-App-108: planner LLM-first + rule-based fallbac
 few-shot cho follow-up routing, decompose query trước khi RRF.
 """
 
-from src.agents.state import GuidanceState
 from src.models import ChatRequest, ChatResponse
 
 

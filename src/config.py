@@ -12,8 +12,9 @@ class Settings(BaseSettings):
     llm_provider: str = "gemini"  # cùng stack với C2
     llm_api_key: str = ""
 
-    ocr_engine: str = "paddleocr"  # 'paddleocr' | 'google_vision'
+    ocr_engine: str = "paddleocr"  # 'paddleocr' | 'google_vision' | 'vision_llm'
     ocr_confidence_threshold: float = 0.85
+    vision_llm_model: str = "gemini-2.5-flash"  # model cho engine vision_llm (chữ viết tay)
 
     readiness_submit_threshold: float = 0.9
 

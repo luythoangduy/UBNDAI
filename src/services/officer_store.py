@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
 from threading import RLock
 from uuid import uuid4
 
@@ -19,6 +21,7 @@ from src.models import (
 )
 from src.config import settings
 from src.services.persistence import ApplicationCaseORM, AuditEventORM, CaseDocumentORM, Database, SubmissionVersionORM
+from src.services.storage import storage
 
 
 def now() -> datetime:
@@ -89,11 +92,27 @@ class OfficerStore:
         if self._db and self.cases:
             return
         timestamp = now()
-        case = ApplicationCase(id="case-demo-001", case_code="UBNDAI-2026-000001", organization_id="org-demo", citizen_id="citizen-demo", procedure_id="khai_sinh", procedure_version_id="khai-sinh-v1", status="awaiting_officer_review", source_channel="citizen_portal", priority=80, created_at=timestamp, updated_at=timestamp)
+        demo_form = {
+            "ho_ten_con": "Nguyễn Minh An",
+            "ngay_sinh": "12/07/2026",
+            "gioi_tinh": "Nam",
+            "noi_sinh": "Bệnh viện Đa khoa Thành phố",
+            "ho_ten_me": "Nguyễn Thị Lan",
+            "ho_ten_cha": "Trần Văn Nam",
+            "locality_code": "00001",
+            "_readiness_score": 86,
+        }
+        demo_checklist = {
+            "to_khai_khai_sinh": "verified",
+            "giay_chung_sinh": "uploaded",
+            "cccd_cha_me": "uploaded",
+            "giay_dang_ky_ket_hon": "missing",
+        }
+        case = ApplicationCase(id="case-demo-001", case_code="UBNDAI-2026-000001", organization_id="org-demo", citizen_id="citizen-demo", procedure_id="khai_sinh", procedure_version_id="khai-sinh-v1", status="awaiting_officer_review", source_channel="citizen_portal", priority=80, form_data=demo_form, checklist=demo_checklist, created_at=timestamp, updated_at=timestamp)
         other = case.model_copy(update={"id": "case-other-001", "case_code": "UBNDAI-2026-000002", "organization_id": "org-other"})
         self.cases[case.id] = case
         self.cases[other.id] = other
-        submission = CaseSubmissionVersion(id="submission-demo-001", case_id=case.id, version=1, form_data={"applicant_full_name": "Nguyen Van A"}, checklist_snapshot={"birth_certificate": "uploaded"}, procedure_version_id=case.procedure_version_id, procedure_rule_version="ruleset-v1", created_at=timestamp, created_by=case.citizen_id)
+        submission = CaseSubmissionVersion(id="submission-demo-001", case_id=case.id, version=1, form_data=demo_form, checklist_snapshot=demo_checklist, procedure_version_id=case.procedure_version_id, procedure_rule_version="ruleset-v1", created_at=timestamp, created_by=case.citizen_id)
         other_submission = submission.model_copy(
             update={
                 "id": "submission-other-001",
@@ -107,8 +126,85 @@ class OfficerStore:
         self._save_case(other)
         self._save_submission(submission)
         self._save_submission(other_submission)
-        finding = ValidationFinding(id="finding-demo-001", case_id=case.id, submission_version_id=submission.id, type="missing_required_document", severity="error", source="rule", message="Thiếu giấy tờ bắt buộc trong checklist.", suggestion="Bổ sung giấy tờ còn thiếu.", rule_id="khai_sinh.required_document", rule_version=1, confidence=1.0, field_keys=["birth_certificate"], created_at=timestamp)
+        demo_asset = Path(__file__).resolve().parents[2] / "data" / "demo" / "giay_chung_sinh_demo.svg"
+        demo_content = demo_asset.read_bytes()
+        object_key = "demo/case-demo-001/giay-chung-sinh.svg"
+        storage.put(object_key, demo_content)
+        document = CaseDocument(
+            id="document-demo-001",
+            case_id=case.id,
+            submission_version_id=submission.id,
+            document_type="giay_chung_sinh",
+            file_uri=f"private://{object_key}",
+            object_key=object_key,
+            original_filename="giay-chung-sinh-demo.svg",
+            content_type="image/svg+xml",
+            size_bytes=len(demo_content),
+            sha256=sha256(demo_content).hexdigest(),
+            ocr_status="manual_review_required",
+            ocr_engine="vision_llm",
+            ocr_version="demo-v1",
+            uploaded_at=timestamp,
+        )
+        self.documents[document.id] = document
+        self._save_document(document)
+        for field_id, key, value, confidence, bbox in [
+            ("field-demo-child", "ho_ten_con", "Nguyễn Minh An", 0.98, [0.24, 0.28, 0.38, 0.045]),
+            ("field-demo-birth-date", "ngay_sinh", "12/07/2026", 0.96, [0.23, 0.35, 0.22, 0.04]),
+            ("field-demo-birth-place", "noi_sinh", "Bệnh viện Đa khoa Thành phố", 0.91, [0.20, 0.43, 0.55, 0.04]),
+            ("field-demo-mother", "ho_ten_me", "Nguyễn Thị Lân", 0.72, [0.22, 0.52, 0.34, 0.045]),
+            ("field-demo-gender", "gioi_tinh", "Nam", 0.95, [0.66, 0.35, 0.10, 0.04]),
+        ]:
+            self.extracted_fields[field_id] = ExtractedFieldRecord(
+                id=field_id,
+                document_id=document.id,
+                field_key=key,
+                raw_value=value,
+                normalized_value=value,
+                confidence=confidence,
+                page=1,
+                bounding_box=bbox,
+                review_status="needs_human_review" if confidence < settings.ocr_confidence_threshold else "unreviewed",
+            )
+        finding = ValidationFinding(id="finding-demo-001", case_id=case.id, submission_version_id=submission.id, type="cross_document_mismatch", severity="error", source="rule", message="Họ tên mẹ trên Giấy chứng sinh chưa khớp dữ liệu tờ khai.", suggestion="Đối chiếu ảnh gốc và sửa trường OCR nếu hệ thống đọc sai dấu.", rule_id="KS-R2", rule_version=1, confidence=1.0, field_keys=["ho_ten_me"], created_at=timestamp)
         self.findings[finding.id] = finding
+        self.findings["finding-demo-002"] = ValidationFinding(
+            id="finding-demo-002",
+            case_id=case.id,
+            submission_version_id=submission.id,
+            type="low_ocr_confidence",
+            severity="warning",
+            source="ai",
+            message="Trường họ tên mẹ có độ tin cậy OCR 72% và cần cán bộ xác minh.",
+            suggestion="Phóng to vùng được khoanh trên tài liệu gốc trước khi xác nhận.",
+            confidence=0.72,
+            field_keys=["ho_ten_me"],
+            created_at=timestamp,
+        )
+        self._audit(case, case.citizen_id, "case_created", "application_case", case.id)
+        self._audit(case, case.citizen_id, "document_uploaded", "case_document", document.id)
+        self._audit(case, "system-ai", "precheck_completed", "case_submission_version", submission.id)
+
+    def reset_demo_data(self) -> None:
+        """Reset the local demo projection to its deterministic showcase state."""
+        with self._lock:
+            self.cases.clear()
+            self.findings.clear()
+            self.submissions.clear()
+            self.decisions.clear()
+            self.audit.clear()
+            self.supplements.clear()
+            self.documents.clear()
+            self.extracted_fields.clear()
+            self.routing_decisions.clear()
+            self.consents.clear()
+            self.idempotency_results.clear()
+            if self._db:
+                with self._db.session() as session:
+                    for model in (AuditEventORM, CaseDocumentORM, SubmissionVersionORM, ApplicationCaseORM):
+                        session.query(model).delete()
+                    session.commit()
+            self._seed()
 
     def list_cases(self, organization_id: str) -> list[ApplicationCase]:
         with self._lock:
@@ -135,6 +231,75 @@ class OfficerStore:
             self._audit(case, citizen_id, "case_created", "application_case", case.id)
             self._save_case(case)
         return deepcopy(case)
+
+    def ensure_guidance_case(
+        self,
+        case_id: str,
+        citizen_id: str,
+        procedure_id: str | None = None,
+    ) -> ApplicationCase:
+        """Create the portal projection for an authenticated guidance case."""
+        with self._lock:
+            existing = self.cases.get(case_id)
+            if existing is not None:
+                if existing.citizen_id != citizen_id:
+                    raise KeyError("case_not_found")
+                return deepcopy(existing)
+
+            timestamp = now()
+            resolved_procedure = procedure_id or "pending_guidance"
+            case = ApplicationCase(
+                id=case_id,
+                case_code=f"UBNDAI-{timestamp.year}-{case_id[:8].upper()}",
+                organization_id="pending-routing",
+                citizen_id=citizen_id,
+                procedure_id=resolved_procedure,
+                procedure_version_id=f"{resolved_procedure}-v1",
+                status="draft",
+                source_channel="ai_guidance",
+                form_data={"locality_code": "00001"},
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            self.cases[case.id] = case
+            self._audit(case, citizen_id, "case_created_from_guidance", "application_case", case.id)
+            self._save_case(case)
+            return deepcopy(case)
+
+    def sync_guidance_case(
+        self,
+        case_id: str,
+        citizen_id: str,
+        procedure_id: str | None,
+        answers: dict,
+        checklist: dict[str, str],
+        status: str,
+    ) -> ApplicationCase:
+        """Synchronize LangGraph guidance state into the public portal case."""
+        with self._lock:
+            case = self.cases.get(case_id)
+            if case is None or case.citizen_id != citizen_id:
+                raise KeyError("case_not_found")
+            resolved_procedure = procedure_id or "pending_guidance"
+            form_data = {
+                **case.form_data,
+                "_answers": deepcopy(answers),
+            }
+            mapped_status = "collecting" if status == "collecting" else "draft"
+            updated = case.model_copy(
+                update={
+                    "procedure_id": resolved_procedure,
+                    "procedure_version_id": f"{resolved_procedure}-v1",
+                    "form_data": form_data,
+                    "checklist": deepcopy(checklist),
+                    "status": mapped_status,
+                    "version": case.version + 1,
+                    "updated_at": now(),
+                }
+            )
+            self.cases[case_id] = updated
+            self._save_case(updated)
+            return deepcopy(updated)
 
     def list_citizen_cases(self, citizen_id: str) -> list[ApplicationCase]:
         with self._lock:
@@ -206,13 +371,15 @@ class OfficerStore:
         document_type: str,
         manual_review: bool,
         fields: list[dict] | None = None,
+        ocr_engine: str | None = None,
     ) -> CaseDocument:
         with self._lock:
             document = self.documents.get(document_id)
             case = self.cases.get(document.case_id) if document else None
             if document is None or case is None or case.citizen_id != citizen_id:
                 raise KeyError("document_not_found")
-            updated = document.model_copy(update={"sha256": sha256, "document_type": document_type, "ocr_status": "manual_review_required" if manual_review else "ready", "file_uri": f"private://{document.object_key}", "ocr_engine": "paddleocr", "ocr_version": "local-v1"})
+            engine_name = ocr_engine or settings.ocr_engine
+            updated = document.model_copy(update={"sha256": sha256, "document_type": document_type, "ocr_status": "manual_review_required" if manual_review else "ready", "file_uri": f"private://{document.object_key}", "ocr_engine": engine_name, "ocr_version": "demo-v1"})
             self.documents[document_id] = updated
             for item in fields or []:
                 confidence = float(item.get("confidence", 0.0))
@@ -247,6 +414,13 @@ class OfficerStore:
             locality_code = str(case.form_data.get("locality_code", ""))
             if not locality_code:
                 raise ValueError("routing_not_found")
+            submitted_values = {
+                key: value
+                for key, value in case.form_data.items()
+                if not key.startswith("_") and key != "locality_code" and value not in (None, "")
+            }
+            if not submitted_values:
+                raise ValueError("form_data_not_ready")
             organization_id = "org-demo"
             submission_version = case.current_submission_version
             submission_id = str(uuid4())
@@ -302,7 +476,8 @@ class OfficerStore:
             if target not in allowed.get(case.status, set()):
                 raise ValueError("invalid_transition")
             if target == "precheck_ready":
-                active = [f for f in self.findings.values() if f.case_id == case_id and f.submission_version_id == self.submission_for(case_id).id and f.severity == "error" and f.status == "open"]
+                active_statuses = {"open", "accepted", "escalated"}
+                active = [f for f in self.findings.values() if f.case_id == case_id and f.submission_version_id == self.submission_for(case_id).id and f.severity == "error" and f.status in active_statuses]
                 if active:
                     raise ValueError("blocking_findings")
             updated = case.model_copy(update={"status": target, "version": case.version + 1, "updated_at": now()})

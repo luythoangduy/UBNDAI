@@ -637,3 +637,40 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 .word-zoom button { width: 18px; height: 18px; display: grid; place-items: center; border: 0; border-radius: 3px; background: rgba(255, 255, 255, .15); color: white; font-size: 12px; line-height: 1; }
 
 @media (max-width: 1100px) { .ocr-studio { grid-template-columns: 1fr; } }
+
+/* Demo readiness and accessibility */
+.readiness-card { margin: 14px 0; padding: 12px; border: 1px solid #cfe0ea; border-radius: 8px; background: #f4f9fc; }
+.readiness-card > div:first-child { display: flex; align-items: center; justify-content: space-between; color: var(--navy); font-size: 12px; }
+.readiness-card strong { color: var(--blue); font-size: 18px; }
+.readiness-card small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.readiness-track { height: 7px; margin-top: 8px; overflow: hidden; border-radius: 99px; background: #dfe8ee; }
+.readiness-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .25s ease; }
+.structured-fields { margin: 12px 0 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.structured-fields summary { color: var(--navy); font-size: 12px; font-weight: 800; cursor: pointer; }
+.structured-fields label { display: block; margin-top: 10px; color: #4e6275; font-size: 11px; font-weight: 700; }
+.structured-fields input { margin-top: 4px; padding: 8px 9px; font-size: 12px; }
+.clarifying-block { margin-top: 9px; padding-top: 8px; border-top: 1px solid #e5edf2; }
+.bubble .clarifying-question { margin: 5px 0; color: #40566b; font-size: 12px; }
+.answer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.answer-chips button { padding: 6px 10px; color: var(--blue); border: 1px solid #bcd5e5; border-radius: 99px; background: #f3f9fc; font-size: 11px; font-weight: 700; }
+.citation a { color: var(--blue); font-weight: 700; }
+
+/* Officer screens are projected during demos, so avoid sub-10px operational text. */
+.officer-page .status, .officer-page .live-dot, .officer-page .queue-filters select,
+.officer-page .case-meta small, .officer-page .review-header p, .officer-page .progress-line span,
+.officer-page .viewer-meta, .officer-page .data-row > span, .officer-page .ocr-row span,
+.officer-page .finding-summary, .officer-page .reason-input, .officer-page .timeline b,
+.officer-page .timeline small, .officer-page .finding-selector label, .officer-page .decision-actions button { font-size: 11px; }
+.officer-page .column-heading, .officer-page .document-tabs b, .officer-page .finding-title b,
+.officer-page .finding-card > p { font-size: 12px; }
+.officer-page .document-tabs small, .officer-page .data-row .verified, .officer-page .needs-review,
+.officer-page .ocr-row small, .officer-page .finding-title small, .officer-page .suggestion-text,
+.officer-page .finding-actions button { font-size: 10px; }
+.officer-page .data-row strong, .officer-page .field-value strong { font-size: 13px; }
+.officer-page .finding-card { padding: 12px; }
+.officer-page .finding-actions button { min-height: 32px; padding: 6px; }
+
+@media (max-width: 440px) {
+  .assistant-card.floating { width: calc(100vw - 24px); height: calc(100vh - 88px); }
+  .chat-widget-container { right: 12px; bottom: 12px; }
+}

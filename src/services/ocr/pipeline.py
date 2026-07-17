@@ -31,7 +31,7 @@ from src.services.ocr.preprocessing import preprocess_document_image
 
 _CLASSIFIER_STRONG_CONFIDENCE = 0.8
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 # Cache OcrResult theo hash ảnh đã tiền xử lý — upload lại cùng ảnh (công dân bấm
 # lại, refresh, retry) không tốn thêm API call. OcrResult là frozen dataclass nên

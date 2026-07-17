@@ -71,7 +71,7 @@ OCR_OUTPUT_SCHEMA = {
                 },
                 # Mọi key đều required (OpenAI strict mode) — model trả chuỗi rỗng
                 # khi không có giá trị.
-                "required": ["key", "value", "confidence", "note"],
+                "required": ["key", "value", "confidence", "note", "bbox"],
                 "additionalProperties": False,
             },
         },

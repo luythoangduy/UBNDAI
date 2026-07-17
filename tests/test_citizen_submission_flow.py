@@ -43,10 +43,21 @@ def test_citizen_submit_appears_in_officer_queue():
     )
     assert completed.status_code == 200, completed.text
 
+    updated = client.patch(
+        f"/api/v1/citizen/cases/{case['id']}",
+        headers=citizen_headers,
+        json={
+            "expected_version": case["version"],
+            "form_data": {"ho_ten_con": "Nguyễn An", "ho_ten_me": "Nguyễn Văn A"},
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    updated_case = updated.json()["data"]
+
     submitted = client.post(
         f"/api/v1/citizen/cases/{case['id']}/submit",
         headers={**citizen_headers, "Idempotency-Key": f"submit-{case['id']}"},
-        json={"expected_version": case["version"], "consent_version": "privacy-v1", "consent_accepted": True},
+        json={"expected_version": updated_case["version"], "consent_version": "privacy-v1", "consent_accepted": True},
     )
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["data"]["status"] == "awaiting_officer_review"
@@ -54,7 +65,7 @@ def test_citizen_submit_appears_in_officer_queue():
     repeated = client.post(
         f"/api/v1/citizen/cases/{case['id']}/submit",
         headers={**citizen_headers, "Idempotency-Key": f"submit-{case['id']}"},
-        json={"expected_version": case["version"], "consent_version": "privacy-v1", "consent_accepted": True},
+        json={"expected_version": updated_case["version"], "consent_version": "privacy-v1", "consent_accepted": True},
     )
     assert repeated.status_code == 200
     assert repeated.json()["data"]["submission_version"] == submitted.json()["data"]["submission_version"]

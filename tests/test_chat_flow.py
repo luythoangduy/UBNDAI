@@ -73,6 +73,31 @@ def test_case_persists_procedure_and_status_after_checklist():
     assert case.checklist, "checklist phải được persist về Case"
 
 
+def test_authenticated_chat_case_is_available_in_citizen_portal():
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "citizen.demo", "password": "ChangeMe123!"},
+    )
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
+
+    chat = client.post(
+        "/api/v1/chat",
+        json={"message": "tôi muốn đăng ký khai sinh cho con"},
+        headers=headers,
+    )
+    assert chat.status_code == 200
+
+    portal = client.get(
+        f"/api/v1/citizen/cases/{chat.json()['case_id']}",
+        headers=headers,
+    )
+    assert portal.status_code == 200
+    case = portal.json()["data"]["case"]
+    assert case["procedure_id"] == "khai_sinh"
+    assert case["source_channel"] == "ai_guidance"
+
+
 def test_clarification_answer_is_extracted_and_persisted():
     from src.services import cases as cases_service
     import asyncio

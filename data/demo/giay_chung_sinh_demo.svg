@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+  <rect width="900" height="1200" fill="#e9eef2"/>
+  <rect x="65" y="45" width="770" height="1110" rx="8" fill="#fff" stroke="#9aa9b5" stroke-width="2"/>
+  <g font-family="Arial, sans-serif" fill="#162b3d">
+    <text x="450" y="105" text-anchor="middle" font-size="25" font-weight="700">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</text>
+    <text x="450" y="140" text-anchor="middle" font-size="21">Độc lập - Tự do - Hạnh phúc</text>
+    <line x1="310" y1="153" x2="590" y2="153" stroke="#162b3d"/>
+    <text x="450" y="215" text-anchor="middle" font-size="34" font-weight="700">GIẤY CHỨNG SINH</text>
+    <text x="125" y="285" font-size="20">Họ và tên trẻ: <tspan font-weight="700">NGUYỄN MINH AN</tspan></text>
+    <text x="125" y="350" font-size="20">Sinh ngày: <tspan font-weight="700">12/07/2026</tspan></text>
+    <text x="585" y="350" font-size="20">Giới tính: <tspan font-weight="700">Nam</tspan></text>
+    <text x="125" y="415" font-size="20">Nơi sinh: <tspan font-weight="700">Bệnh viện Đa khoa Thành phố</tspan></text>
+    <text x="125" y="480" font-size="20">Họ và tên mẹ: <tspan font-weight="700">NGUYỄN THỊ LAN</tspan></text>
+    <text x="125" y="545" font-size="20">Năm sinh: 1995</text>
+    <text x="125" y="610" font-size="20">Nơi cư trú: Phường Trung Tâm, Thành phố Hà Nội</text>
+    <text x="125" y="700" font-size="18">Người đỡ đẻ: Bác sĩ Trần Thu Hà</text>
+    <text x="560" y="790" font-size="18" font-style="italic">Hà Nội, ngày 12 tháng 07 năm 2026</text>
+    <text x="635" y="845" text-anchor="middle" font-size="20" font-weight="700">CƠ SỞ Y TẾ</text>
+    <circle cx="635" cy="930" r="66" fill="none" stroke="#bc3540" stroke-width="5" opacity=".72"/>
+    <text x="635" y="925" text-anchor="middle" font-size="14" fill="#bc3540">BỆNH VIỆN</text>
+    <text x="635" y="948" text-anchor="middle" font-size="14" fill="#bc3540">ĐA KHOA</text>
+    <text x="635" y="1035" text-anchor="middle" font-size="19" font-weight="700">BS. TRẦN THU HÀ</text>
+    <text x="450" y="1120" text-anchor="middle" font-size="15" fill="#677988">DỮ LIỆU TỔNG HỢP PHỤC VỤ DEMO — KHÔNG CÓ GIÁ TRỊ PHÁP LÝ</text>
+  </g>
+</svg>

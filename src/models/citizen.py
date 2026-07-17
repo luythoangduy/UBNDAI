@@ -19,19 +19,19 @@ class CitizenCaseUpdate(BaseModel):
 class UploadIntentRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     content_type: str
-    size_bytes: int = Field(gt=0, le=20 * 1024 * 1024)
+    size_bytes: int = Field(gt=0, le=10 * 1024 * 1024)
 
     @field_validator("content_type")
     @classmethod
     def supported_content_type(cls, value: str) -> str:
-        if value not in {"application/pdf", "image/jpeg", "image/png"}:
-            raise ValueError("Only PDF, JPEG and PNG are supported")
+        if value not in {"image/jpeg", "image/png"}:
+            raise ValueError("Only JPEG and PNG images are supported for OCR")
         return value
 
     @field_validator("filename")
     @classmethod
     def supported_extension(cls, value: str) -> str:
-        if not value.casefold().endswith((".pdf", ".jpg", ".jpeg", ".png")):
+        if not value.casefold().endswith((".jpg", ".jpeg", ".png")):
             raise ValueError("Unsupported file extension")
         return value
 

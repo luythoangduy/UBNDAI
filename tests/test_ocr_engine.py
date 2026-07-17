@@ -245,6 +245,8 @@ def test_openai_provider_parses_fields_and_sends_strict_schema():
     assert req["max_completion_tokens"] == 4000
     assert req["reasoning_effort"] == "minimal"
     assert req["response_format"]["json_schema"]["strict"] is True
+    field_schema = req["response_format"]["json_schema"]["schema"]["properties"]["fields"]["items"]
+    assert set(field_schema["properties"]) == set(field_schema["required"])
     user_content = req["messages"][1]["content"]
     assert user_content[1]["type"] == "image_url"
     assert user_content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")

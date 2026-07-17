@@ -9,6 +9,8 @@ import { buildCaseQuery, formatBytes, formatDate, humanizeStatus } from './utils
 import './styles.css';
 
 const procedureNames: Record<string, string> = { khai_sinh: 'Đăng ký khai sinh' };
+const activeFindingStatuses = new Set<Finding['status']>(['open', 'accepted', 'escalated']);
+const isActiveFinding = (finding: Finding) => activeFindingStatuses.has(finding.status);
 
 function Brand() {
   return <a className="brand" href="/citizen" aria-label="Trang chủ UBNDAI"><span className="brand-mark">AI</span><span><strong>UBNDAI</strong><small>Trợ lý thủ tục hành chính</small></span></a>;
@@ -84,7 +86,7 @@ function CitizenAssistant({ activeCaseId, onChecklist, selectedContext }: { acti
             </div>
           </div>
           <div className="chat-log" aria-live="polite">
-            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{item.response?.clarifying_questions?.map((question, questionIndex) => <button key={questionIndex} className="suggestion" onClick={() => setMessage(question)}>{question}</button>)}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}</p>)}</details>}</div></article>)}
+            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')}>Có</button><button onClick={() => setMessage('Không')}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
             {busy && <article className="bubble assistant"><span>AI</span><div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div></article>}
             {streamedText && <article className="bubble assistant"><span>AI</span><div><p>{streamedText}<span className="cursor">|</span></p></div></article>}
           </div>
@@ -137,6 +139,13 @@ function fill(values: Record<string, string>, key: string, length = 46): string 
 // Layout bám NGUYÊN VĂN mẫu Tờ khai đăng ký khai sinh ban hành kèm Thông tư
 // 04/2024/TT-BTP (bản đang áp dụng) — văn bản NGƯỜI DÂN gửi cơ quan đăng ký.
 const TO_KHAI_KEYS = ['noi_dang_ky', 'ho_ten_nguoi_yeu_cau', 'ngay_sinh_nguoi_yeu_cau', 'noi_cu_tru_nguoi_yeu_cau', 'giay_to_tuy_than_nguoi_yeu_cau', 'quan_he_voi_nguoi_duoc_khai_sinh', 'ho_ten_con', 'ngay_sinh', 'gioi_tinh', 'dan_toc', 'quoc_tich', 'noi_sinh', 'que_quan', 'ho_ten_me', 'nam_sinh_me', 'dan_toc_me', 'quoc_tich_me', 'noi_cu_tru_me', 'giay_to_tuy_than_me', 'ho_ten_cha', 'nam_sinh_cha', 'dan_toc_cha', 'quoc_tich_cha', 'noi_cu_tru_cha', 'giay_to_tuy_than_cha', 'so_gcn_ket_hon', 'quyen_so_gcn_ket_hon', 'ngay_dang_ky_ket_hon', 'noi_dang_ky_ket_hon'];
+const DEMO_REQUIRED_FIELDS: Record<string, string> = {
+  ho_ten_con: 'Họ tên trẻ',
+  ngay_sinh: 'Ngày sinh',
+  gioi_tinh: 'Giới tính',
+  noi_sinh: 'Nơi sinh',
+  ho_ten_me: 'Họ tên mẹ',
+};
 
 type TemplateSource = { label: string; links: { title: string; url: string }[] };
 const TEMPLATE_SOURCE: TemplateSource = {
@@ -308,7 +317,7 @@ function ScanStage({ phase, image, fields }: { phase: OcrPhase; image?: string; 
   );
 }
 
-function WordWorkspace({ content, fileName, onSelectionChange, onDownload, downloading, statusHint, source }: { content: string; fileName: string; onSelectionChange?: (text: string) => void; onDownload?: (html: string) => void; downloading?: boolean; statusHint?: string; source?: TemplateSource }) {
+function WordWorkspace({ content, fileName, onSelectionChange, onContentChange, onDownload, downloading, statusHint, source }: { content: string; fileName: string; onSelectionChange?: (text: string) => void; onContentChange?: (html: string) => void; onDownload?: (html: string) => void; downloading?: boolean; statusHint?: string; source?: TemplateSource }) {
   const [zoom, setZoom] = useState(100);
   const editor = useEditor({
     extensions: [StarterKit],
@@ -317,7 +326,8 @@ function WordWorkspace({ content, fileName, onSelectionChange, onDownload, downl
       if (!onSelectionChange) return;
       const { from, to } = editor.state.selection;
       onSelectionChange(from !== to ? editor.state.doc.textBetween(from, to, ' ') : '');
-    }
+    },
+    onUpdate: ({ editor }) => onContentChange?.(editor.getHTML()),
   });
   useEffect(() => {
     if (editor && content !== editor.getHTML()) editor.commands.setContent(content);
@@ -328,7 +338,7 @@ function WordWorkspace({ content, fileName, onSelectionChange, onDownload, downl
     <div className="word-app">
       <div className="word-titlebar">
         <span className="word-logo">W</span>
-        <div className="word-file"><b>{fileName}</b><small>Đã lưu vào hồ sơ · Bản nháp</small></div>
+        <div className="word-file"><b>{fileName}</b><small>Tự động lưu khi nộp · Bản nháp</small></div>
         {onDownload && <button className="word-download" onClick={() => onDownload(editor?.getHTML() ?? content)} disabled={downloading}><Download size={14}/>{downloading ? 'Đang tạo DOCX…' : 'Tải xuống DOCX'}</button>}
       </div>
       <div className="word-ribbon">{['Tệp', 'Trang đầu', 'Chèn', 'Bố cục', 'Tham chiếu', 'Xem lại', 'Xem'].map(tab => <span key={tab} className={tab === 'Trang đầu' ? 'active' : ''}>{tab}</span>)}</div>
@@ -380,6 +390,14 @@ function CitizenPortal() {
   const [prepSteps, setPrepSteps] = useState<PreprocessStep[]>([]);
   const [prepIndex, setPrepIndex] = useState(0);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const requiredKeys = Object.keys(DEMO_REQUIRED_FIELDS);
+  const readiness = Math.round(requiredKeys.filter(key => draftValues[key]?.trim()).length / requiredKeys.length * 100);
+  const reviewCount = extractedFields?.filter(item => item.confidence < 0.85).length ?? 0;
+  const updateDraftValue = (key: string, value: string) => setDraftValues(current => {
+    const next = { ...current, [key]: value };
+    setDocContent(buildToKhaiKhaiSinhHtml(next));
+    return next;
+  });
 
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
   useEffect(() => { if (logged) refresh().catch(cause => setNotice((cause as Error).message)); }, [logged]);
@@ -406,7 +424,6 @@ function CitizenPortal() {
   };
 
   const upload = () => current && file && run('upload', async () => {
-    const isPdf = file.type === 'application/pdf';
     setOcrPhase('upload'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined);
     setPreviewUrl(URL.createObjectURL(file));
 
@@ -418,15 +435,13 @@ function CitizenPortal() {
     // OCR (LLM) chạy song song trong lúc minh hoạ các bước tiền xử lý
     const completePromise = api<{ document: CaseDocument, fields: ExtractedField[] }>(`/citizen/documents/${intent.document_id}/complete`, { method: 'POST', body: JSON.stringify({ sha256: await checksum(file) }) });
     completePromise.catch(() => undefined);
-    if (!isPdf) {
-      try {
-        const prep = await api<PreprocessResult>(`/citizen/documents/${intent.document_id}/preprocess`, { method: 'POST' });
-        if (prep.steps.length) {
-          setPrepSteps(prep.steps);
-          for (let index = 0; index < prep.steps.length; index += 1) { setPrepIndex(index); await sleep(1100); }
-        }
-      } catch { /* tiền xử lý chỉ minh hoạ — lỗi không chặn OCR */ }
-    }
+    try {
+      const prep = await api<PreprocessResult>(`/citizen/documents/${intent.document_id}/preprocess`, { method: 'POST' });
+      if (prep.steps.length) {
+        setPrepSteps(prep.steps);
+        for (let index = 0; index < prep.steps.length; index += 1) { setPrepIndex(index); await sleep(450); }
+      }
+    } catch { /* tiền xử lý chỉ minh hoạ — lỗi không chặn OCR */ }
     setOcrPhase('recognize');
     let completeResp: { document: CaseDocument, fields: ExtractedField[] };
     try { completeResp = await completePromise; } catch (cause) { setOcrPhase('idle'); throw cause; }
@@ -436,7 +451,7 @@ function CitizenPortal() {
     const merged = { ...mapExtractedToDraftValues(completeResp.fields), ...draftValues };
     setDraftValues(merged);
     setDocContent(buildToKhaiKhaiSinhHtml(merged));
-    await sleep(2800); // giữ màn bounding box đủ lâu để thấy các vùng nhận dạng trước khi chuyển sang DOCX
+    await sleep(1400); // giữ màn bounding box đủ lâu để thấy các vùng nhận dạng trước khi chuyển sang DOCX
     setOcrPhase('ready');
     setNotice(`AI đã nhận dạng ${completeResp.fields.length} trường và điền vào tờ khai.`);
     await refreshCurrent(current.id);
@@ -456,7 +471,8 @@ function CitizenPortal() {
   const submit = () => current && run('submit', async () => { 
     if (!consent) throw new Error('Vui lòng xác nhận đồng ý xử lý dữ liệu trước khi nộp.'); 
     const latest = await api<{ case: CaseRecord }>(`/citizen/cases/${current.id}`); 
-    const item = await api<CaseRecord>(`/citizen/cases/${current.id}/submit`, { method: 'POST', headers: { 'Idempotency-Key': idempotency() }, body: JSON.stringify({ expected_version: latest.case.version, consent_version: 'privacy-v1', consent_accepted: true }) }); 
+    const updated = await api<CaseRecord>(`/citizen/cases/${current.id}`, { method: 'PATCH', body: JSON.stringify({ expected_version: latest.case.version, form_data: { ...draftValues, _draft_html: docContent, _readiness_score: readiness } }) });
+    const item = await api<CaseRecord>(`/citizen/cases/${current.id}/submit`, { method: 'POST', headers: { 'Idempotency-Key': idempotency() }, body: JSON.stringify({ expected_version: updated.version, consent_version: 'privacy-v1', consent_accepted: true }) });
     setCurrent(item); 
     setNotice('Hồ sơ đã được chuyển tới cán bộ tiếp nhận.'); 
     await refresh(); 
@@ -507,6 +523,7 @@ function CitizenPortal() {
                         content={docContent}
                         fileName="to-khai-dang-ky-khai-sinh.docx"
                         onSelectionChange={setSelectedText}
+                        onContentChange={setDocContent}
                         onDownload={downloadDocx}
                         downloading={busy === 'docx'}
                         statusHint={`${TO_KHAI_KEYS.filter(key => draftValues[key]).length} trường đã điền từ OCR · ${TO_KHAI_KEYS.filter(key => !draftValues[key]).length} trường còn trống`}
@@ -523,11 +540,24 @@ function CitizenPortal() {
                      </div>
                    ) : (
                      <div className="sidebar-block">
-                       <div className="current-case">
+                        <div className="current-case">
                          <span>Hồ sơ đang làm</span>
                          <strong>{current.case_code || 'Chưa cấp mã'}</strong>
                          <Status value={current.status}/>
-                       </div>
+                        </div>
+
+                        <div className="readiness-card">
+                          <div><span>Mức sẵn sàng</span><strong>{readiness}%</strong></div>
+                          <div className="readiness-track"><i style={{ width: `${readiness}%` }}/></div>
+                          <small>{requiredKeys.filter(key => draftValues[key]?.trim()).length}/{requiredKeys.length} trường cốt lõi · {reviewCount} trường cần xác minh</small>
+                        </div>
+
+                        <details className="structured-fields" open={!!extractedFields?.length}>
+                          <summary>Dữ liệu dùng để nộp</summary>
+                          {Object.entries(DEMO_REQUIRED_FIELDS).map(([key, label]) => (
+                            <label key={key}>{label}<input value={draftValues[key] ?? ''} onChange={event => updateDraftValue(key, event.target.value)} placeholder="Chưa có dữ liệu"/></label>
+                          ))}
+                        </details>
                        
                        {current.checklist && Object.keys(current.checklist).length > 0 && (
                          <div className="checklist-display">
@@ -564,9 +594,9 @@ function CitizenPortal() {
                        <div className="upload-block">
                          <h3 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--navy)' }}>AI điền tự động từ giấy tờ</h3>
                          <label className="dropzone">
-                           <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
+                           <input type="file" accept="image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
                            <b>{file ? file.name : 'Chọn bản chụp giấy tờ'}</b>
-                           <span>PDF, JPG hoặc PNG · tối đa 20 MB</span>
+                           <span>JPG hoặc PNG · tối đa 10 MB</span>
                          </label>
                          <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang xử lý OCR…' : 'Tải lên & điền tự động'}</button>
                        </div>
@@ -576,7 +606,7 @@ function CitizenPortal() {
                            <input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/>
                            <span>Tôi đồng ý để cơ quan tiếp nhận và xử lý dữ liệu.</span>
                          </label>
-                         <button className="primary wide" onClick={submit} disabled={!!busy || !consent}>{busy === 'submit' ? 'Đang gửi…' : 'Nộp hồ sơ tiền kiểm'}</button>
+                         <button className="primary wide" onClick={submit} disabled={!!busy || !consent || readiness < 60}>{busy === 'submit' ? 'Đang gửi…' : readiness < 60 ? 'Cần điền thêm dữ liệu' : 'Nộp hồ sơ tiền kiểm'}</button>
                        </div>
                        <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setDocContent(buildToKhaiKhaiSinhHtml({})); }}>Tạo hồ sơ khác</button>
                      </div>
@@ -621,9 +651,9 @@ function Dashboard({ summary, active, onFilter }: { summary?: DashboardSummary; 
 }
 
 function ReviewWorkspace({ detail, onRefresh, onError }: { detail: CaseDetail; onRefresh: () => Promise<void>; onError: (cause: unknown) => void }) {
-  const [documentId, setDocumentId] = useState(detail.documents[0]?.id ?? ''); const [fields, setFields] = useState<ExtractedField[]>([]); const [previewUrl, setPreviewUrl] = useState(''); const [previewError, setPreviewError] = useState(''); const [busy, setBusy] = useState(''); const [supplement, setSupplement] = useState(''); const [selectedFindings, setSelectedFindings] = useState<string[]>(detail.findings.filter(item => item.status === 'open').map(item => item.id)); const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [documentId, setDocumentId] = useState(detail.documents[0]?.id ?? ''); const [fields, setFields] = useState<ExtractedField[]>([]); const [previewUrl, setPreviewUrl] = useState(''); const [previewError, setPreviewError] = useState(''); const [busy, setBusy] = useState(''); const [supplement, setSupplement] = useState(''); const [selectedFindings, setSelectedFindings] = useState<string[]>(detail.findings.filter(isActiveFinding).map(item => item.id)); const [reasons, setReasons] = useState<Record<string, string>>({});
   const activeDocument = detail.documents.find(item => item.id === documentId);
-  useEffect(() => { setDocumentId(detail.documents[0]?.id ?? ''); setSelectedFindings(detail.findings.filter(item => item.status === 'open').map(item => item.id)); }, [detail.case.id]);
+  useEffect(() => { setDocumentId(detail.documents[0]?.id ?? ''); setSelectedFindings(detail.findings.filter(isActiveFinding).map(item => item.id)); }, [detail.case.id]);
   useEffect(() => {
     if (!documentId) { setFields([]); setPreviewUrl(''); return; }
     let objectUrl = '';
@@ -637,7 +667,7 @@ function ReviewWorkspace({ detail, onRefresh, onError }: { detail: CaseDetail; o
   const transition = (target_status: string) => action(target_status, () => api(`/officer/cases/${detail.case.id}/transition`, { method: 'POST', body: JSON.stringify({ target_status }) }));
   const requestSupplement = () => action('supplement', () => api(`/officer/cases/${detail.case.id}/supplement-requests`, { method: 'POST', body: JSON.stringify({ public_message: supplement, finding_ids: selectedFindings }) }));
   const rerun = () => action('rerun', () => api(`/officer/cases/${detail.case.id}/rerun-validation`, { method: 'POST' }));
-  return <div className="review-workspace"><div className="review-header"><div><div className="case-code"><span>{detail.case.case_code}</span><Status value={detail.case.status}/></div><h2>{procedureNames[detail.case.procedure_id] ?? detail.case.procedure_id}</h2><p>Phiên bản hồ sơ {detail.submission.version} · Bộ quy tắc {detail.submission.procedure_rule_version}</p></div><div className="review-header-actions">{detail.case.status === 'awaiting_officer_review' && <button className="primary" onClick={claim} disabled={!!busy}>{busy === 'claim' ? 'Đang nhận…' : 'Nhận xử lý'}</button>}<button className="icon-button" aria-label="Làm mới hồ sơ" onClick={onRefresh}>↻</button></div></div><div className="progress-line"><span className="done">Đã nộp</span><span className="done">Tiền kiểm AI</span><span className={detail.case.status === 'awaiting_officer_review' ? 'current' : 'done'}>Tiếp nhận</span><span className={detail.case.status === 'in_officer_review' ? 'current' : ''}>Thẩm tra</span><span className={detail.case.status === 'precheck_ready' ? 'done' : ''}>Hoàn tất</span></div><div className="review-columns"><EvidencePanel documents={detail.documents} activeId={documentId} onSelect={setDocumentId} active={activeDocument} previewUrl={previewUrl} previewError={previewError} fields={fields}/><DataPanel submission={detail.submission.form_data} fields={fields} editable={detail.case.status === 'in_officer_review'} onSaved={async () => { if (documentId) setFields(await api<ExtractedField[]>(`/officer/documents/${documentId}/fields`)); }} onError={onError}/><FindingsPanel findings={detail.findings} busy={busy} reasons={reasons} setReasons={setReasons} onDecide={decide}/></div><div className="review-bottom"><details><summary>Lịch sử xử lý <span>{detail.timeline.length}</span></summary><ol className="timeline">{detail.timeline.length ? detail.timeline.map(item => <li key={item.id}><i/><div><b>{humanizeStatus(item.event_type)}</b><small>{formatDate(item.created_at)} · {item.actor_id}</small></div></li>) : <li>Chưa có hoạt động.</li>}</ol></details>{detail.case.status === 'in_officer_review' && <section className="decision-box"><div><span className="eyebrow">HÀNH ĐỘNG XỬ LÝ</span><h3>Yêu cầu công dân bổ sung</h3></div><textarea value={supplement} onChange={event => setSupplement(event.target.value)} maxLength={5000} placeholder="Mô tả rõ thông tin hoặc giấy tờ cần bổ sung…"/><div className="finding-selector">{detail.findings.filter(item => item.status === 'open').map(item => <label key={item.id}><input type="checkbox" checked={selectedFindings.includes(item.id)} onChange={() => setSelectedFindings(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])}/><span>{item.message}</span></label>)}</div><div className="decision-actions"><button className="warning-button" disabled={!supplement.trim() || !selectedFindings.length || !!busy} onClick={requestSupplement}>Yêu cầu bổ sung</button><button className="ghost" disabled={!!busy} onClick={() => transition('escalated')}>Chuyển chuyên môn</button><button className="ghost" disabled={!!busy} onClick={rerun}>{busy === 'rerun' ? 'Đang kiểm tra…' : 'Chạy lại kiểm tra'}</button><button className="success-button" disabled={!!busy || detail.findings.some(item => item.severity === 'error' && item.status === 'open')} onClick={() => transition('precheck_ready')}>Đạt tiền kiểm</button></div></section>}</div></div>;
+  return <div className="review-workspace"><div className="review-header"><div><div className="case-code"><span>{detail.case.case_code}</span><Status value={detail.case.status}/></div><h2>{procedureNames[detail.case.procedure_id] ?? detail.case.procedure_id}</h2><p>Phiên bản hồ sơ {detail.submission.version} · Bộ quy tắc {detail.submission.procedure_rule_version}</p></div><div className="review-header-actions">{detail.case.status === 'awaiting_officer_review' && <button className="primary" onClick={claim} disabled={!!busy}>{busy === 'claim' ? 'Đang nhận…' : 'Nhận xử lý'}</button>}<button className="icon-button" aria-label="Làm mới hồ sơ" onClick={onRefresh}>↻</button></div></div><div className="progress-line"><span className="done">Đã nộp</span><span className="done">Tiền kiểm AI</span><span className={detail.case.status === 'awaiting_officer_review' ? 'current' : 'done'}>Tiếp nhận</span><span className={detail.case.status === 'in_officer_review' ? 'current' : ''}>Thẩm tra</span><span className={detail.case.status === 'precheck_ready' ? 'done' : ''}>Hoàn tất</span></div><div className="review-columns"><EvidencePanel documents={detail.documents} activeId={documentId} onSelect={setDocumentId} active={activeDocument} previewUrl={previewUrl} previewError={previewError} fields={fields}/><DataPanel submission={detail.submission.form_data} fields={fields} editable={detail.case.status === 'in_officer_review'} onSaved={async () => { if (documentId) setFields(await api<ExtractedField[]>(`/officer/documents/${documentId}/fields`)); }} onError={onError}/><FindingsPanel findings={detail.findings} busy={busy} reasons={reasons} setReasons={setReasons} onDecide={decide}/></div><div className="review-bottom"><details><summary>Lịch sử xử lý <span>{detail.timeline.length}</span></summary><ol className="timeline">{detail.timeline.length ? detail.timeline.map(item => <li key={item.id}><i/><div><b>{humanizeStatus(item.event_type)}</b><small>{formatDate(item.created_at)} · {item.actor_id}</small></div></li>) : <li>Chưa có hoạt động.</li>}</ol></details>{detail.case.status === 'in_officer_review' && <section className="decision-box"><div><span className="eyebrow">HÀNH ĐỘNG XỬ LÝ</span><h3>Yêu cầu công dân bổ sung</h3></div><textarea value={supplement} onChange={event => setSupplement(event.target.value)} maxLength={5000} placeholder="Mô tả rõ thông tin hoặc giấy tờ cần bổ sung…"/><div className="finding-selector">{detail.findings.filter(isActiveFinding).map(item => <label key={item.id}><input type="checkbox" checked={selectedFindings.includes(item.id)} onChange={() => setSelectedFindings(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])}/><span>{item.message}</span></label>)}</div><div className="decision-actions"><button className="warning-button" disabled={!supplement.trim() || !selectedFindings.length || !!busy} onClick={requestSupplement}>Yêu cầu bổ sung</button><button className="ghost" disabled={!!busy} onClick={() => transition('escalated')}>Chuyển chuyên môn</button><button className="ghost" disabled={!!busy} onClick={rerun}>{busy === 'rerun' ? 'Đang kiểm tra…' : 'Chạy lại kiểm tra'}</button><button className="success-button" disabled={!!busy || detail.findings.some(item => item.severity === 'error' && isActiveFinding(item))} onClick={() => transition('precheck_ready')}>Đạt tiền kiểm</button></div></section>}</div></div>;
 }
 
 function EvidencePanel({ documents, activeId, onSelect, active, previewUrl, previewError, fields }: { documents: CaseDocument[]; activeId: string; onSelect: (id: string) => void; active?: CaseDocument; previewUrl: string; previewError: string; fields?: ExtractedField[] }) {
@@ -652,8 +682,8 @@ function DataPanel({ submission, fields, editable, onSaved, onError }: { submiss
 }
 
 function FindingsPanel({ findings, busy, reasons, setReasons, onDecide }: { findings: Finding[]; busy: string; reasons: Record<string, string>; setReasons: React.Dispatch<React.SetStateAction<Record<string, string>>>; onDecide: (finding: Finding, decision: 'accept' | 'dismiss' | 'escalate') => void }) {
-  const openCount = findings.filter(item => item.status === 'open').length;
-  return <section className="review-panel findings-panel"><div className="column-heading"><span>KẾT QUẢ KIỂM TRA</span><b>{openCount}</b></div><div className="finding-summary"><span><i className="red"/>{findings.filter(item => item.severity === 'error' && item.status === 'open').length} lỗi</span><span><i className="gold"/>{findings.filter(item => item.severity === 'warning' && item.status === 'open').length} cảnh báo</span></div>{findings.length ? findings.map(item => <article className={`finding-card ${item.severity} ${item.status !== 'open' ? 'resolved' : ''}`} key={item.id}><div className="finding-title"><span>{item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}</span><div><b>{item.severity === 'error' ? 'Cần xử lý' : item.severity === 'warning' ? 'Cần lưu ý' : 'Thông tin'}</b><small>{item.source === 'rule' ? 'Quy tắc nghiệp vụ' : 'Gợi ý AI'}</small></div><Status value={item.status}/></div><p>{item.message}</p>{item.suggestion && <small className="suggestion-text">Gợi ý: {item.suggestion}</small>}{item.status === 'open' && <><input className="reason-input" value={reasons[item.id] ?? ''} onChange={event => setReasons(current => ({ ...current, [item.id]: event.target.value }))} placeholder="Lý do xử lý (nếu cần)"/><div className="finding-actions"><button onClick={() => onDecide(item, 'accept')} disabled={!!busy}>Xác nhận</button><button onClick={() => onDecide(item, 'dismiss')} disabled={!!busy}>Bỏ qua</button><button onClick={() => onDecide(item, 'escalate')} disabled={!!busy}>Chuyển cấp</button></div></>}</article>) : <Empty title="Không có cảnh báo" text="Chưa phát hiện vấn đề trong phiên bản hiện tại."/>}</section>;
+  const openCount = findings.filter(isActiveFinding).length;
+  return <section className="review-panel findings-panel"><div className="column-heading"><span>KẾT QUẢ KIỂM TRA</span><b>{openCount}</b></div><div className="finding-summary"><span><i className="red"/>{findings.filter(item => item.severity === 'error' && isActiveFinding(item)).length} lỗi</span><span><i className="gold"/>{findings.filter(item => item.severity === 'warning' && isActiveFinding(item)).length} cảnh báo</span></div>{findings.length ? findings.map(item => <article className={`finding-card ${item.severity} ${!isActiveFinding(item) ? 'resolved' : ''}`} key={item.id}><div className="finding-title"><span>{item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}</span><div><b>{item.severity === 'error' ? 'Cần xử lý' : item.severity === 'warning' ? 'Cần lưu ý' : 'Thông tin'}</b><small>{item.source === 'rule' ? 'Quy tắc nghiệp vụ' : 'Gợi ý AI'}</small></div><Status value={item.status}/></div><p>{item.message}</p>{item.suggestion && <small className="suggestion-text">Gợi ý: {item.suggestion}</small>}{item.status === 'open' && <><input className="reason-input" value={reasons[item.id] ?? ''} onChange={event => setReasons(current => ({ ...current, [item.id]: event.target.value }))} placeholder="Lý do xử lý (nếu cần)"/><div className="finding-actions"><button onClick={() => onDecide(item, 'accept')} disabled={!!busy}>Ghi nhận lỗi</button><button onClick={() => onDecide(item, 'dismiss')} disabled={!!busy}>Bỏ qua có lý do</button><button onClick={() => onDecide(item, 'escalate')} disabled={!!busy}>Chuyển cấp</button></div></>}</article>) : <Empty title="Không có cảnh báo" text="Chưa phát hiện vấn đề trong phiên bản hiện tại."/>}</section>;
 }
 
 function App() { return location.pathname.startsWith('/officer') ? <OfficerPortal/> : <CitizenPortal/>; }

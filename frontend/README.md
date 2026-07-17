@@ -7,6 +7,14 @@ React + Vite + TypeScript, phục vụ hai route cùng một bundle:
 
 ## Chạy local
 
+Để chạy bản demo đã build bằng một lệnh từ thư mục gốc dự án:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/demo.ps1
+```
+
+Script sẽ reset hồ sơ mẫu, build frontend và phục vụ cả `/citizen` lẫn `/officer` tại `http://127.0.0.1:8000`. Upload OCR hỗ trợ JPEG/PNG tối đa 10 MB.
+
 ```bash
 # Terminal 1, tại thư mục gốc dự án
 uvicorn src.main:app --reload --host 127.0.0.1 --port 8000

@@ -197,6 +197,64 @@ def test_anthropic_provider_parses_fields_and_sends_image_block():
     assert content[1]["source"]["media_type"] == "image/jpeg"
 
 
+def _openai_engine_with_mock(payload: dict | None = None, refusal: str | None = None):
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["request"] = json.loads(request.content)
+        captured["url"] = str(request.url)
+        captured["headers"] = dict(request.headers)
+        message: dict = {"role": "assistant"}
+        if refusal is not None:
+            message["content"] = None
+            message["refusal"] = refusal
+        else:
+            message["content"] = json.dumps(payload or {}, ensure_ascii=False)
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    engine = VisionLlmEngine(
+        provider="openai", api_key="test-openai-key", model="gpt-5-test", client=client
+    )
+    return engine, captured
+
+
+def test_openai_provider_parses_fields_and_sends_strict_schema():
+    engine, captured = _openai_engine_with_mock(
+        {
+            "raw_text": "GIẤY CHỨNG SINH",
+            "doc_type": "giay_chung_sinh",
+            "doc_type_confidence": 0.9,
+            "fields": [
+                {"key": "ho_ten_con", "value": "Nguyễn Văn Bé", "confidence": 0.88, "note": ""}
+            ],
+        }
+    )
+
+    result = engine.extract(FAKE_IMAGE, field_keys=["ho_ten_con"])
+
+    assert result.doc_type_hint == "giay_chung_sinh"
+    assert result.fields[0].key == "ho_ten_con"
+    # Đúng endpoint + bearer auth
+    assert "api.openai.com/v1/chat/completions" in captured["url"]
+    assert captured["headers"]["authorization"] == "Bearer test-openai-key"
+    # Reasoning model: không temperature, dùng max_completion_tokens + strict schema
+    req = captured["request"]
+    assert "temperature" not in req
+    assert req["max_completion_tokens"] == 16000
+    assert req["response_format"]["json_schema"]["strict"] is True
+    user_content = req["messages"][1]["content"]
+    assert user_content[1]["type"] == "image_url"
+    assert user_content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_openai_refusal_raises():
+    engine, _ = _openai_engine_with_mock(refusal="I can't help with that.")
+
+    with pytest.raises(OcrEngineError):
+        engine.extract(FAKE_IMAGE)
+
+
 def test_factory_resolves_all_engines():
     assert isinstance(get_engine("vision_llm"), VisionLlmEngine)
     assert isinstance(get_engine("paddleocr"), PaddleOcrEngine)

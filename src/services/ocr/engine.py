@@ -2,8 +2,9 @@
 
 Ba adapter:
 - ``VisionLlmEngine`` — vision LLM, mạnh nhất với chữ VIẾT TAY tiếng Việt; trả luôn
-  fields + confidence + doc_type hint. Provider ``anthropic`` dùng official SDK với
-  structured outputs (JSON schema được API đảm bảo); ``gemini`` dùng REST qua httpx.
+  fields + confidence + doc_type hint. Provider ``openai``/``gemini`` dùng REST qua
+  httpx; ``anthropic`` dùng official SDK. Cả 3 đều ép JSON theo ``OCR_OUTPUT_SCHEMA``
+  (OpenAI: response_format json_schema strict; Anthropic: output_config).
 - ``PaddleOcrEngine`` — local, chữ in (TODO Sprint 1).
 - ``GoogleVisionEngine`` — cloud, production (TODO Sprint 3).
 
@@ -33,6 +34,7 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+OPENAI_API_BASE = "https://api.openai.com/v1"
 
 # Structured output schema cho OCR — API đảm bảo JSON hợp lệ theo schema này.
 # Không dùng numerical constraints (min/max) — không được hỗ trợ; clamp phía client.
@@ -62,7 +64,9 @@ OCR_OUTPUT_SCHEMA = {
                     "confidence": {"type": "number"},
                     "note": {"type": "string"},
                 },
-                "required": ["key", "value", "confidence"],
+                # note bắt buộc trong schema (OpenAI strict mode yêu cầu mọi key
+                # đều required) — model trả chuỗi rỗng khi không có ghi chú.
+                "required": ["key", "value", "confidence", "note"],
                 "additionalProperties": False,
             },
         },
@@ -187,6 +191,62 @@ class VisionLlmEngine:
             raise OcrEngineError("Unexpected Vision LLM response shape")
         return text
 
+    def _extract_openai_text(self, task: str, image_b64: str) -> str:
+        # GPT-5/o-series là reasoning model: KHÔNG gửi temperature (bị từ chối),
+        # dùng max_completion_tokens thay cho max_tokens.
+        payload = {
+            "model": self._model,
+            "max_completion_tokens": 16000,
+            "messages": [
+                {"role": "system", "content": VISION_OCR_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": task},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
+                        },
+                    ],
+                },
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ocr_result",
+                    "strict": True,
+                    "schema": OCR_OUTPUT_SCHEMA,
+                },
+            },
+        }
+
+        client = self._client or httpx.Client(timeout=self._timeout_s)
+        try:
+            response = client.post(
+                f"{OPENAI_API_BASE}/chat/completions",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json=payload,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            logger.exception("OpenAI OCR request failed")
+            raise OcrEngineError("Vision LLM request failed") from exc
+        finally:
+            if self._client is None:
+                client.close()
+
+        try:
+            choice = body["choices"][0]
+            if choice["message"].get("refusal"):
+                raise OcrEngineError("Vision LLM declined the request (refusal)")
+            text = choice["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise OcrEngineError("Unexpected Vision LLM response shape") from exc
+        if not text:
+            raise OcrEngineError("Unexpected Vision LLM response shape")
+        return text
+
     def _extract_gemini_text(self, task: str, image_b64: str) -> str:
         payload = {
             "system_instruction": {"parts": [{"text": VISION_OCR_SYSTEM_PROMPT}]},
@@ -225,14 +285,17 @@ class VisionLlmEngine:
             raise OcrEngineError("Empty image")
         if not self._api_key:
             raise OcrEngineError("OCR_LLM_API_KEY is not configured for vision_llm OCR")
-        if self._provider not in ("anthropic", "gemini"):
+        if self._provider not in ("openai", "anthropic", "gemini"):
             raise OcrEngineError(
-                f"Unsupported OCR_LLM_PROVIDER '{self._provider}'. Supported: anthropic, gemini"
+                f"Unsupported OCR_LLM_PROVIDER '{self._provider}'. "
+                "Supported: openai, anthropic, gemini"
             )
 
         task = build_field_instruction(field_keys) if field_keys else VISION_OCR_DEFAULT_TASK
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
-        if self._provider == "anthropic":
+        if self._provider == "openai":
+            text = self._extract_openai_text(task, image_b64)
+        elif self._provider == "anthropic":
             text = self._extract_anthropic_text(task, image_b64)
         else:
             text = self._extract_gemini_text(task, image_b64)

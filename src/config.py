@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     ocr_engine: str = "paddleocr"  # 'paddleocr' | 'google_vision' | 'vision_llm'
     ocr_confidence_threshold: float = 0.85
     # LLM cho engine vision_llm (chữ viết tay) — key/model riêng, không dùng chung với chatbot.
-    ocr_llm_provider: str = "anthropic"  # 'anthropic' | 'gemini'
+    ocr_llm_provider: str = "openai"  # 'openai' | 'anthropic' | 'gemini'
     ocr_llm_api_key: str = ""
-    ocr_llm_model: str = "claude-opus-4-8"
+    ocr_llm_model: str = "gpt-5"
 
     readiness_submit_threshold: float = 0.9
 

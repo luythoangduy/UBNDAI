@@ -224,6 +224,7 @@ class OfficerStore:
                     normalized_value=str(item.get("value", "")),
                     confidence=confidence,
                     review_status="needs_human_review" if confidence < settings.ocr_confidence_threshold else "unreviewed",
+                    bounding_box=item.get("bbox") or item.get("bounding_box"),
                 )
                 self.extracted_fields[record.id] = record
             self._audit(case, citizen_id, "document_completed", "case_document", document_id)

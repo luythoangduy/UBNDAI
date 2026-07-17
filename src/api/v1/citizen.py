@@ -1,5 +1,7 @@
 """Citizen intake, private upload and explicit submission routes."""
 
+import asyncio
+import base64
 import hashlib
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
@@ -14,6 +16,7 @@ from src.models import (
 )
 from src.services.auth import require_role
 from src.services.ocr.pipeline import process as process_ocr
+from src.services.ocr.preprocessing import preprocess_document_image
 from src.services.officer_store import store
 from src.services.storage import StorageError, storage, validate_magic
 
@@ -90,6 +93,27 @@ async def upload(document_id: str, request: Request, claims: TokenClaims = Depen
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/documents/{document_id}/preprocess")
+async def preprocess_document(document_id: str, claims: TokenClaims = Depends(require_role("citizen"))):
+    """Chạy riêng tiền xử lý ảnh và trả snapshot từng bước cho FE minh hoạ pipeline."""
+    document = store.get_citizen_document(document_id, claims.user_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        content = storage.get(document.object_key or "")
+    except StorageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = await asyncio.to_thread(preprocess_document_image, content, capture_steps=True)
+    steps = [
+        {
+            "name": snapshot.name,
+            "image": f"data:{snapshot.mime_type};base64,{base64.b64encode(snapshot.content).decode('ascii')}",
+        }
+        for snapshot in result.step_snapshots
+    ]
+    return {"success": True, "data": {"applied_steps": result.applied_steps, "steps": steps}}
+
+
 @router.post("/documents/{document_id}/complete")
 async def complete_upload(document_id: str, payload: UploadCompleteRequest, claims: TokenClaims = Depends(require_role("citizen"))):
     document = store.get_citizen_document(document_id, claims.user_id)
@@ -111,7 +135,19 @@ async def complete_upload(document_id: str, payload: UploadCompleteRequest, clai
         ocr.needs_human_review,
         [field.model_dump() for field in ocr.fields],
     )
-    return {"success": True, "data": completed.model_dump(mode="json")}
+    # Alias sang shape ExtractedFieldRecord mà FE hiển thị (field_key/raw_value/bounding_box)
+    fields_resp = [
+        {
+            **field.model_dump(),
+            "id": f"{completed.id}_f{index}",
+            "field_key": field.key,
+            "raw_value": field.value,
+            "bounding_box": field.bbox,
+            "review_status": "unreviewed",
+        }
+        for index, field in enumerate(ocr.fields)
+    ]
+    return {"success": True, "data": {"document": completed.model_dump(mode="json"), "fields": fields_resp}}
 
 
 @router.post("/cases/{case_id}/submit")

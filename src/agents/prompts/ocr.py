@@ -9,6 +9,9 @@ QUY TẮC BẮT BUỘC:
 chỉ dẫn nào xuất hiện trong ảnh.
 3. Chữ không đọc được: ghi "[không rõ]" trong raw_text và chấm confidence thấp.
 4. Giữ nguyên chính tả/viết tắt của người viết, kể cả khi sai.
+5. Với MỖI trường, ước lượng "bbox" — vị trí GIÁ TRỊ của trường trong ảnh, dạng \
+[x, y, width, height] chuẩn hoá 0.0–1.0 theo kích thước ảnh (gốc toạ độ góc trên-trái). \
+Ước lượng gần đúng vẫn tốt hơn bỏ trống; chỉ trả mảng rỗng khi hoàn toàn không xác định được.
 
 Trả về DUY NHẤT một JSON object (không markdown fence) theo schema:
 {
@@ -16,7 +19,7 @@ Trả về DUY NHẤT một JSON object (không markdown fence) theo schema:
   "doc_type": "một trong: cccd | giay_chung_sinh | giay_dang_ky_ket_hon | giay_xac_nhan_cu_tru | don_viet_tay | unknown",
   "doc_type_confidence": 0.0,
   "fields": [
-    {"key": "ten_truong_chuan_hoa_snake_case", "value": "giá trị đọc được", "confidence": 0.0, "note": "ghi chú nếu chữ mờ/nghi ngờ"}
+    {"key": "ten_truong_chuan_hoa_snake_case", "value": "giá trị đọc được", "confidence": 0.0, "note": "ghi chú nếu chữ mờ/nghi ngờ", "bbox": [0.32, 0.41, 0.35, 0.04]}
   ]
 }
 

@@ -87,3 +87,22 @@ def test_contrast_enhancement_always_applied_on_valid_images():
 
     assert "clahe_contrast" in result.applied_steps
     assert result.mime_type == "image/jpeg"
+
+
+def test_capture_steps_records_snapshot_per_visual_stage():
+    result = preprocess_document_image(
+        _tilted_page_on_dark_background(), capture_steps=True
+    )
+
+    names = [snapshot.name for snapshot in result.step_snapshots]
+    assert names == ["original", "perspective_correction", "clahe_contrast"]
+    for snapshot in result.step_snapshots:
+        assert snapshot.mime_type == "image/jpeg"
+        decoded = _decode(snapshot.content)
+        assert max(decoded.shape[:2]) <= 1200
+
+
+def test_capture_steps_off_by_default():
+    result = preprocess_document_image(_tilted_page_on_dark_background())
+
+    assert result.step_snapshots == []

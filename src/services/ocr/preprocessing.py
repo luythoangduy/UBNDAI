@@ -33,6 +33,18 @@ MIN_QUAD_AREA_RATIO = 0.25
 DESKEW_MIN_ANGLE = 0.5
 DESKEW_MAX_ANGLE = 15.0
 JPEG_QUALITY = 92
+# Snapshots chỉ phục vụ hiển thị từng bước trên FE — nén nhỏ để payload nhẹ.
+SNAPSHOT_MAX_DIMENSION_PX = 1200
+SNAPSHOT_JPEG_QUALITY = 80
+
+
+@dataclass(frozen=True)
+class StepSnapshot:
+    """Ảnh chụp sau một bước tiền xử lý, dùng cho FE minh hoạ pipeline."""
+
+    name: str
+    content: bytes
+    mime_type: str = "image/jpeg"
 
 
 @dataclass(frozen=True)
@@ -40,6 +52,7 @@ class PreprocessedImage:
     content: bytes
     mime_type: str
     applied_steps: list[str] = field(default_factory=list)
+    step_snapshots: list[StepSnapshot] = field(default_factory=list)
 
 
 def _decode(image_bytes: bytes) -> np.ndarray:
@@ -152,10 +165,44 @@ def _enhance_contrast(image: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
 
 
-def preprocess_document_image(image_bytes: bytes) -> PreprocessedImage:
+def _encode_snapshot(image: np.ndarray, name: str) -> StepSnapshot | None:
+    """Encode a preview-sized JPEG of the current stage; None on encode failure."""
+    height, width = image.shape[:2]
+    longest = max(height, width)
+    if longest > SNAPSHOT_MAX_DIMENSION_PX:
+        scale = SNAPSHOT_MAX_DIMENSION_PX / longest
+        image = cv2.resize(
+            image,
+            (int(width * scale), int(height * scale)),
+            interpolation=cv2.INTER_AREA,
+        )
+    ok, encoded = cv2.imencode(
+        ".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, SNAPSHOT_JPEG_QUALITY]
+    )
+    if not ok:
+        return None
+    return StepSnapshot(name=name, content=encoded.tobytes())
+
+
+def preprocess_document_image(
+    image_bytes: bytes, *, capture_steps: bool = False
+) -> PreprocessedImage:
     """Flatten and front-align a document photo. Never raises: falls back to the
-    original bytes on any decoding/processing failure."""
+    original bytes on any decoding/processing failure.
+
+    ``capture_steps=True`` additionally records a preview JPEG after each visual
+    stage (original/EXIF → perspective|deskew → CLAHE) for the FE step viewer.
+    """
     steps: list[str] = []
+    snapshots: list[StepSnapshot] = []
+
+    def snap(image: np.ndarray, name: str) -> None:
+        if not capture_steps:
+            return
+        snapshot = _encode_snapshot(image, name)
+        if snapshot is not None:
+            snapshots.append(snapshot)
+
     try:
         image = _decode(image_bytes)
         steps.append("exif_orientation")
@@ -169,6 +216,7 @@ def preprocess_document_image(image_bytes: bytes) -> PreprocessedImage:
         image, downscaled = _downscale(image)
         if downscaled:
             steps.append("downscale")
+        snap(image, "original")
 
         quad = _find_document_quad(image)
         if quad is not None:
@@ -176,20 +224,26 @@ def preprocess_document_image(image_bytes: bytes) -> PreprocessedImage:
             if warped is not image:
                 image = warped
                 steps.append("perspective_correction")
+                snap(image, "perspective_correction")
         else:
             angle = _estimate_skew_angle(image)
             if DESKEW_MIN_ANGLE <= abs(angle) <= DESKEW_MAX_ANGLE:
                 image = _rotate(image, angle)
                 steps.append(f"deskew_{angle:.1f}deg")
+                snap(image, "deskew")
 
         image = _enhance_contrast(image)
         steps.append("clahe_contrast")
+        snap(image, "clahe_contrast")
 
         ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
         if not ok:
             raise ValueError("JPEG encoding failed")
         return PreprocessedImage(
-            content=encoded.tobytes(), mime_type="image/jpeg", applied_steps=steps
+            content=encoded.tobytes(),
+            mime_type="image/jpeg",
+            applied_steps=steps,
+            step_snapshots=snapshots,
         )
     except Exception:
         logger.warning("Image preprocessing failed; using original image", exc_info=True)

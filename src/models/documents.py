@@ -9,6 +9,7 @@ class ExtractedField(BaseModel):
     key: str = Field(description="Tên trường chuẩn hoá, vd 'ho_ten', 'ngay_sinh'")
     value: str
     confidence: float = Field(ge=0.0, le=1.0)
+    bbox: list[float] | None = Field(default=None, description="Tọa độ tương đối [x, y, width, height] từ 0.0 đến 1.0")
     edited_by_user: bool = Field(
         default=False, description="True nếu người dân đã sửa tay giá trị OCR"
     )

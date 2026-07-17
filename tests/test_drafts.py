@@ -211,3 +211,59 @@ def test_draft_docx_api_returns_downloadable_word_file():
     )
     assert response.headers["x-draft-legal-status"] == "review-only"
     assert response.content.startswith(b"PK")
+
+
+def test_template_store_has_to_khai_for_citizen_request():
+    """Kho template phải có tờ khai (văn bản người dân gửi cán bộ) bên cạnh giấy khai sinh."""
+    templates = drafts.list_templates("khai_sinh")
+    ids = {template.id for template in templates}
+    assert "khai_sinh.to_khai" in ids
+    to_khai = drafts.get_template("khai_sinh", "khai_sinh.to_khai")
+    assert to_khai.is_default is False
+    assert to_khai.docx_style.filename == "to-khai-dang-ky-khai-sinh.docx"
+    assert any(s.role == "output_template" for s in to_khai.legal_sources)
+    # Mặc định của procedure vẫn là giấy khai sinh (kết quả cho cán bộ).
+    assert drafts.get_template("khai_sinh").id == "khai_sinh.giay_khai_sinh"
+
+
+def test_export_docx_from_editor_html():
+    """POST /drafts/export.docx: DOCX chứa đúng nội dung HTML editor, font Times New Roman."""
+    client = _draft_api_client()
+    html = (
+        "<h2>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br/>Độc lập - Tự do - Hạnh phúc</h2>"
+        "<h1>TỜ KHAI ĐĂNG KÝ KHAI SINH</h1>"
+        "<p>Họ, chữ đệm, tên: <strong>NGUYỄN VĂN AN</strong></p>"
+        "<p><em>Tôi cam đoan nội dung khai trên đây là đúng sự thật.</em></p>"
+    )
+    response = client.post(
+        "/api/v1/drafts/export.docx",
+        json={"html": html, "filename": "to-khai-dang-ky-khai-sinh.docx"},
+    )
+    assert response.status_code == 200, response.text
+    assert "to-khai-dang-ky-khai-sinh.docx" in response.headers["content-disposition"]
+
+    document = Document(BytesIO(response.content))
+    texts = [p.text for p in document.paragraphs if p.text.strip()]
+    assert any("TỜ KHAI ĐĂNG KÝ KHAI SINH" in t for t in texts)
+    assert any("NGUYỄN VĂN AN" in t for t in texts)
+    bold_runs = [
+        run.text
+        for p in document.paragraphs
+        for run in p.runs
+        if run.bold and run.text.strip()
+    ]
+    assert "NGUYỄN VĂN AN" in bold_runs
+    for paragraph in document.paragraphs:
+        for run in paragraph.runs:
+            r_fonts = run._element.get_or_add_rPr().find(qn("w:rFonts"))
+            assert r_fonts is not None
+            assert r_fonts.get(qn("w:ascii")) == "Times New Roman"
+
+
+def test_export_docx_rejects_bad_filename():
+    client = _draft_api_client()
+    response = client.post(
+        "/api/v1/drafts/export.docx",
+        json={"html": "<p>x</p>", "filename": "../../evil.docx"},
+    )
+    assert response.status_code == 422

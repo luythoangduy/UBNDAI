@@ -2,7 +2,12 @@
 
 from fastapi import APIRouter, HTTPException, Response
 
-from src.models import DraftGenerateRequest, DraftTemplateInfo, GeneratedDraft
+from src.models import (
+    DraftGenerateRequest,
+    DraftHtmlExportRequest,
+    DraftTemplateInfo,
+    GeneratedDraft,
+)
 from src.services import catalog
 from src.services import drafts as draft_service
 
@@ -32,6 +37,32 @@ async def generate_draft(payload: DraftGenerateRequest) -> GeneratedDraft:
             status_code=422,
             detail={"message": str(exc), "fields": exc.fields},
         ) from exc
+
+
+@router.post(
+    "/export.docx",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}
+            },
+            "description": "DOCX xuất từ HTML editor (WYSIWYG)",
+        }
+    },
+)
+async def export_draft_docx(payload: DraftHtmlExportRequest) -> Response:
+    """Xuất DOCX đúng nội dung editor — cách làm của C2 (drafting.export_docx)."""
+    content = draft_service.export_html_docx(payload)
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{payload.filename}"',
+            "X-Draft-Legal-Status": "review-only",
+        },
+    )
 
 
 @router.post(

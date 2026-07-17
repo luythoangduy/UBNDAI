@@ -5,6 +5,7 @@ from src.services.drafts.docx_renderer import (
     GeneratedDocx,
     generate_docx,
 )
+from src.services.drafts.html_export import export_html_docx
 from src.services.drafts.registry import (
     DraftTemplateNotFound,
     clear_cache,
@@ -19,6 +20,7 @@ __all__ = [
     "DraftTemplateNotFound",
     "GeneratedDocx",
     "clear_cache",
+    "export_html_docx",
     "generate",
     "generate_docx",
     "get_template",

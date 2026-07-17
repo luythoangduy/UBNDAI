@@ -63,10 +63,15 @@ OCR_OUTPUT_SCHEMA = {
                     "value": {"type": "string"},
                     "confidence": {"type": "number"},
                     "note": {"type": "string"},
+                    "bbox": {
+                        "type": "array",
+                        "items": {"type": "number"}
+                    },
                 },
                 # note bắt buộc trong schema (OpenAI strict mode yêu cầu mọi key
                 # đều required) — model trả chuỗi rỗng khi không có ghi chú.
-                "required": ["key", "value", "confidence", "note"],
+                # bbox cũng required, trả mảng rỗng nếu không có.
+                "required": ["key", "value", "confidence", "note", "bbox"],
                 "additionalProperties": False,
             },
         },
@@ -86,6 +91,7 @@ class OcrField:
     value: str
     confidence: float  # 0.0–1.0, contract của ExtractedField
     note: str = ""
+    bbox: list[float] | None = None
 
 
 @dataclass(frozen=True)
@@ -193,10 +199,12 @@ class VisionLlmEngine:
 
     def _extract_openai_text(self, task: str, image_b64: str) -> str:
         # GPT-5/o-series là reasoning model: KHÔNG gửi temperature (bị từ chối),
-        # dùng max_completion_tokens thay cho max_tokens.
+        # dùng max_completion_tokens thay cho max_tokens. OCR là phiên âm thuần —
+        # reasoning_effort minimal cắt phần lớn latency mà không giảm chất lượng đọc.
         payload = {
             "model": self._model,
-            "max_completion_tokens": 16000,
+            "reasoning_effort": "minimal",
+            "max_completion_tokens": 4000,
             "messages": [
                 {"role": "system", "content": VISION_OCR_SYSTEM_PROMPT},
                 {
@@ -307,6 +315,7 @@ class VisionLlmEngine:
                 value=str(item.get("value") or ""),
                 confidence=_clamp_confidence(item.get("confidence")),
                 note=str(item.get("note") or ""),
+                bbox=item.get("bbox") or None,
             )
             for item in (parsed.get("fields") or [])
             if isinstance(item, dict) and str(item.get("key", "")).strip()

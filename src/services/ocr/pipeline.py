@@ -79,7 +79,7 @@ async def process(
 
     threshold = settings.ocr_confidence_threshold
     fields = [
-        ExtractedField(key=f.key, value=f.value, confidence=f.confidence)
+        ExtractedField(key=f.key, value=f.value, confidence=f.confidence, bbox=f.bbox)
         for f in result.fields
     ]
     needs_human_review = (

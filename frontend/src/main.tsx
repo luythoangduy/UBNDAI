@@ -1,10 +1,10 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MessageCircle, X, FileText, UploadCloud } from 'lucide-react';
+import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethrough, List as ListIcon, Printer } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
-import type { CaseDetail, CaseDocument, CaseRecord, ChatResponse, DashboardSummary, ExtractedField, Finding, PortalRole } from './types';
+import type { CaseDetail, CaseDocument, CaseRecord, ChatResponse, DashboardSummary, ExtractedField, Finding, PortalRole, PreprocessResult, PreprocessStep } from './types';
 import { buildCaseQuery, formatBytes, formatDate, humanizeStatus } from './utils';
 import './styles.css';
 
@@ -105,100 +105,352 @@ async function checksum(file: File) {
   return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
 }
 
-function TiptapDocument({ initialContent, onSelectionChange }: { initialContent: string; onSelectionChange: (text: string) => void }) {
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content: initialContent,
-    onSelectionUpdate: ({ editor }) => {
-      const { from, to } = editor.state.selection;
-      if (from !== to) {
-        const text = editor.state.doc.textBetween(from, to, ' ');
-        onSelectionChange(text);
-      } else {
-        onSelectionChange('');
-      }
-    }
-  });
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+const escapeHtml = (value: string) => value.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch] as string));
 
-  useEffect(() => {
-    if (editor && initialContent !== editor.getHTML()) {
-      editor.commands.setContent(initialContent);
-    }
-  }, [editor, initialContent]);
+// Trường của template DOCX khai_sinh.giay_khai_sinh (data/draft_templates/khai_sinh_giay_khai_sinh.json)
+const DRAFT_TEMPLATE_KEYS = ['ho_ten_con', 'ngay_sinh', 'gioi_tinh', 'dan_toc', 'quoc_tich', 'noi_sinh', 'que_quan', 'so_dinh_danh_ca_nhan', 'ho_ten_me', 'nam_sinh_me', 'dan_toc_me', 'quoc_tich_me', 'noi_cu_tru_me', 'ho_ten_cha', 'nam_sinh_cha', 'dan_toc_cha', 'quoc_tich_cha', 'noi_cu_tru_cha', 'ho_ten_nguoi_di_dang_ky', 'giay_to_tuy_than_nguoi_di_dang_ky', 'noi_dang_ky', 'ngay_dang_ky', 'so', 'quyen_so', 'chuc_vu_nguoi_ky', 'ho_ten_nguoi_ky'];
+const OCR_FIELD_ALIASES: Record<string, string> = {
+  ho_ten: 'ho_ten_con', ho_va_ten: 'ho_ten_con',
+  so_cccd: 'so_dinh_danh_ca_nhan', so_dinh_danh: 'so_dinh_danh_ca_nhan', so_can_cuoc: 'so_dinh_danh_ca_nhan',
+  nguyen_quan: 'que_quan', noi_cu_tru: 'noi_cu_tru_me', noi_thuong_tru: 'noi_cu_tru_me', dia_chi: 'noi_cu_tru_me',
+};
 
+function mapExtractedToDraftValues(fields: ExtractedField[]): Record<string, string> {
+  const known = new Set(DRAFT_TEMPLATE_KEYS);
+  const values: Record<string, string> = {};
+  for (const field of fields) {
+    const value = (field.normalized_value || field.raw_value || '').trim();
+    if (!value) continue;
+    const key = known.has(field.field_key) ? field.field_key : OCR_FIELD_ALIASES[field.field_key];
+    if (key && !values[key]) values[key] = value;
+  }
+  return values;
+}
+
+function fill(values: Record<string, string>, key: string, length = 46): string {
+  const value = values[key];
+  return value ? `<strong>${escapeHtml(value)}</strong>` : `[${'.'.repeat(length)}]`;
+}
+
+// Trường của tờ khai (kho template: data/draft_templates/khai_sinh_to_khai.json).
+// Layout bám NGUYÊN VĂN mẫu Tờ khai đăng ký khai sinh ban hành kèm Thông tư
+// 04/2024/TT-BTP (bản đang áp dụng) — văn bản NGƯỜI DÂN gửi cơ quan đăng ký.
+const TO_KHAI_KEYS = ['noi_dang_ky', 'ho_ten_nguoi_yeu_cau', 'ngay_sinh_nguoi_yeu_cau', 'noi_cu_tru_nguoi_yeu_cau', 'giay_to_tuy_than_nguoi_yeu_cau', 'quan_he_voi_nguoi_duoc_khai_sinh', 'ho_ten_con', 'ngay_sinh', 'gioi_tinh', 'dan_toc', 'quoc_tich', 'noi_sinh', 'que_quan', 'ho_ten_me', 'nam_sinh_me', 'dan_toc_me', 'quoc_tich_me', 'noi_cu_tru_me', 'giay_to_tuy_than_me', 'ho_ten_cha', 'nam_sinh_cha', 'dan_toc_cha', 'quoc_tich_cha', 'noi_cu_tru_cha', 'giay_to_tuy_than_cha', 'so_gcn_ket_hon', 'quyen_so_gcn_ket_hon', 'ngay_dang_ky_ket_hon', 'noi_dang_ky_ket_hon'];
+
+type TemplateSource = { label: string; links: { title: string; url: string }[] };
+const TEMPLATE_SOURCE: TemplateSource = {
+  label: 'Mẫu: Tờ khai đăng ký khai sinh — Phụ lục 05, Thông tư 04/2024/TT-BTP (Bộ Tư pháp), hiệu lực 16/8/2024',
+  links: [
+    { title: 'Văn bản Thông tư 04/2024/TT-BTP', url: 'https://luatvietnam.vn/tu-phap/thong-tu-04-2024-tt-btp-sua-doi-thong-tu-02-2020-tt-btp-thong-tu-04-2020-tt-btp-350235-d1.html' },
+    { title: 'Mẫu đang áp dụng', url: 'https://luatvietnam.vn/bieu-mau/mau-to-khai-dang-ky-khai-sinh-571-26974-article.html' },
+  ],
+};
+
+const VN_ONES = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+function vnReadTwo(value: number): string {
+  const tens = Math.floor(value / 10), unit = value % 10;
+  if (tens === 0) return VN_ONES[unit];
+  const prefix = tens === 1 ? 'mười' : `${VN_ONES[tens]} mươi`;
+  if (unit === 0) return prefix;
+  const unitWord = unit === 1 && tens > 1 ? 'mốt' : unit === 5 ? 'lăm' : VN_ONES[unit];
+  return `${prefix} ${unitWord}`;
+}
+function vnReadNumber(value: number): string {
+  if (value < 10) return VN_ONES[value];
+  if (value < 100) return vnReadTwo(value);
+  const readThree = (n: number, full: boolean): string => {
+    const hundreds = Math.floor(n / 100), rest = n % 100;
+    const parts: string[] = [];
+    if (hundreds || full) parts.push(`${VN_ONES[hundreds]} trăm`);
+    if (rest) {
+      if (rest < 10 && (hundreds || full)) parts.push('linh');
+      parts.push(vnReadTwo(rest));
+    }
+    return parts.join(' ');
+  };
+  if (value < 1000) return readThree(value, false);
+  const thousands = Math.floor(value / 1000), rest = value % 1000;
+  let result = `${VN_ONES[thousands]} nghìn`;
+  if (rest) result += ' ' + readThree(rest, rest < 100);
+  return result;
+}
+// "Ngày, tháng, năm sinh ... ghi bằng chữ" theo mẫu — chỉ đọc được khi OCR trả DD/MM/YYYY.
+function vnDateInWords(raw?: string): string | undefined {
+  const match = raw?.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (!match) return undefined;
+  return `Ngày ${vnReadNumber(Number(match[1]))} tháng ${vnReadNumber(Number(match[2]))} năm ${vnReadNumber(Number(match[3]))}`;
+}
+
+function buildToKhaiKhaiSinhHtml(values: Record<string, string>): string {
+  const ngaySinhChu = vnDateInWords(values.ngay_sinh);
+  return `<h2>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br/>Độc lập - Tự do - Hạnh phúc</h2>
+<h1>TỜ KHAI ĐĂNG KÝ KHAI SINH</h1>
+<p>Kính gửi: (1) ${fill(values, 'noi_dang_ky', 40)}</p>
+<p>Họ, chữ đệm, tên người yêu cầu: ${fill(values, 'ho_ten_nguoi_yeu_cau', 32)}</p>
+<p>Ngày, tháng, năm sinh: ${fill(values, 'ngay_sinh_nguoi_yeu_cau', 36)}</p>
+<p>Nơi cư trú: (2) ${fill(values, 'noi_cu_tru_nguoi_yeu_cau', 44)}</p>
+<p>Giấy tờ tùy thân: (3) ${fill(values, 'giay_to_tuy_than_nguoi_yeu_cau', 40)}</p>
+<p>Quan hệ với người được khai sinh: ${fill(values, 'quan_he_voi_nguoi_duoc_khai_sinh', 28)}</p>
+<p><strong>Đề nghị cơ quan đăng ký khai sinh cho người dưới đây:</strong></p>
+<p>Họ, chữ đệm, tên: ${fill(values, 'ho_ten_con', 40)}</p>
+<p>Ngày, tháng, năm sinh: ${fill(values, 'ngay_sinh', 14)} ghi bằng chữ: ${ngaySinhChu ? `<strong>${escapeHtml(ngaySinhChu)}</strong>` : `[${'.'.repeat(24)}]`}</p>
+<p>Giới tính: ${fill(values, 'gioi_tinh', 8)} Dân tộc: ${fill(values, 'dan_toc', 8)} Quốc tịch: ${fill(values, 'quoc_tich', 10)}</p>
+<p>Nơi sinh: (4) ${fill(values, 'noi_sinh', 44)}</p>
+<p>Quê quán: ${fill(values, 'que_quan', 44)}</p>
+<p>Họ, chữ đệm, tên người mẹ: ${fill(values, 'ho_ten_me', 34)}</p>
+<p>Năm sinh: (5) ${fill(values, 'nam_sinh_me', 6)} Dân tộc: (2) ${fill(values, 'dan_toc_me', 6)} Quốc tịch: (2) ${fill(values, 'quoc_tich_me', 8)}</p>
+<p>Nơi cư trú: (2) ${fill(values, 'noi_cu_tru_me', 44)}</p>
+<p>Giấy tờ tùy thân: (3) ${fill(values, 'giay_to_tuy_than_me', 40)}</p>
+<p>Họ, chữ đệm, tên người cha: ${fill(values, 'ho_ten_cha', 34)}</p>
+<p>Năm sinh: (5) ${fill(values, 'nam_sinh_cha', 6)} Dân tộc: (2) ${fill(values, 'dan_toc_cha', 6)} Quốc tịch: (2) ${fill(values, 'quoc_tich_cha', 8)}</p>
+<p>Nơi cư trú: (2) ${fill(values, 'noi_cu_tru_cha', 44)}</p>
+<p>Giấy tờ tùy thân: (3) ${fill(values, 'giay_to_tuy_than_cha', 40)}</p>
+<p><em>Thông tin về Giấy chứng nhận kết hôn của cha, mẹ trẻ (nếu cha, mẹ trẻ đã đăng ký kết hôn):</em> Số: ${fill(values, 'so_gcn_ket_hon', 8)}, Quyển số: ${fill(values, 'quyen_so_gcn_ket_hon', 8)}, đăng ký ngày ${fill(values, 'ngay_dang_ky_ket_hon', 12)} tại ${fill(values, 'noi_dang_ky_ket_hon', 28)}</p>
+<p>Tôi cam đoan nội dung đề nghị đăng ký khai sinh trên đây là đúng sự thật, được sự thỏa thuận nhất trí của các bên liên quan theo quy định pháp luật.</p>
+<p>Tôi chịu hoàn toàn trách nhiệm trước pháp luật về nội dung cam đoan của mình.</p>
+<p><em>Làm tại: [${'.'.repeat(18)}], ngày [......] tháng [......] năm [......]</em></p>
+<p>Đề nghị cấp bản sao (6): Có ☐  Không ☐ — Số lượng: [......] bản</p>
+<p><strong>Người yêu cầu</strong><br/><em>(Ký, ghi rõ họ, chữ đệm, tên)</em></p>
+<p><br/></p>
+<p><em>Chú thích:</em><br/>
+<em>(1) Ghi rõ tên cơ quan đăng ký khai sinh.</em><br/>
+<em>(2) Chỉ ghi trong trường hợp người có yêu cầu đăng ký hộ tịch chưa có/không cung cấp số định danh cá nhân/căn cước công dân/thẻ căn cước/chứng minh nhân dân; không cung cấp đầy đủ thông tin ngày, tháng, năm sinh. Nơi cư trú ghi theo nơi đăng ký thường trú; nếu không có thì ghi nơi đăng ký tạm trú; nếu không có cả hai thì ghi nơi ở hiện tại.</em><br/>
+<em>(3) Ghi số định danh cá nhân/căn cước công dân/thẻ căn cước; trường hợp không có thì ghi giấy tờ hợp lệ thay thế.</em><br/>
+<em>(4) Trường hợp sinh tại cơ sở y tế thì ghi tên cơ sở y tế và địa chỉ; sinh ngoài cơ sở y tế thì ghi địa danh hành chính.</em><br/>
+<em>(5) Ghi đầy đủ ngày, tháng sinh của cha, mẹ (nếu có).</em><br/>
+<em>(6) Đánh dấu X vào ô nếu có yêu cầu cấp bản sao và ghi rõ số lượng.</em></p>`;
+}
+
+type OcrPhase = 'idle' | 'upload' | 'prep' | 'recognize' | 'compose' | 'ready';
+const PHASE_ORDER: OcrPhase[] = ['idle', 'upload', 'prep', 'recognize', 'compose', 'ready'];
+const OCR_STAGES: { id: OcrPhase; label: string; hint: string }[] = [
+  { id: 'upload', label: 'Tải lên & xác thực', hint: 'Kiểm tra định dạng và checksum' },
+  { id: 'prep', label: 'Làm phẳng & chính diện', hint: 'Nắn phối cảnh, khử nghiêng, tăng tương phản' },
+  { id: 'recognize', label: 'Nhận dạng OCR', hint: 'Bóc tách trường dữ liệu + bounding box' },
+  { id: 'compose', label: 'Soạn văn bản DOCX', hint: 'Điền dữ liệu vào mẫu giấy khai sinh' },
+];
+const PREP_STEP_LABELS: Record<string, string> = {
+  original: 'Ảnh gốc (chuẩn hoá xoay EXIF)',
+  perspective_correction: 'Làm thẳng góc chính diện',
+  deskew: 'Làm phẳng — khử độ nghiêng',
+  clahe_contrast: 'Tăng tương phản CLAHE',
+};
+
+function OcrPipelinePane({ phase, prepSteps, prepIndex, previewUrl, fields }: { phase: OcrPhase; prepSteps: PreprocessStep[]; prepIndex: number; previewUrl?: string; fields?: ExtractedField[] }) {
+  const phaseRank = PHASE_ORDER.indexOf(phase);
+  const visibleSteps = phase === 'prep' ? prepSteps.slice(0, prepIndex + 1) : prepSteps;
+  const finalSnapshot = prepSteps[prepSteps.length - 1];
+  const boxed = fields?.filter(item => item.bounding_box) ?? [];
   return (
-    <div className="document-paper tiptap-wrapper">
-      <EditorContent editor={editor} />
+    <aside className="ocr-pipeline-pane">
+      <div className="pipeline-heading"><span className="eyebrow">XỬ LÝ TÀI LIỆU</span><h3>Theo dõi từng bước</h3></div>
+      <ol className="pipeline-stages">
+        {OCR_STAGES.map(stage => {
+          const rank = PHASE_ORDER.indexOf(stage.id);
+          const state = phase === 'ready' || phaseRank > rank ? 'done' : phaseRank === rank ? 'current' : 'todo';
+          return (
+            <li key={stage.id} className={state}>
+              <i>{state === 'done' ? <Check size={12}/> : state === 'current' ? <span className="stage-spinner"/> : null}</i>
+              <div>
+                <b>{stage.label}</b><small>{stage.hint}</small>
+                {stage.id === 'prep' && visibleSteps.length > 0 && (
+                  <ul className="prep-substeps">
+                    {visibleSteps.map((step, index) => (
+                      <li key={step.name} className={phase !== 'prep' || index < prepIndex ? 'done' : 'current'}><Check size={10}/>{PREP_STEP_LABELS[step.name] ?? step.name}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {phase === 'ready' && (
+        <figure className="stage-viewer">
+          {finalSnapshot || previewUrl ? (
+            <div className="stage-image">
+              <img src={finalSnapshot?.image ?? previewUrl} alt="Tài liệu đã xử lý"/>
+              {boxed.map(item => item.bounding_box && (
+                <div key={item.id ?? item.field_key} className="bbox-overlay labeled" style={{ left: `${item.bounding_box[0] * 100}%`, top: `${item.bounding_box[1] * 100}%`, width: `${item.bounding_box[2] * 100}%`, height: `${item.bounding_box[3] * 100}%` }}>
+                  <label>{humanizeStatus(item.field_key)} · {Math.round(item.confidence * 100)}%</label>
+                </div>
+              ))}
+            </div>
+          ) : <div className="stage-image empty">Chưa có ảnh</div>}
+          <figcaption>{boxed.length ? `Đã khoanh vùng ${boxed.length} trường tại vị trí văn bản gốc` : 'Tài liệu đã tiền xử lý'}</figcaption>
+        </figure>
+      )}
+    </aside>
+  );
+}
+
+function ScanStage({ phase, image, fields }: { phase: OcrPhase; image?: string; fields?: ExtractedField[] }) {
+  const boxed = fields?.filter(item => item.bounding_box) ?? [];
+  const caption =
+    phase === 'upload' ? 'Đang tải tài liệu lên…'
+    : phase === 'prep' ? 'Tiền xử lý: làm thẳng chính diện và tăng tương phản'
+    : phase === 'recognize' ? 'Đang quét nhận dạng nội dung…'
+    : `Đã nhận dạng ${boxed.length} vùng văn bản — đang điền vào mẫu DOCX…`;
+  return (
+    <div className="scan-stage">
+      <div className="scan-frame">
+        {image ? <img key={image} src={image} alt="Tài liệu đang xử lý"/> : <div className="scan-empty">Đang chuẩn bị bản xem trước…</div>}
+        {phase === 'recognize' && <div className="scan-beam"/>}
+        {phase === 'compose' && boxed.map((item, index) => item.bounding_box && (
+          <div key={item.id ?? item.field_key} className="bbox-overlay pop" style={{ left: `${item.bounding_box[0] * 100}%`, top: `${item.bounding_box[1] * 100}%`, width: `${item.bounding_box[2] * 100}%`, height: `${item.bounding_box[3] * 100}%`, animationDelay: `${index * 130}ms` }}>
+            <label>{humanizeStatus(item.field_key)} · {Math.round(item.confidence * 100)}%</label>
+          </div>
+        ))}
+      </div>
+      <p className="scan-caption">{phase !== 'compose' && phase !== 'upload' && <span className="stage-spinner inline"/>}{caption}</p>
     </div>
   );
 }
+
+function WordWorkspace({ content, fileName, onSelectionChange, onDownload, downloading, statusHint, source }: { content: string; fileName: string; onSelectionChange?: (text: string) => void; onDownload?: (html: string) => void; downloading?: boolean; statusHint?: string; source?: TemplateSource }) {
+  const [zoom, setZoom] = useState(100);
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content,
+    onSelectionUpdate: ({ editor }) => {
+      if (!onSelectionChange) return;
+      const { from, to } = editor.state.selection;
+      onSelectionChange(from !== to ? editor.state.doc.textBetween(from, to, ' ') : '');
+    }
+  });
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) editor.commands.setContent(content);
+  }, [editor, content]);
+  const words = editor ? editor.getText().trim().split(/\s+/).filter(Boolean).length : 0;
+  const markClass = (name: 'bold' | 'italic' | 'strike' | 'bulletList') => editor?.isActive(name) ? 'active' : '';
+  return (
+    <div className="word-app">
+      <div className="word-titlebar">
+        <span className="word-logo">W</span>
+        <div className="word-file"><b>{fileName}</b><small>Đã lưu vào hồ sơ · Bản nháp</small></div>
+        {onDownload && <button className="word-download" onClick={() => onDownload(editor?.getHTML() ?? content)} disabled={downloading}><Download size={14}/>{downloading ? 'Đang tạo DOCX…' : 'Tải xuống DOCX'}</button>}
+      </div>
+      <div className="word-ribbon">{['Tệp', 'Trang đầu', 'Chèn', 'Bố cục', 'Tham chiếu', 'Xem lại', 'Xem'].map(tab => <span key={tab} className={tab === 'Trang đầu' ? 'active' : ''}>{tab}</span>)}</div>
+      <div className="word-toolbar">
+        <span className="word-font">Times New Roman</span>
+        <span className="word-size">13</span>
+        <i className="word-sep"/>
+        <button className={markClass('bold')} aria-label="Đậm" onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={14}/></button>
+        <button className={markClass('italic')} aria-label="Nghiêng" onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={14}/></button>
+        <button className={markClass('strike')} aria-label="Gạch ngang" onClick={() => editor?.chain().focus().toggleStrike().run()}><Strikethrough size={14}/></button>
+        <i className="word-sep"/>
+        <button className={markClass('bulletList')} aria-label="Danh sách" onClick={() => editor?.chain().focus().toggleBulletList().run()}><ListIcon size={14}/></button>
+        <button aria-label="In" onClick={() => window.print()}><Printer size={14}/></button>
+      </div>
+      {source && (
+        <div className="word-source-bar">
+          <span>⚖ {source.label}</span>
+          <span className="word-source-links">{source.links.map(link => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.title} ↗</a>)}</span>
+        </div>
+      )}
+      <div className="word-ruler">{Array.from({ length: 17 }, (_, index) => <i key={index}/>)}</div>
+      <div className="word-canvas">
+        <div className="word-page" style={{ transform: `scale(${zoom / 100})` }}>
+          <div className="word-watermark">DỰ THẢO — KHÔNG CÓ GIÁ TRỊ PHÁP LÝ</div>
+          <EditorContent editor={editor}/>
+        </div>
+      </div>
+      <div className="word-statusbar">
+        <span>Trang 1/1 · {words} từ · Tiếng Việt (Việt Nam)</span>
+        {statusHint && <span className="word-hint">{statusHint}</span>}
+        <span className="word-zoom"><button aria-label="Thu nhỏ" onClick={() => setZoom(value => Math.max(60, value - 10))}>−</button>{zoom}%<button aria-label="Phóng to" onClick={() => setZoom(value => Math.min(150, value + 10))}>+</button></span>
+      </div>
+    </div>
+  );
+}
+
 
 function CitizenPortal() {
   const [logged, setLogged] = useState(!!token()); const [cases, setCases] = useState<CaseRecord[]>([]); const [current, setCurrent] = useState<CaseRecord | null>(null);
   const [file, setFile] = useState<File>(); const [consent, setConsent] = useState(false);
   const [notice, setNotice] = useState(''); const [busy, setBusy] = useState('');
   
-  const [procedureType, setProcedureType] = useState<'none' | 'rule_based' | 'ocr'>('none');
-  const [docContent, setDocContent] = useState('<h2>Đơn đề nghị</h2><p>Vui lòng điền thông tin hoặc tải tài liệu lên để tiếp tục.</p>');
+  const [started, setStarted] = useState(false);
+  const [docContent, setDocContent] = useState(() => buildToKhaiKhaiSinhHtml({}));
   const [selectedText, setSelectedText] = useState('');
+  const [extractedFields, setExtractedFields] = useState<ExtractedField[]>();
+  const [previewUrl, setPreviewUrl] = useState<string>();
+  const [ocrPhase, setOcrPhase] = useState<OcrPhase>('idle');
+  const [prepSteps, setPrepSteps] = useState<PreprocessStep[]>([]);
+  const [prepIndex, setPrepIndex] = useState(0);
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
 
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
   useEffect(() => { if (logged) refresh().catch(cause => setNotice((cause as Error).message)); }, [logged]);
   if (!logged) return <Login role="citizen" onSuccess={() => setLogged(true)}/>;
+  
   const run = async (name: string, work: () => Promise<void>) => { setBusy(name); setNotice(''); try { await work(); } catch (cause) { setNotice((cause as Error).message); } finally { setBusy(''); } };
   
-  const khaiSinhTemplate = `<h2 style="text-align: center;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br/>Độc lập - Tự do - Hạnh phúc</h2>
-<h1 style="text-align: center;">TỜ KHAI ĐĂNG KÝ KHAI SINH</h1>
-<p>Kính gửi: Ủy ban nhân dân [....................................................................]</p>
-<p>Họ, chữ đệm, tên người yêu cầu: [....................................................................]</p>
-<p>Nơi cư trú: [....................................................................]</p>
-<p>Giấy tờ tùy thân: [....................................................................]</p>
-<p>Quan hệ với người được khai sinh: [....................................................................]</p>
-<p><strong>Đề nghị đăng ký khai sinh cho người dưới đây:</strong></p>
-<p>Họ, chữ đệm, tên: [....................................................................]</p>
-<p>Giới tính: [.......................] Ngày, tháng, năm sinh: [........................................]</p>
-<p>Nơi sinh: [....................................................................]</p>
-<p>Dân tộc: [.......................] Quốc tịch: [........................................]</p>
-<p>Quê quán: [....................................................................]</p>
-<p><strong>Thông tin người mẹ:</strong></p>
-<p>Họ, chữ đệm, tên: [....................................................................]</p>
-<p>Năm sinh: [.......................] Quốc tịch: [........................................]</p>
-<p>Nơi cư trú: [....................................................................]</p>
-<p><strong>Thông tin người cha:</strong></p>
-<p>Họ, chữ đệm, tên: [....................................................................]</p>
-<p>Năm sinh: [.......................] Quốc tịch: [........................................]</p>
-<p>Nơi cư trú: [....................................................................]</p>`;
-
-  const createRuleBased = () => {
-    setProcedureType('rule_based');
-    setDocContent(khaiSinhTemplate);
-    run('create', async () => { 
-      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: 'khai_sinh', locality_code: '00001' }) }); 
-      setCurrent(item); 
-      setNotice('Đã khởi tạo đơn đề nghị.'); 
-      await refresh(); 
-    }); 
+  // Một luồng duy nhất: mở tờ khai mẫu để tự điền, OCR là bước "AI điền hộ" tùy chọn.
+  const startCase = () => {
+    setStarted(true);
+    setDocContent(buildToKhaiKhaiSinhHtml({}));
+    setExtractedFields(undefined);
+    setPreviewUrl(undefined);
+    setOcrPhase('idle');
+    setPrepSteps([]);
+    setPrepIndex(0);
+    setDraftValues({});
+    run('create', async () => {
+      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: 'khai_sinh', locality_code: '00001' }) });
+      setCurrent(item);
+      setNotice('Đã khởi tạo tờ khai. Điền trực tiếp hoặc tải giấy tờ để AI điền tự động.');
+      await refresh();
+    });
   };
 
-  const createOcr = () => {
-    setProcedureType('ocr');
-    setDocContent(''); // Clear doc content to show dropzone
-    run('create', async () => { 
-      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: 'khai_sinh', locality_code: '00001' }) }); 
-      setCurrent(item); 
-      setNotice('Đã tạo phiên OCR. Vui lòng tải tài liệu.'); 
-      await refresh(); 
-    }); 
-  };
+  const upload = () => current && file && run('upload', async () => {
+    const isPdf = file.type === 'application/pdf';
+    setOcrPhase('upload'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined);
+    setPreviewUrl(URL.createObjectURL(file));
 
-  const upload = () => current && file && run('upload', async () => { 
-    const intent = await api<{ document_id: string; upload_url: string }>(`/citizen/cases/${current.id}/documents/upload-intents`, { method: 'POST', body: JSON.stringify({ filename: file.name, content_type: file.type, size_bytes: file.size }) }); 
-    const uploaded = await fetch(intent.upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${token()}` } }); 
-    if (!uploaded.ok) throw new Error('Không thể tải file lên'); 
-    await api(`/citizen/documents/${intent.document_id}/complete`, { method: 'POST', body: JSON.stringify({ sha256: await checksum(file) }) }); 
-    setNotice('Đã tải và tiền kiểm giấy tờ. AI đã phân tích nội dung.'); 
-    setDocContent(`<h2>Tài liệu đã số hóa: ${file.name}</h2><p>Dữ liệu này được AI nhận diện tự động. Vui lòng kiểm tra và chỉnh sửa nếu cần thiết.</p>`);
-    await refreshCurrent(current.id); 
+    const intent = await api<{ document_id: string; upload_url: string }>(`/citizen/cases/${current.id}/documents/upload-intents`, { method: 'POST', body: JSON.stringify({ filename: file.name, content_type: file.type, size_bytes: file.size }) });
+    const uploaded = await fetch(intent.upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${token()}` } });
+    if (!uploaded.ok) throw new Error('Không thể tải file lên');
+
+    setOcrPhase('prep');
+    // OCR (LLM) chạy song song trong lúc minh hoạ các bước tiền xử lý
+    const completePromise = api<{ document: CaseDocument, fields: ExtractedField[] }>(`/citizen/documents/${intent.document_id}/complete`, { method: 'POST', body: JSON.stringify({ sha256: await checksum(file) }) });
+    completePromise.catch(() => undefined);
+    if (!isPdf) {
+      try {
+        const prep = await api<PreprocessResult>(`/citizen/documents/${intent.document_id}/preprocess`, { method: 'POST' });
+        if (prep.steps.length) {
+          setPrepSteps(prep.steps);
+          for (let index = 0; index < prep.steps.length; index += 1) { setPrepIndex(index); await sleep(1100); }
+        }
+      } catch { /* tiền xử lý chỉ minh hoạ — lỗi không chặn OCR */ }
+    }
+    setOcrPhase('recognize');
+    let completeResp: { document: CaseDocument, fields: ExtractedField[] };
+    try { completeResp = await completePromise; } catch (cause) { setOcrPhase('idle'); throw cause; }
+    setExtractedFields(completeResp.fields);
+    setOcrPhase('compose');
+    // Trường đã điền trước đó (OCR lần trước) được giữ nguyên — OCR mới chỉ điền chỗ trống.
+    const merged = { ...mapExtractedToDraftValues(completeResp.fields), ...draftValues };
+    setDraftValues(merged);
+    setDocContent(buildToKhaiKhaiSinhHtml(merged));
+    await sleep(2800); // giữ màn bounding box đủ lâu để thấy các vùng nhận dạng trước khi chuyển sang DOCX
+    setOcrPhase('ready');
+    setNotice(`AI đã nhận dạng ${completeResp.fields.length} trường và điền vào tờ khai.`);
+    await refreshCurrent(current.id);
+  });
+
+  // Xuất DOCX từ chính HTML đang hiển thị trong editor (WYSIWYG — cách làm của C2):
+  // người dân sửa gì trong tờ khai thì file tải xuống có đúng nội dung đó.
+  const downloadDocx = (html: string) => run('docx', async () => {
+    const blob = await apiBlob('/drafts/export.docx', { method: 'POST', body: JSON.stringify({ html, filename: 'to-khai-dang-ky-khai-sinh.docx' }) });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = 'to-khai-dang-ky-khai-sinh.docx'; anchor.click();
+    URL.revokeObjectURL(url);
+    setNotice('Đã tải xuống tờ khai đăng ký khai sinh (DOCX).');
   });
   
   const submit = () => current && run('submit', async () => { 
@@ -210,7 +462,7 @@ function CitizenPortal() {
     await refresh(); 
   });
   const refreshCurrent = async (id: string) => { const detail = await api<{case: CaseRecord}>(`/citizen/cases/${id}`); setCurrent(detail.case); await refresh(); };
-  const handleChecklist = async (caseId: string) => { await refreshCurrent(caseId); setProcedureType('ocr'); setNotice('Đã nhận danh sách giấy tờ. Vui lòng chuẩn bị và tải lên.'); };
+  const handleChecklist = async (caseId: string) => { await refreshCurrent(caseId); setStarted(true); setNotice('Đã nhận danh sách giấy tờ. Vui lòng chuẩn bị và tải lên.'); };
 
   return (
     <Shell role="citizen">
@@ -225,43 +477,41 @@ function CitizenPortal() {
         </div>
         
         <div className="document-workspace">
-           {procedureType === 'none' && !current && (
+           {!started && !current && (
               <div className="procedure-selector">
-                 <h2>Bạn muốn chuẩn bị hồ sơ bằng cách nào?</h2>
+                 <h2>Đăng ký khai sinh</h2>
                  <div className="selector-cards">
-                   <button onClick={createRuleBased} className="selector-card">
+                   <button onClick={startCase} className="selector-card">
                      <FileText size={32} />
-                     <h3>Điền theo Form mẫu</h3>
-                     <p>Cung cấp thông tin trực tiếp vào biểu mẫu chuẩn.</p>
-                   </button>
-                   <button onClick={createOcr} className="selector-card">
-                     <UploadCloud size={32} />
-                     <h3>Tải lên giấy tờ (OCR)</h3>
-                     <p>Tải lên bản chụp để AI tự động trích xuất thông tin.</p>
+                     <h3>Tờ khai đăng ký khai sinh</h3>
+                     <p>Soạn trực tiếp trên mẫu chuẩn Thông tư 04/2024/TT-BTP, hoặc tải bản chụp giấy tờ để AI điền tự động.</p>
                    </button>
                  </div>
               </div>
            )}
-           
-           {(procedureType !== 'none' || current) && (
+
+           {(started || current) && (
               <div className="editor-container">
                  <div className="editor-main">
-                    {procedureType === 'ocr' && !docContent ? (
-                      <div style={{ textAlign: 'center', width: '100%', paddingTop: 60, paddingBottom: 60 }}>
-                         <h2 style={{ fontSize: 24, color: 'var(--navy)', marginBottom: 12 }}>Tải lên tài liệu của bạn</h2>
-                         <p style={{ color: 'var(--muted)', marginBottom: 32 }}>Hệ thống sẽ tự động trích xuất thông tin bằng AI</p>
-                         <div style={{ maxWidth: 400, margin: '0 auto' }}>
-                           <label className="dropzone">
-                             <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
-                             <UploadCloud size={48} style={{ color: 'var(--blue)', marginBottom: 16 }}/>
-                             <b>{file ? file.name : 'Chọn hoặc kéo thả giấy tờ'}</b>
-                             <span>PDF, JPG hoặc PNG · tối đa 20 MB</span>
-                           </label>
-                           <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang phân tích OCR…' : 'Bắt đầu xử lý'}</button>
-                         </div>
+                    {ocrPhase !== 'idle' && ocrPhase !== 'ready' ? (
+                      <div className="ocr-studio">
+                        <OcrPipelinePane phase={ocrPhase} prepSteps={prepSteps} prepIndex={prepIndex} previewUrl={previewUrl} fields={extractedFields}/>
+                        <ScanStage
+                          phase={ocrPhase}
+                          image={ocrPhase === 'prep' ? (prepSteps[Math.min(prepIndex, prepSteps.length - 1)]?.image ?? previewUrl) : (prepSteps[prepSteps.length - 1]?.image ?? previewUrl)}
+                          fields={extractedFields}
+                        />
                       </div>
                     ) : (
-                      <TiptapDocument initialContent={docContent} onSelectionChange={setSelectedText} />
+                      <WordWorkspace
+                        content={docContent}
+                        fileName="to-khai-dang-ky-khai-sinh.docx"
+                        onSelectionChange={setSelectedText}
+                        onDownload={downloadDocx}
+                        downloading={busy === 'docx'}
+                        statusHint={`${TO_KHAI_KEYS.filter(key => draftValues[key]).length} trường đã điền từ OCR · ${TO_KHAI_KEYS.filter(key => !draftValues[key]).length} trường còn trống`}
+                        source={TEMPLATE_SOURCE}
+                      />
                     )}
                  </div>
                  
@@ -296,16 +546,30 @@ function CitizenPortal() {
                          </div>
                        )}
                        
-                       {procedureType === 'ocr' && docContent && (
-                         <div className="upload-block">
-                           <label className="dropzone">
-                             <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
-                             <b>{file ? file.name : 'Tải thêm tài liệu'}</b>
-                             <span>Tối đa 20 MB</span>
-                           </label>
-                           <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang OCR…' : 'Tải giấy tờ lên'}</button>
+                       {ocrPhase === 'ready' && prepSteps.length > 0 && (
+                         <div className="sidebar-doc">
+                           <h3>Giấy tờ đã xử lý</h3>
+                           <div className="stage-image">
+                             <img src={prepSteps[prepSteps.length - 1].image} alt="Tài liệu đã tiền xử lý"/>
+                             {extractedFields?.map(item => item.bounding_box && (
+                               <div key={item.id ?? item.field_key} className="bbox-overlay labeled" style={{ left: `${item.bounding_box[0] * 100}%`, top: `${item.bounding_box[1] * 100}%`, width: `${item.bounding_box[2] * 100}%`, height: `${item.bounding_box[3] * 100}%` }}>
+                                 <label>{humanizeStatus(item.field_key)} · {Math.round(item.confidence * 100)}%</label>
+                               </div>
+                             ))}
+                           </div>
+                           <small className="muted">Đã khoanh vùng {extractedFields?.filter(item => item.bounding_box).length ?? 0} trường tại vị trí văn bản gốc</small>
                          </div>
                        )}
+
+                       <div className="upload-block">
+                         <h3 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--navy)' }}>AI điền tự động từ giấy tờ</h3>
+                         <label className="dropzone">
+                           <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
+                           <b>{file ? file.name : 'Chọn bản chụp giấy tờ'}</b>
+                           <span>PDF, JPG hoặc PNG · tối đa 20 MB</span>
+                         </label>
+                         <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang xử lý OCR…' : 'Tải lên & điền tự động'}</button>
+                       </div>
                        
                        <div className="submit-block">
                          <label className="check-row">
@@ -314,7 +578,7 @@ function CitizenPortal() {
                          </label>
                          <button className="primary wide" onClick={submit} disabled={!!busy || !consent}>{busy === 'submit' ? 'Đang gửi…' : 'Nộp hồ sơ tiền kiểm'}</button>
                        </div>
-                       <button className="text-button" onClick={() => { setCurrent(null); setProcedureType('none'); }}>Tạo hồ sơ khác</button>
+                       <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setDocContent(buildToKhaiKhaiSinhHtml({})); }}>Tạo hồ sơ khác</button>
                      </div>
                    )}
                    
@@ -373,11 +637,11 @@ function ReviewWorkspace({ detail, onRefresh, onError }: { detail: CaseDetail; o
   const transition = (target_status: string) => action(target_status, () => api(`/officer/cases/${detail.case.id}/transition`, { method: 'POST', body: JSON.stringify({ target_status }) }));
   const requestSupplement = () => action('supplement', () => api(`/officer/cases/${detail.case.id}/supplement-requests`, { method: 'POST', body: JSON.stringify({ public_message: supplement, finding_ids: selectedFindings }) }));
   const rerun = () => action('rerun', () => api(`/officer/cases/${detail.case.id}/rerun-validation`, { method: 'POST' }));
-  return <div className="review-workspace"><div className="review-header"><div><div className="case-code"><span>{detail.case.case_code}</span><Status value={detail.case.status}/></div><h2>{procedureNames[detail.case.procedure_id] ?? detail.case.procedure_id}</h2><p>Phiên bản hồ sơ {detail.submission.version} · Bộ quy tắc {detail.submission.procedure_rule_version}</p></div><div className="review-header-actions">{detail.case.status === 'awaiting_officer_review' && <button className="primary" onClick={claim} disabled={!!busy}>{busy === 'claim' ? 'Đang nhận…' : 'Nhận xử lý'}</button>}<button className="icon-button" aria-label="Làm mới hồ sơ" onClick={onRefresh}>↻</button></div></div><div className="progress-line"><span className="done">Đã nộp</span><span className="done">Tiền kiểm AI</span><span className={detail.case.status === 'awaiting_officer_review' ? 'current' : 'done'}>Tiếp nhận</span><span className={detail.case.status === 'in_officer_review' ? 'current' : ''}>Thẩm tra</span><span className={detail.case.status === 'precheck_ready' ? 'done' : ''}>Hoàn tất</span></div><div className="review-columns"><EvidencePanel documents={detail.documents} activeId={documentId} onSelect={setDocumentId} active={activeDocument} previewUrl={previewUrl} previewError={previewError}/><DataPanel submission={detail.submission.form_data} fields={fields} editable={detail.case.status === 'in_officer_review'} onSaved={async () => { if (documentId) setFields(await api<ExtractedField[]>(`/officer/documents/${documentId}/fields`)); }} onError={onError}/><FindingsPanel findings={detail.findings} busy={busy} reasons={reasons} setReasons={setReasons} onDecide={decide}/></div><div className="review-bottom"><details><summary>Lịch sử xử lý <span>{detail.timeline.length}</span></summary><ol className="timeline">{detail.timeline.length ? detail.timeline.map(item => <li key={item.id}><i/><div><b>{humanizeStatus(item.event_type)}</b><small>{formatDate(item.created_at)} · {item.actor_id}</small></div></li>) : <li>Chưa có hoạt động.</li>}</ol></details>{detail.case.status === 'in_officer_review' && <section className="decision-box"><div><span className="eyebrow">HÀNH ĐỘNG XỬ LÝ</span><h3>Yêu cầu công dân bổ sung</h3></div><textarea value={supplement} onChange={event => setSupplement(event.target.value)} maxLength={5000} placeholder="Mô tả rõ thông tin hoặc giấy tờ cần bổ sung…"/><div className="finding-selector">{detail.findings.filter(item => item.status === 'open').map(item => <label key={item.id}><input type="checkbox" checked={selectedFindings.includes(item.id)} onChange={() => setSelectedFindings(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])}/><span>{item.message}</span></label>)}</div><div className="decision-actions"><button className="warning-button" disabled={!supplement.trim() || !selectedFindings.length || !!busy} onClick={requestSupplement}>Yêu cầu bổ sung</button><button className="ghost" disabled={!!busy} onClick={() => transition('escalated')}>Chuyển chuyên môn</button><button className="ghost" disabled={!!busy} onClick={rerun}>{busy === 'rerun' ? 'Đang kiểm tra…' : 'Chạy lại kiểm tra'}</button><button className="success-button" disabled={!!busy || detail.findings.some(item => item.severity === 'error' && item.status === 'open')} onClick={() => transition('precheck_ready')}>Đạt tiền kiểm</button></div></section>}</div></div>;
+  return <div className="review-workspace"><div className="review-header"><div><div className="case-code"><span>{detail.case.case_code}</span><Status value={detail.case.status}/></div><h2>{procedureNames[detail.case.procedure_id] ?? detail.case.procedure_id}</h2><p>Phiên bản hồ sơ {detail.submission.version} · Bộ quy tắc {detail.submission.procedure_rule_version}</p></div><div className="review-header-actions">{detail.case.status === 'awaiting_officer_review' && <button className="primary" onClick={claim} disabled={!!busy}>{busy === 'claim' ? 'Đang nhận…' : 'Nhận xử lý'}</button>}<button className="icon-button" aria-label="Làm mới hồ sơ" onClick={onRefresh}>↻</button></div></div><div className="progress-line"><span className="done">Đã nộp</span><span className="done">Tiền kiểm AI</span><span className={detail.case.status === 'awaiting_officer_review' ? 'current' : 'done'}>Tiếp nhận</span><span className={detail.case.status === 'in_officer_review' ? 'current' : ''}>Thẩm tra</span><span className={detail.case.status === 'precheck_ready' ? 'done' : ''}>Hoàn tất</span></div><div className="review-columns"><EvidencePanel documents={detail.documents} activeId={documentId} onSelect={setDocumentId} active={activeDocument} previewUrl={previewUrl} previewError={previewError} fields={fields}/><DataPanel submission={detail.submission.form_data} fields={fields} editable={detail.case.status === 'in_officer_review'} onSaved={async () => { if (documentId) setFields(await api<ExtractedField[]>(`/officer/documents/${documentId}/fields`)); }} onError={onError}/><FindingsPanel findings={detail.findings} busy={busy} reasons={reasons} setReasons={setReasons} onDecide={decide}/></div><div className="review-bottom"><details><summary>Lịch sử xử lý <span>{detail.timeline.length}</span></summary><ol className="timeline">{detail.timeline.length ? detail.timeline.map(item => <li key={item.id}><i/><div><b>{humanizeStatus(item.event_type)}</b><small>{formatDate(item.created_at)} · {item.actor_id}</small></div></li>) : <li>Chưa có hoạt động.</li>}</ol></details>{detail.case.status === 'in_officer_review' && <section className="decision-box"><div><span className="eyebrow">HÀNH ĐỘNG XỬ LÝ</span><h3>Yêu cầu công dân bổ sung</h3></div><textarea value={supplement} onChange={event => setSupplement(event.target.value)} maxLength={5000} placeholder="Mô tả rõ thông tin hoặc giấy tờ cần bổ sung…"/><div className="finding-selector">{detail.findings.filter(item => item.status === 'open').map(item => <label key={item.id}><input type="checkbox" checked={selectedFindings.includes(item.id)} onChange={() => setSelectedFindings(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])}/><span>{item.message}</span></label>)}</div><div className="decision-actions"><button className="warning-button" disabled={!supplement.trim() || !selectedFindings.length || !!busy} onClick={requestSupplement}>Yêu cầu bổ sung</button><button className="ghost" disabled={!!busy} onClick={() => transition('escalated')}>Chuyển chuyên môn</button><button className="ghost" disabled={!!busy} onClick={rerun}>{busy === 'rerun' ? 'Đang kiểm tra…' : 'Chạy lại kiểm tra'}</button><button className="success-button" disabled={!!busy || detail.findings.some(item => item.severity === 'error' && item.status === 'open')} onClick={() => transition('precheck_ready')}>Đạt tiền kiểm</button></div></section>}</div></div>;
 }
 
-function EvidencePanel({ documents, activeId, onSelect, active, previewUrl, previewError }: { documents: CaseDocument[]; activeId: string; onSelect: (id: string) => void; active?: CaseDocument; previewUrl: string; previewError: string }) {
-  return <section className="review-panel evidence-panel"><div className="column-heading"><span>TÀI LIỆU & CĂN CỨ</span><b>{documents.length}</b></div><div className="document-tabs">{documents.map(item => <button key={item.id} className={activeId === item.id ? 'active' : ''} onClick={() => onSelect(item.id)}><span>▤</span><div><b>{item.original_filename ?? item.document_type}</b><small>{formatBytes(item.size_bytes)}</small></div><Status value={item.ocr_status}/></button>)}</div>{active ? <div className="document-viewer">{previewUrl ? active.content_type === 'application/pdf' ? <iframe title={active.original_filename ?? 'Tài liệu'} src={previewUrl}/> : <img alt={active.original_filename ?? 'Tài liệu'} src={previewUrl}/> : <div className="document-placeholder"><div className="paper-lines"><i/><i/><i/><i/><i/></div><span>▧</span><b>Chưa có bản xem trước</b><small>{previewError || 'Tài liệu được bảo vệ và chỉ mở khi được cấp quyền.'}</small></div>}<div className="viewer-meta"><span>{active.ocr_engine ? `OCR: ${active.ocr_engine}` : 'Chưa có OCR'}</span><Status value={active.ocr_status}/></div></div> : <Empty title="Chưa có tài liệu" text="Hồ sơ này chưa đính kèm giấy tờ."/>}</section>;
+function EvidencePanel({ documents, activeId, onSelect, active, previewUrl, previewError, fields }: { documents: CaseDocument[]; activeId: string; onSelect: (id: string) => void; active?: CaseDocument; previewUrl: string; previewError: string; fields?: ExtractedField[] }) {
+  return <section className="review-panel evidence-panel"><div className="column-heading"><span>TÀI LIỆU & CĂN CỨ</span><b>{documents.length}</b></div><div className="document-tabs">{documents.map(item => <button key={item.id} className={activeId === item.id ? 'active' : ''} onClick={() => onSelect(item.id)}><span>▤</span><div><b>{item.original_filename ?? item.document_type}</b><small>{formatBytes(item.size_bytes)}</small></div><Status value={item.ocr_status}/></button>)}</div>{active ? <div className="document-viewer">{previewUrl ? active.content_type === 'application/pdf' ? <iframe title={active.original_filename ?? 'Tài liệu'} src={previewUrl}/> : <div className="image-preview-container"><img alt={active.original_filename ?? 'Tài liệu'} src={previewUrl}/>{fields?.map(f => f.bounding_box && (<div key={f.id} className="bbox-overlay" style={{ left: `${f.bounding_box[0]*100}%`, top: `${f.bounding_box[1]*100}%`, width: `${f.bounding_box[2]*100}%`, height: `${f.bounding_box[3]*100}%` }} title={`${f.field_key}: ${f.normalized_value || f.raw_value}`}/>))}</div> : <div className="document-placeholder"><div className="paper-lines"><i/><i/><i/><i/><i/></div><span>▧</span><b>Chưa có bản xem trước</b><small>{previewError || 'Tài liệu được bảo vệ và chỉ mở khi được cấp quyền.'}</small></div>}<div className="viewer-meta"><span>{active.ocr_engine ? `OCR: ${active.ocr_engine}` : 'Chưa có OCR'}</span><Status value={active.ocr_status}/></div></div> : <Empty title="Chưa có tài liệu" text="Hồ sơ này chưa đính kèm giấy tờ."/>}</section>;
 }
 
 function DataPanel({ submission, fields, editable, onSaved, onError }: { submission: Record<string, unknown>; fields: ExtractedField[]; editable: boolean; onSaved: () => Promise<void>; onError: (cause: unknown) => void }) {

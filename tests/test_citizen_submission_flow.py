@@ -95,6 +95,38 @@ def test_citizen_can_update_form_data_and_clarification_answers():
     assert updated.json()["data"]["version"] == created["version"] + 1
 
 
+def test_preprocess_endpoint_returns_step_snapshots():
+    import cv2
+    import numpy as np
+
+    headers = auth("citizen.demo")
+    case = client.post("/api/v1/citizen/cases", headers=headers, json={"procedure_id": "khai_sinh", "locality_code": "00001"}).json()["data"]
+
+    canvas = np.full((300, 400, 3), 240, dtype=np.uint8)
+    ok, encoded = cv2.imencode(".png", canvas)
+    assert ok
+    content = encoded.tobytes()
+
+    intent = client.post(
+        f"/api/v1/citizen/cases/{case['id']}/documents/upload-intents",
+        headers=headers,
+        json={"filename": "giay.png", "content_type": "image/png", "size_bytes": len(content)},
+    )
+    assert intent.status_code == 201, intent.text
+    document = intent.json()["data"]
+    uploaded = client.put(document["upload_url"], headers={**headers, "Content-Type": "application/octet-stream"}, content=content)
+    assert uploaded.status_code == 204, uploaded.text
+
+    response = client.post(f"/api/v1/citizen/documents/{document['document_id']}/preprocess", headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert "clahe_contrast" in data["applied_steps"]
+    names = [step["name"] for step in data["steps"]]
+    assert names[0] == "original"
+    assert names[-1] == "clahe_contrast"
+    assert all(step["image"].startswith("data:image/jpeg;base64,") for step in data["steps"])
+
+
 def test_upload_policy_rejects_invalid_type_and_oversized_file():
     headers = auth("citizen.demo")
     case = client.post("/api/v1/citizen/cases", headers=headers, json={"procedure_id": "khai_sinh", "locality_code": "00001"}).json()["data"]

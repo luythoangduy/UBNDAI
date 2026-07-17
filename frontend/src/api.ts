@@ -4,7 +4,7 @@ const officerTokenKey = 'ubndai.officer.access_token';
 const tokenKeyForPath = () => location.pathname.startsWith('/officer') ? officerTokenKey : citizenTokenKey;
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public detail?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -32,11 +32,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (body.data ?? body) as T;
 }
 
-export async function apiBlob(path: string): Promise<Blob> {
-  const response = await fetch(`/api/v1${path}`, { headers: withHeaders({}) });
+export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const response = await fetch(`/api/v1${path}`, { ...init, headers: withHeaders(init) });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(body.detail ?? 'Không thể mở tài liệu', response.status);
+    const detail = body.detail;
+    const message = typeof detail === 'string' ? detail : detail?.message ?? 'Không thể mở tài liệu';
+    throw new ApiError(message, response.status, detail);
   }
   return response.blob();
 }

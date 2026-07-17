@@ -145,6 +145,20 @@ class DraftTemplateInfo(BaseModel):
     disclaimer: str
 
 
+class DraftHtmlExportRequest(BaseModel):
+    """Xuất DOCX từ HTML của editor (WYSIWYG) — cách làm của C2-App-108.
+
+    Nội dung tải xuống đúng bằng nội dung người dùng thấy/sửa trong editor,
+    không render lại từ values qua builder riêng.
+    """
+
+    html: str = Field(min_length=1, max_length=500_000)
+    title: str | None = Field(default=None, max_length=300)
+    filename: str = Field(
+        default="van-ban.docx", pattern=r"^[A-Za-z0-9_.-]+\.docx$"
+    )
+
+
 class DraftGenerateRequest(BaseModel):
     procedure_id: str
     template_id: str | None = None

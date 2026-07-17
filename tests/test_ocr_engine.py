@@ -238,10 +238,12 @@ def test_openai_provider_parses_fields_and_sends_strict_schema():
     # Đúng endpoint + bearer auth
     assert "api.openai.com/v1/chat/completions" in captured["url"]
     assert captured["headers"]["authorization"] == "Bearer test-openai-key"
-    # Reasoning model: không temperature, dùng max_completion_tokens + strict schema
+    # Reasoning model: không temperature, dùng max_completion_tokens + strict schema;
+    # OCR là phiên âm thuần nên chạy reasoning_effort minimal cho nhanh.
     req = captured["request"]
     assert "temperature" not in req
-    assert req["max_completion_tokens"] == 16000
+    assert req["max_completion_tokens"] == 4000
+    assert req["reasoning_effort"] == "minimal"
     assert req["response_format"]["json_schema"]["strict"] is True
     user_content = req["messages"][1]["content"]
     assert user_content[1]["type"] == "image_url"

@@ -53,7 +53,7 @@ export type ExtractedField = {
   normalized_value?: string;
   confidence: number;
   page?: number;
-  bounding_box?: number[];
+  bounding_box?: [number, number, number, number];
   review_status: string;
   previous_value?: string;
 };
@@ -84,6 +84,9 @@ export type DashboardSummary = {
   document_processing: number;
   document_rejected: number;
 };
+
+export type PreprocessStep = { name: string; image: string };
+export type PreprocessResult = { applied_steps: string[]; steps: PreprocessStep[] };
 
 export type ChatCitation = { index: number; section?: string; excerpt?: string; source_url?: string };
 export type ChatResponse = {

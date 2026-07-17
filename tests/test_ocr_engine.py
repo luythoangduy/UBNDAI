@@ -323,3 +323,50 @@ def test_invalid_reasoning_effort_is_omitted():
     engine.extract(FAKE_IMAGE)
 
     assert "reasoning_effort" not in captured["request"]
+
+
+def test_strict_schema_invariant_all_properties_required():
+    """OpenAI strict mode: MỌI key trong properties phải nằm trong required.
+    Test này chặn tái diễn bug thêm field mới vào properties mà quên required (400)."""
+    from src.services.ocr.engine import OCR_OUTPUT_SCHEMA
+
+    def walk(node, path="$"):
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "object" and "properties" in node:
+            props = set(node["properties"])
+            required = set(node.get("required", []))
+            assert props == required, (
+                f"{path}: properties {sorted(props - required)} thiếu trong required "
+                "(OpenAI strict mode sẽ trả 400)"
+            )
+        for key, child in node.items():
+            if isinstance(child, dict):
+                walk(child, f"{path}.{key}")
+            elif isinstance(child, list):
+                for i, item in enumerate(child):
+                    walk(item, f"{path}.{key}[{i}]")
+
+    walk(OCR_OUTPUT_SCHEMA)
+
+
+def test_bbox_parsed_and_clamped():
+    engine, _ = _engine_with_mock(
+        {
+            "raw_text": "x",
+            "fields": [
+                {"key": "a", "value": "1", "confidence": 0.9, "bbox": [0.1, 0.2, 0.3, 1.4]},
+                {"key": "b", "value": "2", "confidence": 0.9, "bbox": None},
+                {"key": "c", "value": "3", "confidence": 0.9, "bbox": [0.1, 0.2]},
+                {"key": "d", "value": "4", "confidence": 0.9, "bbox": "goc tren"},
+            ],
+        }
+    )
+
+    result = engine.extract(FAKE_IMAGE)
+
+    by_key = {f.key: f.bbox for f in result.fields}
+    assert by_key["a"] == [0.1, 0.2, 0.3, 1.0]  # clamp 1.4 -> 1.0
+    assert by_key["b"] is None
+    assert by_key["c"] is None  # sai độ dài
+    assert by_key["d"] is None  # sai kiểu

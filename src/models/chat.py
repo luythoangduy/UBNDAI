@@ -37,6 +37,63 @@ class Citation(BaseModel):
     source_url: str | None = None
 
 
+ChatActionKind = Literal["send_message", "start_form", "open_url"]
+EvidenceStatus = Literal["ready", "cache_hit", "fallback", "unavailable"]
+
+
+class ChatAction(BaseModel):
+    id: str
+    label: str
+    description: str
+    kind: ChatActionKind
+    value: str
+    icon: Literal["search", "checklist", "clock", "template", "form", "source"]
+    primary: bool = False
+
+
+class TemplateCitation(BaseModel):
+    document_number: str
+    title: str
+    issuing_authority: str
+    role: str
+    source_url: str
+    official: bool
+    priority: int = Field(ge=0)
+
+
+class ChatTemplateResource(BaseModel):
+    template_id: str
+    title: str
+    version: str
+    source_checked_on: str
+    field_count: int = Field(ge=0)
+    source_url: str
+    source_label: str
+    official_source: bool
+    citations: list[TemplateCitation] = Field(default_factory=list)
+
+
+class EvidenceStep(BaseModel):
+    id: str
+    label: str
+    detail: str
+    status: EvidenceStatus
+    source_url: str | None = None
+
+
+class ChatCacheInfo(BaseModel):
+    backend: Literal["redis", "memory", "none"] = "none"
+    status: Literal["hit", "miss", "unavailable"] = "unavailable"
+    ttl_seconds: int = Field(default=0, ge=0)
+
+
+class ChatStarterResponse(BaseModel):
+    reply: str
+    actions: list[ChatAction] = Field(default_factory=list)
+    evidence: list[EvidenceStep] = Field(default_factory=list)
+    cache: ChatCacheInfo = Field(default_factory=ChatCacheInfo)
+
+
 class ChatRequest(BaseModel):
     case_id: str | None = Field(default=None, description="None = mở hội thoại/case mới")
     message: str = Field(min_length=1, max_length=4000)
@@ -60,3 +117,8 @@ class ChatResponse(BaseModel):
     detected_intents: list[IntentName] = Field(default_factory=list)
     clarifying_questions: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
+    procedure_id: str | None = None
+    actions: list[ChatAction] = Field(default_factory=list)
+    templates: list[ChatTemplateResource] = Field(default_factory=list)
+    evidence: list[EvidenceStep] = Field(default_factory=list)
+    cache: ChatCacheInfo = Field(default_factory=ChatCacheInfo)

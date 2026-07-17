@@ -18,6 +18,43 @@ def test_legal_chunks_keep_dataset_provenance_and_split_long_record():
     assert all(chunk.metadata["source_hash"] for chunk in chunks)
 
 
+def test_legal_hybrid_chunking_keeps_article_clause_and_point_path():
+    text = """Chương I
+Quy định chung
+
+Điều 1. Phạm vi điều chỉnh
+1. Nội dung thứ nhất.
+a) Điểm a.
+b) Điểm b.
+2. Nội dung thứ hai.
+
+Điều 2. Điều khoản thi hành
+1. Có hiệu lực từ ngày ban hành.
+"""
+
+    chunks = chunks_from_legal_record("vbpl-1", text)
+
+    first_clause = next(chunk for chunk in chunks if chunk.metadata["clause"] == "Khoản 1")
+    assert first_clause.metadata["chunking_method"] == "legal_hybrid"
+    assert first_clause.metadata["chapter"] == "Chương I"
+    assert first_clause.metadata["article"] == "Điều 1"
+    assert first_clause.metadata["points"] == "Điểm a,Điểm b"
+
+
+def test_unstructured_long_text_uses_c2_overlap_fallback():
+    chunks = chunks_from_legal_record(
+        "unstructured",
+        "Nội dung không có đề mục. " * 300,
+        fallback_max_chars=300,
+        overlap_chars=30,
+    )
+
+    assert len(chunks) > 1
+    assert all(chunk.metadata["chunk_type"] == "overlap_fallback" for chunk in chunks)
+    assert all(chunk.metadata["fallback_strategy"] == "overlap" for chunk in chunks)
+    assert all(len(chunk.content) <= 300 for chunk in chunks)
+
+
 def test_legal_retrieval_uses_its_own_bm25_cache(tmp_path, monkeypatch):
     chunks = chunks_from_legal_record(
         "99",

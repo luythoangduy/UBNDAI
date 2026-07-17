@@ -27,6 +27,8 @@ from src.services.retrieval.chunking import (
     chunks_from_procedure,
     identity_chunk_from_procedure,
 )
+from src.services.retrieval.raw_procedures import chunks as raw_chunks
+from src.services.retrieval.raw_procedures import identity_chunks as raw_identity_chunks
 from src.services.retrieval.common import (
     NO_SOURCE_WARNING,
     RetrievedChunk,
@@ -60,9 +62,10 @@ def retrieve(
     limit = top_k or settings.retrieval_top_k
     if procedure_id:
         procedure = catalog.get_procedure(procedure_id)
-        if procedure is None:
-            return []
-        return Bm25Index(chunks_from_procedure(procedure)).search(query, top_k=limit)
+        available = chunks_from_procedure(procedure) if procedure else raw_chunks(procedure_id)
+        sparse = Bm25Index(available).search(query, top_k=limit * 2)
+        dense = _dense_search(query, top_k=limit * 2, procedure_id=procedure_id)
+        return (reciprocal_rank_fusion([dense, sparse]) if dense and sparse else dense or sparse)[:limit]
     sparse = _bm25_index().search(query, top_k=limit * 2)
     dense = _dense_search(query, top_k=limit * 2)
     if dense and sparse:
@@ -90,6 +93,12 @@ def retrieve_procedure_identity(query: str) -> list[RetrievedChunk]:
         ranked.append(
             RetrievedChunk(content=chunk.content, metadata=chunk.metadata, score=score)
         )
+    by_procedure = {chunk.procedure_id: chunk for chunk in ranked}
+    for chunk in raw_identity_chunks(query):
+        existing = by_procedure.get(chunk.procedure_id)
+        if existing is None or float(chunk.score or 0) > float(existing.score or 0):
+            by_procedure[chunk.procedure_id] = chunk
+    ranked = list(by_procedure.values())
     ranked.sort(key=lambda chunk: float(chunk.score or 0), reverse=True)
     return ranked
 
@@ -159,18 +168,29 @@ def reset_caches() -> None:
 
 def _bm25_index() -> Bm25Index:
     cache_path = Path(settings.bm25_index_path)
+    raw = raw_chunks()
+    raw_fingerprint = ":".join(
+        sorted(str(chunk.metadata.get("source_hash") or "") for chunk in raw)
+    )
     if cache_path.is_file():
-        key = f"file:{cache_path.resolve()}:{cache_path.stat().st_mtime_ns}"
+        key = f"file:{cache_path.resolve()}:{cache_path.stat().st_mtime_ns}:{raw_fingerprint}"
         if key not in _BM25_CACHE:
             _BM25_CACHE.clear()
-            _BM25_CACHE[key] = Bm25Index.load(cache_path)
+            cached = Bm25Index.load(cache_path)
+            _BM25_CACHE[key] = Bm25Index([*cached.chunks, *raw])
         return _BM25_CACHE[key]
-    if "catalog" not in _BM25_CACHE:
-        _BM25_CACHE["catalog"] = Bm25Index(chunks_from_catalog(catalog.load_catalog()))
-    return _BM25_CACHE["catalog"]
+    key = f"catalog:{raw_fingerprint}"
+    if key not in _BM25_CACHE:
+        _BM25_CACHE.clear()
+        _BM25_CACHE[key] = Bm25Index(
+            [*chunks_from_catalog(catalog.load_catalog()), *raw]
+        )
+    return _BM25_CACHE[key]
 
 
-def _dense_search(query: str, *, top_k: int) -> list[RetrievedChunk]:
+def _dense_search(
+    query: str, *, top_k: int, procedure_id: str | None = None
+) -> list[RetrievedChunk]:
     try:
         client = get_chroma_persistent_client(settings.chroma_persist_dir)
         if client is None:
@@ -183,10 +203,15 @@ def _dense_search(query: str, *, top_k: int) -> list[RetrievedChunk]:
             return []
         provider = (collection.metadata or {}).get("embedding_provider")
         embedding = get_embedding_model(provider).embed_query(query)
+        query_kwargs = {
+            "query_embeddings": [embedding],
+            "n_results": top_k,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if procedure_id:
+            query_kwargs["where"] = {"procedure_id": procedure_id}
         result = collection.query(
-            query_embeddings=[embedding],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"],
+            **query_kwargs,
         )
         documents = (result.get("documents") or [[]])[0]
         metadatas = (result.get("metadatas") or [[]])[0]

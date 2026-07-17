@@ -17,6 +17,7 @@ from src.agents.state import GuidanceState
 from src.models import ChatRequest, ChatResponse, ChecklistItem, Citation
 from src.services import cases
 from src.services.guidance_bridge import resolve_case_id, sync_to_portal
+from src.services.chat_experience import build_experience
 from src.services.retrieval import NO_SOURCE_WARNING
 
 
@@ -117,6 +118,7 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         message,
         reply,
     )
+    experience = await build_experience(case.procedure_id, message)
 
     return ChatResponse(
         case_id=case.id,
@@ -128,4 +130,9 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         citations=[
             Citation.model_validate(item) for item in final.get("citations") or []
         ],
+        procedure_id=experience.procedure_id,
+        actions=experience.actions,
+        templates=experience.templates,
+        evidence=experience.evidence,
+        cache=experience.cache,
     )

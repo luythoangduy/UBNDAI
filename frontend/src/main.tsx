@@ -4,11 +4,12 @@ import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethroug
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
-import type { CaseDetail, CaseDocument, CaseRecord, ChatResponse, DashboardSummary, ExtractedField, Finding, PortalRole, PreprocessResult, PreprocessStep } from './types';
+import type { CaseDetail, CaseDocument, CaseRecord, ChatAction, ChatExperience, ChatResponse, ChatStarterResponse, DashboardSummary, ExtractedField, Finding, PortalRole, PreprocessResult, PreprocessStep, ProcedureCapabilities, ProcedureFormSchema, ProcedureSummary } from './types';
 import { buildCaseQuery, formatBytes, formatDate, humanizeStatus } from './utils';
 import './styles.css';
 
-const procedureNames: Record<string, string> = { khai_sinh: 'Đăng ký khai sinh' };
+const procedureNames: Record<string, string> = {};
+const rememberProcedureNames = (items: ProcedureSummary[]) => items.forEach(item => { procedureNames[item.id] = item.name; });
 const activeFindingStatuses = new Set<Finding['status']>(['open', 'accepted', 'escalated']);
 const isActiveFinding = (finding: Finding) => activeFindingStatuses.has(finding.status);
 
@@ -35,15 +36,20 @@ function Login({ role, onSuccess }: { role: PortalRole; onSuccess: () => void })
   return <Shell role={role}><main className="login-page"><section className="login-story"><span className="eyebrow">DỊCH VỤ CÔNG THÔNG MINH</span><h1>{role === 'citizen' ? 'Chuẩn bị hồ sơ đúng ngay từ lần đầu.' : 'Một không gian làm việc, toàn bộ căn cứ cần thiết.'}</h1><p>{role === 'citizen' ? 'Được hướng dẫn từng bước, kiểm tra giấy tờ và theo dõi hồ sơ minh bạch.' : 'Tiếp nhận, đối chiếu OCR, xử lý cảnh báo và lưu vết mọi quyết định.'}</p><div className="trust-row"><span>✓ Dữ liệu riêng tư</span><span>✓ Có căn cứ</span><span>✓ Có người kiểm tra</span></div></section><form className="login-card" onSubmit={submit}><div className="login-icon">{role === 'citizen' ? 'CN' : 'CB'}</div><span className="eyebrow">{role === 'citizen' ? 'CỔNG CÔNG DÂN' : 'DÀNH CHO CÁN BỘ'}</span><h2>Đăng nhập hệ thống</h2><p className="muted">Sử dụng tài khoản được cấp để tiếp tục.</p><label>Tên đăng nhập<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} /></label><label>Mật khẩu<input autoComplete="current-password" type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Nhập mật khẩu" /></label>{error && <div className="alert error" role="alert">{error}</div>}<button className="primary wide" disabled={busy}>{busy ? 'Đang xác thực…' : 'Đăng nhập'}</button><small className="demo-hint">Tài khoản demo dùng mật khẩu <code>ChangeMe123!</code></small></form></main></Shell>;
 }
 
-type ChatMessage = { role: 'user' | 'assistant'; text: string; response?: ChatResponse };
-function CitizenAssistant({ activeCaseId, onChecklist, selectedContext }: { activeCaseId?: string; onChecklist?: (caseId: string) => void; selectedContext?: string }) {
+type ChatMessage = { role: 'user' | 'assistant'; text: string; response?: ChatExperience & Partial<ChatResponse> };
+function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, selectedContext }: { activeCaseId?: string; onChecklist?: (caseId: string) => void; onStartProcedure?: (procedureId: string) => void; selectedContext?: string }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', text: 'Xin chào! Bạn cần thực hiện thủ tục gì? Hãy mô tả bằng lời của bạn.' }]);
+  const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', text: 'Đang kết nối kho thủ tục và nguồn chính thức…' }]);
   const [message, setMessage] = useState(''); const [caseId, setCaseId] = useState<string | undefined>(activeCaseId); const [busy, setBusy] = useState(false);
   const [streamedText, setStreamedText] = useState('');
   useEffect(() => { if (activeCaseId) setCaseId(activeCaseId); }, [activeCaseId]);
-  const send = async (event: FormEvent) => {
-    event.preventDefault(); const value = message.trim(); if (!value || busy) return;
+  useEffect(() => {
+    api<ChatStarterResponse>('/chat/starter')
+      .then(response => setMessages([{ role: 'assistant', text: response.reply, response }]))
+      .catch(() => setMessages([{ role: 'assistant', text: 'Xin chào! Bạn cần thực hiện thủ tục gì? Hãy mô tả bằng lời của bạn.' }]));
+  }, []);
+  const submitMessage = async (rawValue: string) => {
+    const value = rawValue.trim(); if (!value || busy) return;
     setMessages(current => [...current, { role: 'user', text: value }]); setMessage(''); setBusy(true); setStreamedText('');
     try {
       const payloadMessage = selectedContext ? `${value}\n\n[Ngữ cảnh đang chọn]: "${selectedContext}"` : value;
@@ -66,6 +72,13 @@ function CitizenAssistant({ activeCaseId, onChecklist, selectedContext }: { acti
       }, 10);
     } catch (cause) { setBusy(false); setMessages(current => [...current, { role: 'assistant', text: `Chưa thể kết nối trợ lý: ${(cause as Error).message}` }]); }
   };
+  const send = (event: FormEvent) => { event.preventDefault(); void submitMessage(message); };
+  const runAction = (action: ChatAction) => {
+    if (action.kind === 'send_message') void submitMessage(action.value);
+    else if (action.kind === 'start_form') onStartProcedure?.(action.value);
+    else window.open(action.value, '_blank', 'noopener,noreferrer');
+  };
+  const iconFor = (icon: ChatAction['icon']) => ({ search: '⌕', checklist: '✓', clock: '◷', template: '▤', form: '✦', source: '↗' }[icon]);
   return (
     <div className={`chat-widget-container ${isOpen ? 'open' : ''}`}>
       {!isOpen && (
@@ -86,13 +99,13 @@ function CitizenAssistant({ activeCaseId, onChecklist, selectedContext }: { acti
             </div>
           </div>
           <div className="chat-log" aria-live="polite">
-            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')}>Có</button><button onClick={() => setMessage('Không')}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
+            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b>{item.response.cache && <small className={`cache-badge ${item.response.cache.status}`}>{item.response.cache.backend === 'redis' ? 'Redis' : 'Cache'} · {item.response.cache.status === 'hit' ? 'HIT' : 'MISS'}</small>}</div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu tìm thấy</b><small>có nguồn ban hành</small></div>{item.response.templates.map(template => <article key={template.template_id} className="template-card"><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{template.official_source ? '✓ NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div><a href={template.source_url} target="_blank" rel="noreferrer">Xem mẫu ↗</a><details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')}>Có</button><button onClick={() => setMessage('Không')}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
             {busy && <article className="bubble assistant"><span>AI</span><div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div></article>}
             {streamedText && <article className="bubble assistant"><span>AI</span><div><p>{streamedText}<span className="cursor">|</span></p></div></article>}
           </div>
           <form className="chat-input" onSubmit={send}>
             {selectedContext && <div className="chat-context-banner"><strong>Đang chọn:</strong> "{selectedContext.length > 40 ? selectedContext.substring(0, 40) + '...' : selectedContext}"</div>}
-            <textarea aria-label="Nội dung cần hỏi" rows={2} maxLength={4000} value={message} onChange={event => setMessage(event.target.value)} placeholder="Ví dụ: Tôi muốn đăng ký khai sinh cho con…"/>
+            <textarea aria-label="Nội dung cần hỏi" rows={2} maxLength={4000} value={message} onChange={event => setMessage(event.target.value)} placeholder="Mô tả việc hành chính bạn cần thực hiện…"/>
             <button className="primary" disabled={!message.trim() || busy || !!streamedText}>Gửi</button>
           </form>
           <p className="ai-note">AI có thể chưa đầy đủ. Đối chiếu nội dung với nguồn thủ tục.</p>
@@ -110,125 +123,31 @@ async function checksum(file: File) {
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const escapeHtml = (value: string) => value.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch] as string));
 
-// Trường của template DOCX khai_sinh.giay_khai_sinh (data/draft_templates/khai_sinh_giay_khai_sinh.json)
-const DRAFT_TEMPLATE_KEYS = ['ho_ten_con', 'ngay_sinh', 'gioi_tinh', 'dan_toc', 'quoc_tich', 'noi_sinh', 'que_quan', 'so_dinh_danh_ca_nhan', 'ho_ten_me', 'nam_sinh_me', 'dan_toc_me', 'quoc_tich_me', 'noi_cu_tru_me', 'ho_ten_cha', 'nam_sinh_cha', 'dan_toc_cha', 'quoc_tich_cha', 'noi_cu_tru_cha', 'ho_ten_nguoi_di_dang_ky', 'giay_to_tuy_than_nguoi_di_dang_ky', 'noi_dang_ky', 'ngay_dang_ky', 'so', 'quyen_so', 'chuc_vu_nguoi_ky', 'ho_ten_nguoi_ky'];
-const OCR_FIELD_ALIASES: Record<string, string> = {
-  ho_ten: 'ho_ten_con', ho_va_ten: 'ho_ten_con',
-  so_cccd: 'so_dinh_danh_ca_nhan', so_dinh_danh: 'so_dinh_danh_ca_nhan', so_can_cuoc: 'so_dinh_danh_ca_nhan',
-  nguyen_quan: 'que_quan', noi_cu_tru: 'noi_cu_tru_me', noi_thuong_tru: 'noi_cu_tru_me', dia_chi: 'noi_cu_tru_me',
-};
-
-function mapExtractedToDraftValues(fields: ExtractedField[]): Record<string, string> {
-  const known = new Set(DRAFT_TEMPLATE_KEYS);
+function mapExtractedToDraftValues(fields: ExtractedField[], schema: ProcedureFormSchema): Record<string, string> {
   const values: Record<string, string> = {};
   for (const field of fields) {
     const value = (field.normalized_value || field.raw_value || '').trim();
     if (!value) continue;
-    const key = known.has(field.field_key) ? field.field_key : OCR_FIELD_ALIASES[field.field_key];
+    const target = schema.fields.find(item =>
+      item.key === field.field_key || item.ocr_sources.some(source => source.split('.').pop() === field.field_key)
+    );
+    const key = target?.key;
     if (key && !values[key]) values[key] = value;
   }
   return values;
 }
 
-function fill(values: Record<string, string>, key: string, length = 46): string {
-  const value = values[key];
-  return value ? `<strong>${escapeHtml(value)}</strong>` : `[${'.'.repeat(length)}]`;
-}
-
-// Trường của tờ khai (kho template: data/draft_templates/khai_sinh_to_khai.json).
-// Layout bám NGUYÊN VĂN mẫu Tờ khai đăng ký khai sinh ban hành kèm Thông tư
-// 04/2024/TT-BTP (bản đang áp dụng) — văn bản NGƯỜI DÂN gửi cơ quan đăng ký.
-const TO_KHAI_KEYS = ['noi_dang_ky', 'ho_ten_nguoi_yeu_cau', 'ngay_sinh_nguoi_yeu_cau', 'noi_cu_tru_nguoi_yeu_cau', 'giay_to_tuy_than_nguoi_yeu_cau', 'quan_he_voi_nguoi_duoc_khai_sinh', 'ho_ten_con', 'ngay_sinh', 'gioi_tinh', 'dan_toc', 'quoc_tich', 'noi_sinh', 'que_quan', 'ho_ten_me', 'nam_sinh_me', 'dan_toc_me', 'quoc_tich_me', 'noi_cu_tru_me', 'giay_to_tuy_than_me', 'ho_ten_cha', 'nam_sinh_cha', 'dan_toc_cha', 'quoc_tich_cha', 'noi_cu_tru_cha', 'giay_to_tuy_than_cha', 'so_gcn_ket_hon', 'quyen_so_gcn_ket_hon', 'ngay_dang_ky_ket_hon', 'noi_dang_ky_ket_hon'];
-const DEMO_REQUIRED_FIELDS: Record<string, string> = {
-  ho_ten_con: 'Họ tên trẻ',
-  ngay_sinh: 'Ngày sinh',
-  gioi_tinh: 'Giới tính',
-  noi_sinh: 'Nơi sinh',
-  ho_ten_me: 'Họ tên mẹ',
-};
-
 type TemplateSource = { label: string; links: { title: string; url: string }[] };
-const TEMPLATE_SOURCE: TemplateSource = {
-  label: 'Mẫu: Tờ khai đăng ký khai sinh — Phụ lục 05, Thông tư 04/2024/TT-BTP (Bộ Tư pháp), hiệu lực 16/8/2024',
-  links: [
-    { title: 'Văn bản Thông tư 04/2024/TT-BTP', url: 'https://luatvietnam.vn/tu-phap/thong-tu-04-2024-tt-btp-sua-doi-thong-tu-02-2020-tt-btp-thong-tu-04-2020-tt-btp-350235-d1.html' },
-    { title: 'Mẫu đang áp dụng', url: 'https://luatvietnam.vn/bieu-mau/mau-to-khai-dang-ky-khai-sinh-571-26974-article.html' },
-  ],
-};
-
-const VN_ONES = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
-function vnReadTwo(value: number): string {
-  const tens = Math.floor(value / 10), unit = value % 10;
-  if (tens === 0) return VN_ONES[unit];
-  const prefix = tens === 1 ? 'mười' : `${VN_ONES[tens]} mươi`;
-  if (unit === 0) return prefix;
-  const unitWord = unit === 1 && tens > 1 ? 'mốt' : unit === 5 ? 'lăm' : VN_ONES[unit];
-  return `${prefix} ${unitWord}`;
-}
-function vnReadNumber(value: number): string {
-  if (value < 10) return VN_ONES[value];
-  if (value < 100) return vnReadTwo(value);
-  const readThree = (n: number, full: boolean): string => {
-    const hundreds = Math.floor(n / 100), rest = n % 100;
-    const parts: string[] = [];
-    if (hundreds || full) parts.push(`${VN_ONES[hundreds]} trăm`);
-    if (rest) {
-      if (rest < 10 && (hundreds || full)) parts.push('linh');
-      parts.push(vnReadTwo(rest));
-    }
-    return parts.join(' ');
-  };
-  if (value < 1000) return readThree(value, false);
-  const thousands = Math.floor(value / 1000), rest = value % 1000;
-  let result = `${VN_ONES[thousands]} nghìn`;
-  if (rest) result += ' ' + readThree(rest, rest < 100);
-  return result;
-}
-// "Ngày, tháng, năm sinh ... ghi bằng chữ" theo mẫu — chỉ đọc được khi OCR trả DD/MM/YYYY.
-function vnDateInWords(raw?: string): string | undefined {
-  const match = raw?.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (!match) return undefined;
-  return `Ngày ${vnReadNumber(Number(match[1]))} tháng ${vnReadNumber(Number(match[2]))} năm ${vnReadNumber(Number(match[3]))}`;
-}
-
-function buildToKhaiKhaiSinhHtml(values: Record<string, string>): string {
-  const ngaySinhChu = vnDateInWords(values.ngay_sinh);
+function buildDynamicFormHtml(schema: ProcedureFormSchema, values: Record<string, string>): string {
+  const rows = schema.fields.map(field => {
+    const value = values[field.key]?.trim();
+    const rendered = value ? `<strong>${escapeHtml(value)}</strong>` : `[${'.'.repeat(42)}]`;
+    return `<p>${escapeHtml(field.label)}${field.required ? ' <em>(bắt buộc)</em>' : ''}: ${rendered}</p>`;
+  }).join('\n');
   return `<h2>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br/>Độc lập - Tự do - Hạnh phúc</h2>
-<h1>TỜ KHAI ĐĂNG KÝ KHAI SINH</h1>
-<p>Kính gửi: (1) ${fill(values, 'noi_dang_ky', 40)}</p>
-<p>Họ, chữ đệm, tên người yêu cầu: ${fill(values, 'ho_ten_nguoi_yeu_cau', 32)}</p>
-<p>Ngày, tháng, năm sinh: ${fill(values, 'ngay_sinh_nguoi_yeu_cau', 36)}</p>
-<p>Nơi cư trú: (2) ${fill(values, 'noi_cu_tru_nguoi_yeu_cau', 44)}</p>
-<p>Giấy tờ tùy thân: (3) ${fill(values, 'giay_to_tuy_than_nguoi_yeu_cau', 40)}</p>
-<p>Quan hệ với người được khai sinh: ${fill(values, 'quan_he_voi_nguoi_duoc_khai_sinh', 28)}</p>
-<p><strong>Đề nghị cơ quan đăng ký khai sinh cho người dưới đây:</strong></p>
-<p>Họ, chữ đệm, tên: ${fill(values, 'ho_ten_con', 40)}</p>
-<p>Ngày, tháng, năm sinh: ${fill(values, 'ngay_sinh', 14)} ghi bằng chữ: ${ngaySinhChu ? `<strong>${escapeHtml(ngaySinhChu)}</strong>` : `[${'.'.repeat(24)}]`}</p>
-<p>Giới tính: ${fill(values, 'gioi_tinh', 8)} Dân tộc: ${fill(values, 'dan_toc', 8)} Quốc tịch: ${fill(values, 'quoc_tich', 10)}</p>
-<p>Nơi sinh: (4) ${fill(values, 'noi_sinh', 44)}</p>
-<p>Quê quán: ${fill(values, 'que_quan', 44)}</p>
-<p>Họ, chữ đệm, tên người mẹ: ${fill(values, 'ho_ten_me', 34)}</p>
-<p>Năm sinh: (5) ${fill(values, 'nam_sinh_me', 6)} Dân tộc: (2) ${fill(values, 'dan_toc_me', 6)} Quốc tịch: (2) ${fill(values, 'quoc_tich_me', 8)}</p>
-<p>Nơi cư trú: (2) ${fill(values, 'noi_cu_tru_me', 44)}</p>
-<p>Giấy tờ tùy thân: (3) ${fill(values, 'giay_to_tuy_than_me', 40)}</p>
-<p>Họ, chữ đệm, tên người cha: ${fill(values, 'ho_ten_cha', 34)}</p>
-<p>Năm sinh: (5) ${fill(values, 'nam_sinh_cha', 6)} Dân tộc: (2) ${fill(values, 'dan_toc_cha', 6)} Quốc tịch: (2) ${fill(values, 'quoc_tich_cha', 8)}</p>
-<p>Nơi cư trú: (2) ${fill(values, 'noi_cu_tru_cha', 44)}</p>
-<p>Giấy tờ tùy thân: (3) ${fill(values, 'giay_to_tuy_than_cha', 40)}</p>
-<p><em>Thông tin về Giấy chứng nhận kết hôn của cha, mẹ trẻ (nếu cha, mẹ trẻ đã đăng ký kết hôn):</em> Số: ${fill(values, 'so_gcn_ket_hon', 8)}, Quyển số: ${fill(values, 'quyen_so_gcn_ket_hon', 8)}, đăng ký ngày ${fill(values, 'ngay_dang_ky_ket_hon', 12)} tại ${fill(values, 'noi_dang_ky_ket_hon', 28)}</p>
-<p>Tôi cam đoan nội dung đề nghị đăng ký khai sinh trên đây là đúng sự thật, được sự thỏa thuận nhất trí của các bên liên quan theo quy định pháp luật.</p>
-<p>Tôi chịu hoàn toàn trách nhiệm trước pháp luật về nội dung cam đoan của mình.</p>
-<p><em>Làm tại: [${'.'.repeat(18)}], ngày [......] tháng [......] năm [......]</em></p>
-<p>Đề nghị cấp bản sao (6): Có ☐  Không ☐ — Số lượng: [......] bản</p>
-<p><strong>Người yêu cầu</strong><br/><em>(Ký, ghi rõ họ, chữ đệm, tên)</em></p>
-<p><br/></p>
-<p><em>Chú thích:</em><br/>
-<em>(1) Ghi rõ tên cơ quan đăng ký khai sinh.</em><br/>
-<em>(2) Chỉ ghi trong trường hợp người có yêu cầu đăng ký hộ tịch chưa có/không cung cấp số định danh cá nhân/căn cước công dân/thẻ căn cước/chứng minh nhân dân; không cung cấp đầy đủ thông tin ngày, tháng, năm sinh. Nơi cư trú ghi theo nơi đăng ký thường trú; nếu không có thì ghi nơi đăng ký tạm trú; nếu không có cả hai thì ghi nơi ở hiện tại.</em><br/>
-<em>(3) Ghi số định danh cá nhân/căn cước công dân/thẻ căn cước; trường hợp không có thì ghi giấy tờ hợp lệ thay thế.</em><br/>
-<em>(4) Trường hợp sinh tại cơ sở y tế thì ghi tên cơ sở y tế và địa chỉ; sinh ngoài cơ sở y tế thì ghi địa danh hành chính.</em><br/>
-<em>(5) Ghi đầy đủ ngày, tháng sinh của cha, mẹ (nếu có).</em><br/>
-<em>(6) Đánh dấu X vào ô nếu có yêu cầu cấp bản sao và ghi rõ số lượng.</em></p>`;
+<h1>${escapeHtml(schema.title.toUpperCase())}</h1>
+${rows}
+<p><em>Bản nháp điện tử được dựng từ schema đã kiểm duyệt. Cơ quan có thẩm quyền quyết định việc tiếp nhận.</em></p>`;
 }
 
 type OcrPhase = 'idle' | 'upload' | 'prep' | 'recognize' | 'compose' | 'ready';
@@ -237,7 +156,7 @@ const OCR_STAGES: { id: OcrPhase; label: string; hint: string }[] = [
   { id: 'upload', label: 'Tải lên & xác thực', hint: 'Kiểm tra định dạng và checksum' },
   { id: 'prep', label: 'Làm phẳng & chính diện', hint: 'Nắn phối cảnh, khử nghiêng, tăng tương phản' },
   { id: 'recognize', label: 'Nhận dạng OCR', hint: 'Bóc tách trường dữ liệu + bounding box' },
-  { id: 'compose', label: 'Soạn văn bản DOCX', hint: 'Điền dữ liệu vào mẫu giấy khai sinh' },
+  { id: 'compose', label: 'Soạn văn bản DOCX', hint: 'Điền dữ liệu vào biểu mẫu đã kiểm duyệt' },
 ];
 const PREP_STEP_LABELS: Record<string, string> = {
   original: 'Ảnh gốc (chuẩn hoá xoay EXIF)',
@@ -380,9 +299,13 @@ function CitizenPortal() {
   const [logged, setLogged] = useState(!!token()); const [cases, setCases] = useState<CaseRecord[]>([]); const [current, setCurrent] = useState<CaseRecord | null>(null);
   const [file, setFile] = useState<File>(); const [consent, setConsent] = useState(false);
   const [notice, setNotice] = useState(''); const [busy, setBusy] = useState('');
+  const [procedures, setProcedures] = useState<ProcedureSummary[]>([]);
+  const [procedureCapabilities, setProcedureCapabilities] = useState<Record<string, ProcedureCapabilities>>({});
+  const [formSchema, setFormSchema] = useState<ProcedureFormSchema>();
+  const [capabilities, setCapabilities] = useState<ProcedureCapabilities>();
   
   const [started, setStarted] = useState(false);
-  const [docContent, setDocContent] = useState(() => buildToKhaiKhaiSinhHtml({}));
+  const [docContent, setDocContent] = useState('');
   const [selectedText, setSelectedText] = useState('');
   const [extractedFields, setExtractedFields] = useState<ExtractedField[]>();
   const [previewUrl, setPreviewUrl] = useState<string>();
@@ -390,33 +313,47 @@ function CitizenPortal() {
   const [prepSteps, setPrepSteps] = useState<PreprocessStep[]>([]);
   const [prepIndex, setPrepIndex] = useState(0);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-  const requiredKeys = Object.keys(DEMO_REQUIRED_FIELDS);
-  const readiness = Math.round(requiredKeys.filter(key => draftValues[key]?.trim()).length / requiredKeys.length * 100);
+  const requiredFields = formSchema?.fields.filter(field => field.required) ?? [];
+  const readiness = requiredFields.length ? Math.round(requiredFields.filter(field => draftValues[field.key]?.trim()).length / requiredFields.length * 100) : 0;
   const reviewCount = extractedFields?.filter(item => item.confidence < 0.85).length ?? 0;
   const updateDraftValue = (key: string, value: string) => setDraftValues(current => {
     const next = { ...current, [key]: value };
-    setDocContent(buildToKhaiKhaiSinhHtml(next));
+    if (formSchema) setDocContent(buildDynamicFormHtml(formSchema, next));
     return next;
   });
 
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
-  useEffect(() => { if (logged) refresh().catch(cause => setNotice((cause as Error).message)); }, [logged]);
+  useEffect(() => {
+    if (!logged) return;
+    Promise.all([refresh(), api<ProcedureSummary[]>('/procedures').then(async items => {
+      rememberProcedureNames(items); setProcedures(items);
+      const pairs = await Promise.all(items.map(async item => [item.id, await api<ProcedureCapabilities>(`/procedures/${item.id}/capabilities`)] as const));
+      setProcedureCapabilities(Object.fromEntries(pairs));
+    })])
+      .catch(cause => setNotice((cause as Error).message));
+  }, [logged]);
   if (!logged) return <Login role="citizen" onSuccess={() => setLogged(true)}/>;
   
   const run = async (name: string, work: () => Promise<void>) => { setBusy(name); setNotice(''); try { await work(); } catch (cause) { setNotice((cause as Error).message); } finally { setBusy(''); } };
   
   // Một luồng duy nhất: mở tờ khai mẫu để tự điền, OCR là bước "AI điền hộ" tùy chọn.
-  const startCase = () => {
-    setStarted(true);
-    setDocContent(buildToKhaiKhaiSinhHtml({}));
-    setExtractedFields(undefined);
-    setPreviewUrl(undefined);
-    setOcrPhase('idle');
-    setPrepSteps([]);
-    setPrepIndex(0);
-    setDraftValues({});
+  const startCase = (procedure: ProcedureSummary) => {
     run('create', async () => {
-      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: 'khai_sinh', locality_code: '00001' }) });
+      const [schema, caps] = await Promise.all([
+        api<ProcedureFormSchema>(`/procedures/${procedure.id}/form-schema`),
+        api<ProcedureCapabilities>(`/procedures/${procedure.id}/capabilities`),
+      ]);
+      setStarted(true);
+      setFormSchema(schema);
+      setCapabilities(caps);
+      setDocContent(buildDynamicFormHtml(schema, {}));
+      setExtractedFields(undefined);
+      setPreviewUrl(undefined);
+      setOcrPhase('idle');
+      setPrepSteps([]);
+      setPrepIndex(0);
+      setDraftValues({});
+      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) });
       setCurrent(item);
       setNotice('Đã khởi tạo tờ khai. Điền trực tiếp hoặc tải giấy tờ để AI điền tự động.');
       await refresh();
@@ -448,9 +385,10 @@ function CitizenPortal() {
     setExtractedFields(completeResp.fields);
     setOcrPhase('compose');
     // Trường đã điền trước đó (OCR lần trước) được giữ nguyên — OCR mới chỉ điền chỗ trống.
-    const merged = { ...mapExtractedToDraftValues(completeResp.fields), ...draftValues };
+    if (!formSchema) throw new Error('Chưa tải được schema biểu mẫu');
+    const merged = { ...mapExtractedToDraftValues(completeResp.fields, formSchema), ...draftValues };
     setDraftValues(merged);
-    setDocContent(buildToKhaiKhaiSinhHtml(merged));
+    setDocContent(buildDynamicFormHtml(formSchema, merged));
     await sleep(1400); // giữ màn bounding box đủ lâu để thấy các vùng nhận dạng trước khi chuyển sang DOCX
     setOcrPhase('ready');
     setNotice(`AI đã nhận dạng ${completeResp.fields.length} trường và điền vào tờ khai.`);
@@ -460,12 +398,13 @@ function CitizenPortal() {
   // Xuất DOCX từ chính HTML đang hiển thị trong editor (WYSIWYG — cách làm của C2):
   // người dân sửa gì trong tờ khai thì file tải xuống có đúng nội dung đó.
   const downloadDocx = (html: string) => run('docx', async () => {
-    const blob = await apiBlob('/drafts/export.docx', { method: 'POST', body: JSON.stringify({ html, filename: 'to-khai-dang-ky-khai-sinh.docx' }) });
+    const filename = `${formSchema?.procedure_id ?? 'to-khai'}.docx`;
+    const blob = await apiBlob('/drafts/export.docx', { method: 'POST', body: JSON.stringify({ html, filename }) });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    anchor.href = url; anchor.download = 'to-khai-dang-ky-khai-sinh.docx'; anchor.click();
+    anchor.href = url; anchor.download = filename; anchor.click();
     URL.revokeObjectURL(url);
-    setNotice('Đã tải xuống tờ khai đăng ký khai sinh (DOCX).');
+    setNotice('Đã tải xuống bản nháp DOCX.');
   });
   
   const submit = () => current && run('submit', async () => { 
@@ -479,6 +418,11 @@ function CitizenPortal() {
   });
   const refreshCurrent = async (id: string) => { const detail = await api<{case: CaseRecord}>(`/citizen/cases/${id}`); setCurrent(detail.case); await refresh(); };
   const handleChecklist = async (caseId: string) => { await refreshCurrent(caseId); setStarted(true); setNotice('Đã nhận danh sách giấy tờ. Vui lòng chuẩn bị và tải lên.'); };
+  const startProcedureFromChat = (procedureId: string) => {
+    const procedure = procedures.find(item => item.id === procedureId);
+    if (!procedure) { setNotice('Thủ tục này mới hỗ trợ hỏi đáp, chưa có biểu mẫu được duyệt.'); return; }
+    startCase(procedure);
+  };
 
   return (
     <Shell role="citizen">
@@ -495,13 +439,16 @@ function CitizenPortal() {
         <div className="document-workspace">
            {!started && !current && (
               <div className="procedure-selector">
-                 <h2>Đăng ký khai sinh</h2>
+                 <h2>Chọn thủ tục cần soạn</h2>
                  <div className="selector-cards">
-                   <button onClick={startCase} className="selector-card">
-                     <FileText size={32} />
-                     <h3>Tờ khai đăng ký khai sinh</h3>
-                     <p>Soạn trực tiếp trên mẫu chuẩn Thông tư 04/2024/TT-BTP, hoặc tải bản chụp giấy tờ để AI điền tự động.</p>
-                   </button>
+                   {procedures.map(procedure => (
+                     <button key={procedure.id} onClick={() => startCase(procedure)} className="selector-card" disabled={!procedureCapabilities[procedure.id]?.dynamic_form}>
+                       <FileText size={32} />
+                       <h3>{procedure.name}</h3>
+                       <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''}{!procedureCapabilities[procedure.id]?.dynamic_form ? ' · Chỉ hỗ trợ chat' : ''}</p>
+                     </button>
+                   ))}
+                   {!procedures.length && <p>Chưa có thủ tục với biểu mẫu đã công bố.</p>}
                  </div>
               </div>
            )}
@@ -521,13 +468,12 @@ function CitizenPortal() {
                     ) : (
                       <WordWorkspace
                         content={docContent}
-                        fileName="to-khai-dang-ky-khai-sinh.docx"
+                        fileName={`${formSchema?.procedure_id ?? 'to-khai'}.docx`}
                         onSelectionChange={setSelectedText}
                         onContentChange={setDocContent}
                         onDownload={downloadDocx}
                         downloading={busy === 'docx'}
-                        statusHint={`${TO_KHAI_KEYS.filter(key => draftValues[key]).length} trường đã điền từ OCR · ${TO_KHAI_KEYS.filter(key => !draftValues[key]).length} trường còn trống`}
-                        source={TEMPLATE_SOURCE}
+                        statusHint={`${formSchema?.fields.filter(field => draftValues[field.key]).length ?? 0} trường đã điền · ${formSchema?.fields.filter(field => !draftValues[field.key]).length ?? 0} trường còn trống`}
                       />
                     )}
                  </div>
@@ -549,13 +495,13 @@ function CitizenPortal() {
                         <div className="readiness-card">
                           <div><span>Mức sẵn sàng</span><strong>{readiness}%</strong></div>
                           <div className="readiness-track"><i style={{ width: `${readiness}%` }}/></div>
-                          <small>{requiredKeys.filter(key => draftValues[key]?.trim()).length}/{requiredKeys.length} trường cốt lõi · {reviewCount} trường cần xác minh</small>
+                          <small>{requiredFields.filter(field => draftValues[field.key]?.trim()).length}/{requiredFields.length} trường bắt buộc · {reviewCount} trường cần xác minh</small>
                         </div>
 
                         <details className="structured-fields" open={!!extractedFields?.length}>
                           <summary>Dữ liệu dùng để nộp</summary>
-                          {Object.entries(DEMO_REQUIRED_FIELDS).map(([key, label]) => (
-                            <label key={key}>{label}<input value={draftValues[key] ?? ''} onChange={event => updateDraftValue(key, event.target.value)} placeholder="Chưa có dữ liệu"/></label>
+                          {formSchema?.fields.map(field => (
+                            <label key={field.key}>{field.label}{field.required ? ' *' : ''}<input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)} placeholder="Chưa có dữ liệu"/></label>
                           ))}
                         </details>
                        
@@ -591,7 +537,7 @@ function CitizenPortal() {
                          </div>
                        )}
 
-                       <div className="upload-block">
+                       {capabilities?.ocr_autofill && <div className="upload-block">
                          <h3 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--navy)' }}>AI điền tự động từ giấy tờ</h3>
                          <label className="dropzone">
                            <input type="file" accept="image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
@@ -599,7 +545,7 @@ function CitizenPortal() {
                            <span>JPG hoặc PNG · tối đa 10 MB</span>
                          </label>
                          <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang xử lý OCR…' : 'Tải lên & điền tự động'}</button>
-                       </div>
+                       </div>}
                        
                        <div className="submit-block">
                          <label className="check-row">
@@ -608,7 +554,7 @@ function CitizenPortal() {
                          </label>
                          <button className="primary wide" onClick={submit} disabled={!!busy || !consent || readiness < 60}>{busy === 'submit' ? 'Đang gửi…' : readiness < 60 ? 'Cần điền thêm dữ liệu' : 'Nộp hồ sơ tiền kiểm'}</button>
                        </div>
-                       <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setDocContent(buildToKhaiKhaiSinhHtml({})); }}>Tạo hồ sơ khác</button>
+                       <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setFormSchema(undefined); setCapabilities(undefined); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setDocContent(''); }}>Tạo hồ sơ khác</button>
                      </div>
                    )}
                    
@@ -618,7 +564,7 @@ function CitizenPortal() {
            )}
         </div>
         
-        <CitizenAssistant activeCaseId={current?.id} onChecklist={handleChecklist} selectedContext={selectedText} />
+        <CitizenAssistant activeCaseId={current?.id} onChecklist={handleChecklist} onStartProcedure={startProcedureFromChat} selectedContext={selectedText} />
       </main>
     </Shell>
   );
@@ -630,7 +576,7 @@ function Empty({ title, text }: { title: string; text: string }) { return <div c
 function OfficerPortal() {
   const [logged, setLogged] = useState(!!token()); const [cases, setCases] = useState<CaseRecord[]>([]); const [summary, setSummary] = useState<DashboardSummary>(); const [selected, setSelected] = useState<CaseDetail>();
   const [search, setSearch] = useState(''); const [filter, setFilter] = useState(''); const [sort, setSort] = useState('priority_desc'); const [loading, setLoading] = useState(true); const [detailLoading, setDetailLoading] = useState(false); const [notice, setNotice] = useState('');
-  const loadQueue = async () => { setLoading(true); try { const [queue, dashboard] = await Promise.all([api<CaseRecord[]>(`/officer/cases?${buildCaseQuery(search, filter, sort)}`), api<DashboardSummary>('/officer/dashboard/summary')]); setCases(queue); setSummary(dashboard); } catch (cause) { handleError(cause); } finally { setLoading(false); } };
+  const loadQueue = async () => { setLoading(true); try { const [queue, dashboard, catalogItems] = await Promise.all([api<CaseRecord[]>(`/officer/cases?${buildCaseQuery(search, filter, sort)}`), api<DashboardSummary>('/officer/dashboard/summary'), api<ProcedureSummary[]>('/procedures')]); rememberProcedureNames(catalogItems); setCases(queue); setSummary(dashboard); } catch (cause) { handleError(cause); } finally { setLoading(false); } };
   const handleError = (cause: unknown) => { const error = cause as Error; if (error instanceof ApiError && error.status === 401) { setToken('', 'officer'); setLogged(false); } setNotice(error.message); };
   useEffect(() => { if (!logged) return; const timer = window.setTimeout(loadQueue, 250); return () => window.clearTimeout(timer); }, [logged, search, filter, sort]);
   useEffect(() => { if (!logged) return; const timer = window.setInterval(loadQueue, 30000); return () => window.clearInterval(timer); }, [logged, search, filter, sort]);

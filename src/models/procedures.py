@@ -5,12 +5,14 @@ Owner: Dev A (schema), cả team review khi thay đổi (contract).
 """
 
 import re
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 FieldType = Literal["text", "date", "number", "select", "checkbox"]
 AnswerType = Literal["boolean", "integer", "text", "choice"]
+ProcedureStatus = Literal["discovered", "extracted", "needs_review", "approved", "published"]
 
 
 class ClarifyingQuestion(BaseModel):
@@ -90,6 +92,11 @@ class Procedure(BaseModel):
     """Một thủ tục hành chính trong catalog."""
 
     id: str = Field(description="Mã nội bộ, vd 'khai_sinh'")
+    status: ProcedureStatus = Field(
+        default="published",
+        description="Chỉ approved/published mới được dùng cho workflow có tác động pháp lý",
+    )
+    locality_code: str = "national"
     national_code: str | None = Field(
         default=None, description="Mã trên Cổng DVC quốc gia, vd '1.001193'"
     )
@@ -113,6 +120,8 @@ class Procedure(BaseModel):
     requirements: list[DocumentRequirement]
     form_templates: list[FormTemplate] = Field(default_factory=list)
     source_url: str | None = None
+    source_hash: str | None = None
+    retrieved_at: datetime | None = None
 
     @model_validator(mode="after")
     def condition_keys_have_questions(self) -> "Procedure":
@@ -153,3 +162,30 @@ class Procedure(BaseModel):
                 "late_registration_after_days và warning phải được khai báo cùng nhau"
             )
         return self
+
+
+class ProcedureSummary(BaseModel):
+    id: str
+    national_code: str | None = None
+    name: str
+    agency: str
+    locality_code: str = "national"
+    status: ProcedureStatus
+    source_url: str | None = None
+
+
+class ProcedureCapabilities(BaseModel):
+    chat: bool = True
+    checklist: bool = False
+    dynamic_form: bool = False
+    ocr_autofill: bool = False
+    legal_validation: bool = False
+    official_draft: bool = False
+    requires_human_review: bool = True
+
+
+class ProcedureFormSchema(BaseModel):
+    procedure_id: str
+    template_id: str
+    title: str
+    fields: list[FormField]

@@ -413,8 +413,8 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 }
 
 .assistant-card.floating {
-  width: 380px;
-  height: 600px;
+  width: 460px;
+  height: 680px;
   max-height: calc(100vh - 48px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   border: 1px solid var(--bd);
@@ -654,6 +654,38 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 .answer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .answer-chips button { padding: 6px 10px; color: var(--blue); border: 1px solid #bcd5e5; border-radius: 99px; background: #f3f9fc; font-size: 11px; font-weight: 700; }
 .citation a { color: var(--blue); font-weight: 700; }
+.assistant-card.floating .bubble.assistant > div { width: calc(100% - 38px); max-width: calc(100% - 38px); }
+.source-trace { margin-top: 10px; padding: 10px; border: 1px solid #d8e7ef; border-radius: 10px; background: linear-gradient(135deg, #f7fbfd, #eef8f7); }
+.trace-heading, .template-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: var(--navy); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.cache-badge { padding: 3px 6px; border: 1px solid #bfd8ce; border-radius: 99px; color: #28775e; background: #eaf8f2; font-size: 8px; font-weight: 900; }
+.cache-badge.miss { color: #8a641d; border-color: #ecd79e; background: #fff9e8; }
+.trace-step { display: flex; gap: 7px; padding: 5px 0; color: #334d62; text-decoration: none; }
+.trace-step + .trace-step { border-top: 1px dashed #d6e2e8; }
+.trace-step > i { flex: 0 0 18px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: white; background: #2d9577; font-size: 9px; font-style: normal; font-weight: 900; }
+.trace-step.fallback > i, .trace-step.unavailable > i { background: #d79b35; }
+.trace-step span { display: grid; gap: 1px; min-width: 0; }
+.trace-step b { color: var(--navy); font-size: 10px; }
+.trace-step small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.chat-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+.chat-actions button { min-height: 58px; display: flex; align-items: center; gap: 8px; padding: 8px; text-align: left; border: 1px solid #d8e4eb; border-radius: 10px; background: white; cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
+.chat-actions button:hover { border-color: #78b4d3; box-shadow: 0 5px 12px #275e7d14; transform: translateY(-1px); }
+.chat-actions button.featured { border-color: #84c5b1; background: linear-gradient(135deg, #f2fbf8, #eef8fc); }
+.chat-actions button > i { flex: 0 0 28px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: white; background: var(--blue); font-size: 14px; font-style: normal; }
+.chat-actions button.featured > i { background: #24876a; }
+.chat-actions button span { display: grid; gap: 2px; min-width: 0; }
+.chat-actions button b { color: var(--navy); font-size: 10px; }
+.chat-actions button small { color: var(--muted); font-size: 8px; line-height: 1.3; }
+.template-results { display: grid; gap: 8px; margin-top: 10px; }
+.template-card { display: grid; grid-template-columns: 1fr auto; gap: 5px 8px; padding: 10px; border: 1px solid #cfe1da; border-radius: 10px; background: #fbfefd; }
+.template-card h4 { margin: 4px 0 2px; color: var(--navy); font-size: 11px; }
+.template-card p { color: var(--muted); font-size: 9px; }
+.template-card > a { align-self: center; padding: 6px 8px; color: var(--blue); border: 1px solid #bdd7e5; border-radius: 7px; background: white; font-size: 9px; font-weight: 800; text-decoration: none; }
+.official-mark, .source-mark { color: #1d795d; font-size: 8px; font-weight: 900; letter-spacing: .04em; }
+.source-mark { color: #876522; }
+.template-card details { grid-column: 1 / -1; margin: 2px 0 0; }
+.template-card details a { display: grid; gap: 1px; padding: 6px 0; color: var(--navy); text-decoration: none; }
+.template-card details a + a { border-top: 1px dashed #d9e5e0; }
+.template-card details a span { color: var(--muted); font-size: 8px; }
 
 /* Officer screens are projected during demos, so avoid sub-10px operational text. */
 .officer-page .status, .officer-page .live-dot, .officer-page .queue-filters select,

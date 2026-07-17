@@ -1,5 +1,8 @@
 """Tải corpus pháp luật Hugging Face và build collection Chroma tách biệt.
 
+Chunking mặc định là ``legal_hybrid`` tương thích C2: bảo toàn Chương/Mục/
+Điều/Khoản/Điểm, chỉ fallback overlap 2.000/200 với văn bản dài không có cấu trúc.
+
 Ví dụ:
     .venv\\Scripts\\python.exe scripts\\build_legal_index.py --download \\
         --embedding-provider bge-m3 --build-bm25

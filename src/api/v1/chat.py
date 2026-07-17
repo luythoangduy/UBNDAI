@@ -3,11 +3,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.agents.graph import run_guidance
-from src.models import ChatRequest, ChatResponse, TokenClaims
+from src.models import ChatRequest, ChatResponse, ChatStarterResponse, TokenClaims
+from src.services.chat_experience import starter_experience
 from src.services.auth import optional_current_claims
 from src.services.cases import CaseNotFoundError, ConcurrentCaseUpdateError
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+@router.get("/starter", response_model=ChatStarterResponse)
+async def starter() -> ChatStarterResponse:
+    return await starter_experience()
 
 
 @router.post("", response_model=ChatResponse)

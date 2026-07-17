@@ -65,6 +65,10 @@ class Bm25Index:
             for score, i in scored[:top_k]
         ]
 
+    @property
+    def chunks(self) -> list[RetrievedChunk]:
+        return list(self._chunks)
+
     def save(self, path: Path | str) -> None:
         payload: dict[str, Any] = {
             "chunks": [

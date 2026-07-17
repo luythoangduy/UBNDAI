@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./data/chroma"
     procedures_collection: str = "tthc_procedures"
     bm25_index_path: str = "./data/bm25_index.json"
+    raw_documents_dir: str = "./data/raw_documents"
+    procedure_candidates_dir: str = "./data/procedure_candidates"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_connect_timeout_s: float = 0.25
+    chat_experience_cache_ttl_s: int = 3600
+    official_source_live_fetch: bool = True
+    official_source_timeout_s: float = 2.5
+    dvc_search_url: str = "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc.html"
     # Tách index VBPL khỏi catalog thủ tục để có thể dùng lại index dựng sẵn.
     # Rỗng = dùng cùng CHROMA_PERSIST_DIR với catalog.
     legal_chroma_persist_dir: str = ""

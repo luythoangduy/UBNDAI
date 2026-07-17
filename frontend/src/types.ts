@@ -89,10 +89,94 @@ export type PreprocessStep = { name: string; image: string };
 export type PreprocessResult = { applied_steps: string[]; steps: PreprocessStep[] };
 
 export type ChatCitation = { index: number; section?: string; excerpt?: string; source_url?: string };
+export type ChatAction = {
+  id: string;
+  label: string;
+  description: string;
+  kind: 'send_message' | 'start_form' | 'open_url';
+  value: string;
+  icon: 'search' | 'checklist' | 'clock' | 'template' | 'form' | 'source';
+  primary: boolean;
+};
+export type TemplateCitation = {
+  document_number: string;
+  title: string;
+  issuing_authority: string;
+  role: string;
+  source_url: string;
+  official: boolean;
+  priority: number;
+};
+export type ChatTemplateResource = {
+  template_id: string;
+  title: string;
+  version: string;
+  source_checked_on: string;
+  field_count: number;
+  source_url: string;
+  source_label: string;
+  official_source: boolean;
+  citations: TemplateCitation[];
+};
+export type EvidenceStep = {
+  id: string;
+  label: string;
+  detail: string;
+  status: 'ready' | 'cache_hit' | 'fallback' | 'unavailable';
+  source_url?: string;
+};
+export type ChatCacheInfo = {
+  backend: 'redis' | 'memory' | 'none';
+  status: 'hit' | 'miss' | 'unavailable';
+  ttl_seconds: number;
+};
+export type ChatExperience = {
+  actions?: ChatAction[];
+  templates?: ChatTemplateResource[];
+  evidence?: EvidenceStep[];
+  cache?: ChatCacheInfo;
+};
 export type ChatResponse = {
   case_id?: string;
   reply: string;
   kind: 'clarify' | 'checklist' | 'answer' | 'fallback';
+  procedure_id?: string | null;
   clarifying_questions?: string[];
   citations?: ChatCitation[];
+} & ChatExperience;
+export type ChatStarterResponse = { reply: string } & ChatExperience;
+
+export type ProcedureSummary = {
+  id: string;
+  national_code?: string | null;
+  name: string;
+  agency: string;
+  locality_code: string;
+  status: 'approved' | 'published';
+  source_url?: string | null;
+};
+
+export type ProcedureCapabilities = {
+  chat: boolean;
+  checklist: boolean;
+  dynamic_form: boolean;
+  ocr_autofill: boolean;
+  legal_validation: boolean;
+  official_draft: boolean;
+  requires_human_review: boolean;
+};
+
+export type ProcedureFormField = {
+  key: string;
+  label: string;
+  type: 'text' | 'date' | 'number' | 'select' | 'checkbox';
+  required: boolean;
+  ocr_sources: string[];
+};
+
+export type ProcedureFormSchema = {
+  procedure_id: string;
+  template_id: string;
+  title: string;
+  fields: ProcedureFormField[];
 };

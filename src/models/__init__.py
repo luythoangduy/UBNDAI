@@ -4,7 +4,18 @@
 """
 
 from src.models.cases import Case, CaseCreate, CaseStatus, CaseUpdate, ChecklistItem
-from src.models.chat import ChatRequest, ChatResponse, Citation, IntentName
+from src.models.chat import (
+    ChatAction,
+    ChatCacheInfo,
+    ChatRequest,
+    ChatResponse,
+    ChatStarterResponse,
+    ChatTemplateResource,
+    Citation,
+    EvidenceStep,
+    IntentName,
+    TemplateCitation,
+)
 from src.models.documents import ExtractedDocument, ExtractedField
 from src.models.drafts import (
     DraftDocxStyle,
@@ -30,6 +41,17 @@ from src.models.procedures import (
     FormField,
     FormTemplate,
     Procedure,
+    ProcedureCapabilities,
+    ProcedureFormSchema,
+    ProcedureSummary,
+)
+from src.models.sources import (
+    NormalizedProcedureMetadata,
+    ProcedureDocument,
+    ProcedureSection,
+    ProvenancedValue,
+    QualityReport,
+    SyncResult,
 )
 from src.models.validation import ValidationIssue, ValidationReport
 from src.models.citizen import (
@@ -65,9 +87,14 @@ __all__ = [
     "CaseUpdate",
     "ChatRequest",
     "ChatResponse",
+    "ChatAction",
+    "ChatCacheInfo",
+    "ChatStarterResponse",
+    "ChatTemplateResource",
     "ChecklistItem",
     "ClarifyingQuestion",
     "Citation",
+    "EvidenceStep",
     "DailyDigest",
     "DocumentRequirement",
     "DraftDocxStyle",
@@ -86,6 +113,16 @@ __all__ = [
     "IntentName",
     "MetricPoint",
     "Procedure",
+    "TemplateCitation",
+    "ProcedureCapabilities",
+    "ProcedureDocument",
+    "ProcedureFormSchema",
+    "ProcedureSection",
+    "ProcedureSummary",
+    "ProvenancedValue",
+    "NormalizedProcedureMetadata",
+    "QualityReport",
+    "SyncResult",
     "ValidationIssue",
     "ValidationReport",
     "ApplicationCase",

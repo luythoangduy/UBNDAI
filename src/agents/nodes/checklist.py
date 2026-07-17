@@ -12,11 +12,23 @@ from src.services import catalog, checklist as checklist_service
 from src.services.clarification import unresolved_questions
 from src.services.retrieval.chunking import chunks_from_procedure
 from src.services.retrieval.common import citations_from_chunks
+from src.services.retrieval.raw_procedures import get_document as get_raw_document
 
 
 async def run(state: GuidanceState) -> dict[str, Any]:
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
     if procedure is None:
+        raw_document = get_raw_document(state.get("selected_procedure_id") or "")
+        if raw_document is not None:
+            return {
+                "reply": (
+                    f"Thủ tục {raw_document.procedure_name} đã có dữ liệu nguồn để hỏi đáp, "
+                    "nhưng checklist chưa được bật vì dữ liệu chuẩn hoá đang chờ kiểm duyệt."
+                ),
+                "reply_kind": "fallback",
+                "pending_questions": [],
+                "citations": [],
+            }
         return {
             "reply": (
                 "Mình chưa xác định được bạn cần thủ tục nào. Bạn mô tả nhu cầu "

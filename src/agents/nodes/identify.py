@@ -16,6 +16,7 @@ from src.services.retrieval import (
     citations_from_chunks,
     retrieve_procedure_identity,
 )
+from src.services.retrieval.raw_procedures import get_document as get_raw_document
 
 
 async def run(state: GuidanceState) -> dict[str, Any]:
@@ -84,15 +85,35 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         and confidence >= settings.identify_confidence_threshold
     ):
         procedure = catalog.get_procedure(top_id)
-        if procedure is None:  # index lệch catalog — không đoán
+        if procedure is None:
+            raw_document = get_raw_document(top_id)
+            if raw_document is None:  # index lệch nguồn — không đoán
+                return {
+                    "reply": NO_SOURCE_WARNING,
+                    "reply_kind": "fallback",
+                    "citations": [],
+                    "retrieved_chunks": retrieved,
+                    "pending_action": None,
+                    "pending_procedure_ids": [],
+                    "pending_question_keys": [],
+                }
+            proc_chunks = [c for c in chunks if c.procedure_id == top_id]
             return {
-                "reply": NO_SOURCE_WARNING,
-                "reply_kind": "fallback",
-                "citations": [],
-                "retrieved_chunks": retrieved,
+                "selected_procedure_id": top_id,
+                "identify_confidence": round(confidence, 4),
+                "candidate_procedures": candidates,
+                "pending_questions": [],
                 "pending_action": None,
                 "pending_procedure_ids": [],
                 "pending_question_keys": [],
+                "reply": (
+                    f"Mình đã tìm thấy thủ tục {raw_document.procedure_name} từ nguồn chính thức. "
+                    "Nội dung này dùng được cho hỏi đáp có trích dẫn; checklist, biểu mẫu và "
+                    "validation chưa bật vì bản chuẩn hoá đang chờ kiểm duyệt."
+                ),
+                "reply_kind": "answer",
+                "citations": [c.model_dump() for c in citations_from_chunks(proc_chunks)],
+                "retrieved_chunks": retrieved,
             }
         questions = [question.text for question in procedure.clarifying_questions]
         reply = _procedure_intro(procedure)
@@ -121,6 +142,10 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         procedure = catalog.get_procedure(procedure_id)
         if procedure:
             lines.append(f"{index}. {procedure.name} — {procedure.agency}")
+        else:
+            raw_document = get_raw_document(procedure_id)
+            if raw_document:
+                lines.append(f"{index}. {raw_document.procedure_name} — nguồn chính thức, chờ duyệt workflow")
     lines.append("Bạn đang cần làm thủ tục nào trong số trên?")
     return {
         "identify_confidence": round(confidence, 4),

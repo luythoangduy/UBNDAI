@@ -9,6 +9,14 @@ from src.services.ocr import pipeline
 from src.services.ocr.engine import OcrField, OcrResult
 
 
+@pytest.fixture(autouse=True)
+def _clear_ocr_cache():
+    """Các test dùng chung 1 ảnh — xóa cache để engine fake của test này không rò sang test khác."""
+    pipeline._ocr_cache.clear()
+    yield
+    pipeline._ocr_cache.clear()
+
+
 def _png_bytes() -> bytes:
     ok, encoded = cv2.imencode(".png", np.full((400, 600, 3), 230, dtype=np.uint8))
     assert ok
@@ -19,9 +27,11 @@ class FakeEngine:
     def __init__(self, result: OcrResult):
         self.result = result
         self.received: bytes | None = None
+        self.calls = 0
 
     def extract(self, image_bytes: bytes) -> OcrResult:
         self.received = image_bytes
+        self.calls += 1
         return self.result
 
 
@@ -172,3 +182,70 @@ async def test_paddle_fallback_flags_low_confidence(monkeypatch):
 
     assert document.doc_type == "cccd"
     assert document.needs_human_review is True
+
+
+async def test_illegible_regions_force_human_review(monkeypatch):
+    result = OcrResult(
+        raw_text="Họ tên: [ILLEGIBLE]",
+        fields=[OcrField(key="ho_ten", value="", confidence=0.9)],
+        doc_type_hint="giay_chung_sinh",
+        doc_type_confidence=0.95,
+        engine="fake",
+        illegible_regions=["dòng họ tên — mực nhòe"],
+    )
+    _install(monkeypatch, result)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.needs_human_review is True
+
+
+async def test_low_overall_ocr_confidence_forces_human_review(monkeypatch):
+    result = OcrResult(
+        raw_text="ok",
+        fields=[OcrField(key="ho_ten", value="A", confidence=0.95)],
+        doc_type_hint="giay_chung_sinh",
+        doc_type_confidence=0.95,
+        engine="fake",
+        ocr_confidence=0.5,
+    )
+    _install(monkeypatch, result)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.needs_human_review is True
+
+
+async def test_same_image_hits_cache_no_second_engine_call(monkeypatch):
+    engine = _install(monkeypatch, _result(doc_conf=0.95, field_conf=0.9))
+    image = _png_bytes()
+
+    doc1 = await pipeline.process("case_1", "don.png", image)
+    doc2 = await pipeline.process("case_2", "don.png", image)
+
+    assert engine.calls == 1  # lần 2 lấy từ cache
+    # ExtractedDocument vẫn được build mới cho từng case
+    assert doc1.id != doc2.id
+    assert doc2.case_id == "case_2"
+    assert doc2.fields[0].value == doc1.fields[0].value
+
+
+async def test_different_field_keys_miss_cache(monkeypatch):
+    engine = _install(monkeypatch, _result(doc_conf=0.95, field_conf=0.9))
+    image = _png_bytes()
+
+    await pipeline.process("case_1", "don.png", image)
+    await pipeline.process("case_1", "don.png", image, field_keys=["ho_ten"])
+
+    assert engine.calls == 2
+
+
+async def test_cache_disabled_when_size_zero(monkeypatch):
+    engine = _install(monkeypatch, _result(doc_conf=0.95, field_conf=0.9))
+    monkeypatch.setattr(pipeline.settings, "ocr_cache_size", 0)
+    image = _png_bytes()
+
+    await pipeline.process("case_1", "don.png", image)
+    await pipeline.process("case_1", "don.png", image)
+
+    assert engine.calls == 2

@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
+from src.models.chat import IntentName
 
 
 class GuidanceState(TypedDict, total=False):
@@ -15,6 +16,8 @@ class GuidanceState(TypedDict, total=False):
     # Kết quả planner (1 LLM call structured: intent + rewrite + route)
     route: Literal["clarify", "identify", "checklist", "answer", "fallback"]
     rewritten_query: str
+    primary_intent: IntentName
+    detected_intents: list[IntentName]
     # Nhận diện thủ tục
     candidate_procedures: list[dict[str, Any]]  # [{procedure_id, score}]
     selected_procedure_id: str | None

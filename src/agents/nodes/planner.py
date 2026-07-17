@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field
 
 from src.agents.prompts import PLANNER_SYSTEM, planner_context
 from src.agents.state import GuidanceState
+from src.models import IntentName
 from src.services import catalog
 from src.services.clarification import extract_answers, unresolved_questions
+from src.services.intent import IntentDetection, detect_intents
 from src.services.llm import get_llm, llm_is_configured
 from src.services.retrieval.common import fold_ascii
 
@@ -33,8 +35,10 @@ class ExtractedAnswer(BaseModel):
 
 
 class PlannerDecision(BaseModel):
-    route: Literal["clarify", "identify", "checklist", "answer"]
+    route: Literal["clarify", "identify", "checklist", "answer", "fallback"]
     rewritten_query: str = ""
+    primary_intent: IntentName = "unknown"
+    detected_intents: list[IntentName] = Field(default_factory=list)
     extracted_answers: list[ExtractedAnswer] = Field(default_factory=list)
 
 
@@ -42,6 +46,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     message = _last_human_text(state)
     procedure = catalog.get_procedure(state.get("selected_procedure_id"))
     answers = dict(state.get("answers") or {})
+    detection = detect_intents(message, has_selected_procedure=procedure is not None)
 
     if procedure is None and state.get("pending_action") == "select_procedure":
         candidate_ids = state.get("pending_procedure_ids") or []
@@ -54,6 +59,8 @@ async def run(state: GuidanceState) -> dict[str, Any]:
                 "rewritten_query": message,
                 "selected_procedure_id": selected.id,
                 "answers": answers,
+                "primary_intent": "clarification_answer",
+                "detected_intents": ["clarification_answer"],
                 "pending_action": "answer_clarification" if remaining else None,
                 "pending_procedure_ids": [],
                 "pending_question_keys": [question.key for question in remaining],
@@ -62,6 +69,8 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "route": "clarify",
             "rewritten_query": message,
             "answers": answers,
+            "primary_intent": "unknown",
+            "detected_intents": ["unknown"],
             "pending_action": "select_procedure",
             "pending_procedure_ids": candidate_ids,
             "pending_question_keys": [],
@@ -73,47 +82,80 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     if deterministic:
         answers.update(deterministic)
         remaining = unresolved_questions(procedure, answers)
-        explicit_route = _explicit_response_route(message)
-        return {
-            "route": explicit_route or ("clarify" if remaining else "checklist"),
-            "rewritten_query": message,
-            "answers": answers,
-            "pending_action": "answer_clarification" if remaining else None,
-            "pending_procedure_ids": [],
-            "pending_question_keys": [question.key for question in remaining],
-        }
+        intents = (
+            []
+            if detection.intents in (["general_question"], ["unknown"])
+            else list(detection.intents)
+        )
+        if "clarification_answer" not in intents:
+            intents.append("clarification_answer")
+        if detection.primary not in {"general_question", "unknown"} or not llm_is_configured():
+            return {
+                "route": _route_for_intents(
+                    intents,
+                    procedure_exists=True,
+                    has_remaining_questions=bool(remaining),
+                    default_route="clarify",
+                ),
+                "rewritten_query": message,
+                "answers": answers,
+                "primary_intent": detection.primary,
+                "detected_intents": intents,
+                "pending_action": "answer_clarification" if remaining else None,
+                "pending_procedure_ids": [],
+                "pending_question_keys": [question.key for question in remaining],
+            }
+        pending = remaining
+        unresolved = [question.key for question in pending]
 
     decision = await _llm_decision(state, message, procedure, answers, unresolved)
     if decision is None:
-        decision = _rule_decision(message, procedure)
-
-    # Invariant của graph: chưa có thủ tục thì mọi route nghiệp vụ khác đều
-    # thiếu context. LLM có thể hiểu "cần làm rõ" theo nghĩa hội thoại và trả
-    # clarify, nhưng lượt này bắt buộc phải qua retrieval để identify trước.
-    if procedure is None:
-        decision.route = "identify"
+        decision = _rule_decision(message, procedure, detection)
 
     allowed_keys = set(unresolved)
-    accepted_answers = 0
+    accepted_answers = len(deterministic)
     for extracted in decision.extracted_answers:
         if extracted.key in allowed_keys:
             answers[extracted.key] = _coerce(extracted.value)
             accepted_answers += 1
 
-    explicit_route = _explicit_response_route(message)
-    if explicit_route and procedure:
-        decision.route = explicit_route
-    elif accepted_answers and procedure:
-        decision.route = (
-            "clarify" if unresolved_questions(procedure, answers) else "checklist"
-        )
-
     remaining = unresolved_questions(procedure, answers) if procedure else []
+    llm_intents = [
+        intent for intent in decision.detected_intents if intent != "unknown"
+    ]
+    use_llm_intents = (
+        detection.primary in {"general_question", "unknown"} and bool(llm_intents)
+    )
+    base_intents = llm_intents if use_llm_intents else list(detection.intents)
+    primary_intent = (
+        decision.primary_intent if use_llm_intents else detection.primary
+    )
+    intents = (
+        []
+        if accepted_answers
+        and base_intents in (["general_question"], ["unknown"])
+        else base_intents
+    )
+    if accepted_answers and "clarification_answer" not in intents:
+        intents.append("clarification_answer")
+    decision.route = _route_for_intents(
+        intents,
+        procedure_exists=procedure is not None,
+        has_remaining_questions=bool(remaining),
+        default_route=decision.route,
+    )
 
     return {
         "route": decision.route,
         "rewritten_query": decision.rewritten_query.strip() or message,
         "answers": answers,
+        "primary_intent": (
+            "clarification_answer"
+            if primary_intent in {"general_question", "unknown"}
+            and intents == ["clarification_answer"]
+            else primary_intent
+        ),
+        "detected_intents": intents,
         "pending_action": "answer_clarification" if remaining else None,
         "pending_procedure_ids": [],
         "pending_question_keys": [question.key for question in remaining],
@@ -156,14 +198,22 @@ async def _llm_decision(
         return None
 
 
-def _rule_decision(message: str, procedure: Any) -> PlannerDecision:
+def _rule_decision(
+    message: str, procedure: Any, detection: IntentDetection
+) -> PlannerDecision:
     """Fallback deterministic sau khi answer extraction không tìm thấy dữ liệu."""
-    if procedure is None:
-        return PlannerDecision(route="identify", rewritten_query=message)
-    folded = fold_ascii(message)
-    if any(keyword in folded for keyword in _CHECKLIST_KEYWORDS):
-        return PlannerDecision(route="checklist", rewritten_query=message)
-    return PlannerDecision(route="answer", rewritten_query=message)
+    route = _route_for_intents(
+        detection.intents,
+        procedure_exists=procedure is not None,
+        has_remaining_questions=False,
+        default_route="answer" if procedure else "fallback",
+    )
+    return PlannerDecision(
+        route=route,
+        rewritten_query=message,
+        primary_intent=detection.primary,
+        detected_intents=detection.intents,
+    )
 
 
 def _coerce(value: str) -> Any:
@@ -184,17 +234,36 @@ def _last_human_text(state: GuidanceState) -> str:
     return ""
 
 
-def _explicit_response_route(message: str) -> Literal["answer", "checklist"] | None:
-    folded = fold_ascii(message)
-    if any(keyword in folded for keyword in _CHECKLIST_KEYWORDS):
-        return "checklist"
-    answer_keywords = (
-        "le phi", "bao nhieu tien", "thoi han", "may ngay", "bao lau",
-        "co quan", "noi nop", "nop o dau",
-    )
-    if any(keyword in folded for keyword in answer_keywords):
+def _route_for_intents(
+    intents: list[IntentName],
+    *,
+    procedure_exists: bool,
+    has_remaining_questions: bool,
+    default_route: Literal["clarify", "identify", "checklist", "answer", "fallback"],
+) -> Literal["clarify", "identify", "checklist", "answer", "fallback"]:
+    non_procedural = {
+        "greeting", "thanks", "capabilities", "out_of_scope", "status_tracking",
+        "submission", "document_upload",
+    }
+    informational = {
+        "fee", "processing_time", "agency", "legal_basis", "forms",
+        "general_question",
+    }
+    if any(intent in non_procedural for intent in intents):
         return "answer"
-    return None
+    if not procedure_exists:
+        if "procedure_discovery" in intents:
+            return "identify"
+        if any(intent in informational or intent == "checklist" for intent in intents):
+            return "clarify"
+        return default_route
+    if any(intent in informational for intent in intents):
+        return "answer"
+    if "checklist" in intents:
+        return "checklist"
+    if "clarification_answer" in intents:
+        return "clarify" if has_remaining_questions else "checklist"
+    return default_route
 
 
 def _parse_candidate_selection(message: str, candidate_ids: list[str]) -> str | None:

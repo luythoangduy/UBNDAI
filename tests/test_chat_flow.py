@@ -21,6 +21,8 @@ def test_full_guidance_flow_with_citations():
     first = _post({"message": "tôi muốn đăng ký khai sinh cho con mới sinh"})
     assert first["case_id"]
     assert first["kind"] == "clarify"
+    assert first["primary_intent"] == "procedure_discovery"
+    assert "procedure_discovery" in first["detected_intents"]
     assert "Đăng ký khai sinh" in first["reply"]
     assert first["clarifying_questions"], "phải kèm câu hỏi làm rõ từ catalog"
     assert first["citations"] and first["citations"][0]["procedure_id"] == "khai_sinh"
@@ -46,7 +48,7 @@ def test_gibberish_returns_grounding_fallback():
     result = _post({"message": "xyzt qwerty lorem ipsum"})
     assert result["kind"] == "fallback"
     assert result["citations"] == []
-    assert "Chưa đủ căn cứ" in result["reply"]
+    assert "chưa hiểu rõ yêu cầu" in result["reply"].casefold()
 
 
 def test_unknown_case_id_returns_404():

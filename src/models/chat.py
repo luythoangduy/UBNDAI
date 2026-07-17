@@ -4,6 +4,26 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+IntentName = Literal[
+    "procedure_discovery",
+    "clarification_answer",
+    "checklist",
+    "fee",
+    "processing_time",
+    "agency",
+    "legal_basis",
+    "forms",
+    "status_tracking",
+    "submission",
+    "document_upload",
+    "capabilities",
+    "greeting",
+    "thanks",
+    "out_of_scope",
+    "general_question",
+    "unknown",
+]
+
 
 class Citation(BaseModel):
     index: int = Field(ge=1)
@@ -34,5 +54,7 @@ class ChatResponse(BaseModel):
     kind: Literal["clarify", "checklist", "answer", "fallback"] = Field(
         description="Node cuối cùng của graph sinh ra reply — frontend render khác nhau"
     )
+    primary_intent: IntentName = "unknown"
+    detected_intents: list[IntentName] = Field(default_factory=list)
     clarifying_questions: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)

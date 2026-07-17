@@ -74,7 +74,9 @@ curl -X POST http://localhost:8000/api/v1/chat \
 ```
 
 Response (`ChatResponse`): `reply`, `kind` (`clarify` | `checklist` | `answer` | `fallback`),
-`clarifying_questions`, và `citations`. Mỗi citation ánh xạ đúng một chunk nguồn qua
+`primary_intent`, `detected_intents`, `clarifying_questions`, và `citations`. Một message
+có thể mang nhiều intent (ví dụ `fee` + `processing_time` + `agency` + `checklist`).
+Mỗi citation ánh xạ đúng một chunk nguồn qua
 `index`, `procedure_id`, `chunk_id`, `section`, `excerpt` và `source_url`; chỉ dấu `[n]`
 trong `reply` khớp với `citations[].index`. Tin nhắn được strip và giới hạn 4.000 ký tự.
 Mọi câu trả lời về thủ tục đều kèm nguồn; thiếu nguồn thì trả cảnh báo "chưa đủ căn cứ".
@@ -87,6 +89,21 @@ trả lời bằng số thứ tự ở lượt kế tiếp.
 SQLite là cấu hình MVP và chỉ nên chạy một worker. Optimistic-lock conflict trả HTTP 409
 thay vì 500. Trước khi public deployment vẫn phải nối JWT ownership (`case.citizen_id`),
 rate limit, case expiration và idempotency key; `case_id` không được xem là cơ chế auth.
+
+### Intent routing
+
+| Nhóm | Intent | Hành vi |
+|---|---|---|
+| Điều hướng | `procedure_discovery`, `clarification_answer` | Identify hoặc cập nhật answers trước khi chọn response |
+| Thông tin | `fee`, `processing_time`, `agency`, `legal_basis`, `forms` | Đọc trực tiếp `Procedure`, hỗ trợ nhiều intent cùng lượt |
+| Hồ sơ | `checklist` | Sinh từ requirements; có thể ghép cùng câu trả lời thông tin |
+| Chưa tích hợp | `status_tracking`, `submission`, `document_upload` | Trả fallback minh bạch, không giả vờ đã tra cứu/nộp |
+| Hội thoại | `greeting`, `thanks`, `capabilities` | Trả lời không qua procedure RAG |
+| Ngoài phạm vi | `out_of_scope`, `unknown` | Không retrieve thủ tục; hướng người dùng mô tả lại nhu cầu hành chính |
+
+Precedence: pending candidate → deterministic answer extraction → intent rõ → LLM semantic
+fallback cho wording `unknown/general` → route. Với mixed intent, state update và response
+intent được xử lý độc lập để việc ghi nhận câu làm rõ không làm mất câu hỏi chính.
 
 Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
 model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive

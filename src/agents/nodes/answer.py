@@ -15,6 +15,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.prompts import ANSWER_SYSTEM, answer_user_prompt
 from src.agents.state import GuidanceState
 from src.services import catalog
+from src.services import checklist as checklist_service
+from src.services.intent import detect_intents
 from src.services.llm import get_llm, llm_is_configured
 from src.services.retrieval import (
     NO_SOURCE_WARNING,
@@ -23,7 +25,6 @@ from src.services.retrieval import (
     chunks_from_procedure,
     retrieve,
 )
-from src.services.retrieval.common import fold_ascii
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,20 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     query = state.get("rewritten_query") or ""
     selected = state.get("selected_procedure_id")
     procedure = catalog.get_procedure(selected)
+    intents = state.get("detected_intents") or detect_intents(
+        query, has_selected_procedure=procedure is not None
+    ).intents
+
+    special = _special_intent_answer(intents)
+    if special is not None:
+        reply, kind = special
+        return {
+            "reply": reply,
+            "reply_kind": kind,
+            "citations": [],
+            "retrieved_chunks": [],
+        }
+
     chunks = retrieve(query, procedure_id=selected) if selected else retrieve(query)
     if procedure and not chunks:
         chunks = chunks_from_procedure(procedure)
@@ -44,7 +59,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             "retrieved_chunks": [],
         }
 
-    deterministic = _structured_answer(query, procedure, chunks)
+    deterministic = _structured_answer(state, query, procedure, chunks, intents)
     if deterministic is not None:
         reply, chunks = deterministic
     else:
@@ -108,33 +123,127 @@ def _extractive_answer(chunks: list[RetrievedChunk]) -> str:
 
 
 def _structured_answer(
+    state: GuidanceState,
     query: str,
     procedure: Any,
     chunks: list[RetrievedChunk],
+    intents: list[str],
 ) -> tuple[str, list[RetrievedChunk]] | None:
-    """Thông tin có cấu trúc đọc thẳng từ Procedure, không cần LLM."""
+    """Trả một hoặc nhiều intent có cấu trúc trực tiếp từ Procedure."""
     if procedure is None:
         return None
-    folded = fold_ascii(query)
     overview = next(
         (chunk for chunk in chunks if chunk.metadata.get("section") == "tong_quan"),
         chunks_from_procedure(procedure)[0],
     )
-    if any(term in folded for term in ("le phi", "bao nhieu tien")):
-        if procedure.fee_vnd is None:
-            return None
-        fee = "được miễn" if procedure.fee_vnd == 0 else f"là {procedure.fee_vnd:,} đồng"
-        return f"Lệ phí thủ tục {procedure.name} {fee} [1].", [overview]
-    if any(term in folded for term in ("thoi han", "may ngay", "bao lau")):
-        if procedure.processing_days is None:
-            return None
-        return (
-            f"Thời hạn xử lý thủ tục {procedure.name} là "
-            f"{procedure.processing_days} ngày làm việc [1].",
-            [overview],
+    requested = set(intents)
+    if not requested:
+        requested = set(
+            detect_intents(query, has_selected_procedure=True).intents
         )
-    if any(term in folded for term in ("co quan", "noi nop", "nop o dau")):
-        return f"Cơ quan thực hiện thủ tục {procedure.name}: {procedure.agency} [1].", [overview]
+    lines: list[str] = []
+    used_chunks: list[RetrievedChunk] = []
+
+    def cite(chunk: RetrievedChunk) -> int:
+        if chunk not in used_chunks:
+            used_chunks.append(chunk)
+        return used_chunks.index(chunk) + 1
+
+    if "fee" in requested and procedure.fee_vnd is not None:
+        fee = "được miễn" if procedure.fee_vnd == 0 else f"là {procedure.fee_vnd:,} đồng"
+        lines.append(f"Lệ phí thủ tục {procedure.name} {fee} [{cite(overview)}].")
+    if "processing_time" in requested and procedure.processing_days is not None:
+        lines.append(
+            f"Thời hạn xử lý thủ tục {procedure.name} là "
+            f"{procedure.processing_days} ngày làm việc [{cite(overview)}]."
+        )
+    if "agency" in requested:
+        lines.append(
+            f"Cơ quan thực hiện thủ tục {procedure.name}: "
+            f"{procedure.agency} [{cite(overview)}]."
+        )
+    if "legal_basis" in requested and procedure.legal_basis:
+        lines.append(
+            f"Căn cứ pháp lý: {'; '.join(procedure.legal_basis)} [{cite(overview)}]."
+        )
+    if "forms" in requested and procedure.form_templates:
+        form_chunk = next(
+            (chunk for chunk in chunks if chunk.metadata.get("section") == "bieu_mau"),
+            chunks_from_procedure(procedure)[-1],
+        )
+        names = "; ".join(
+            f"{template.name} ({template.id})" for template in procedure.form_templates
+        )
+        lines.append(f"Biểu mẫu: {names} [{cite(form_chunk)}].")
+    if "checklist" in requested:
+        requirement_chunk = next(
+            (
+                chunk
+                for chunk in chunks
+                if chunk.metadata.get("section") == "thanh_phan_ho_so"
+            ),
+            chunks_from_procedure(procedure)[1],
+        )
+        items = checklist_service.build_checklist(
+            procedure, state.get("answers") or {}
+        )
+        names = []
+        for item in items:
+            if item.status == "not_applicable":
+                continue
+            requirement = checklist_service.requirement_by_code(
+                procedure, item.requirement_code
+            )
+            if requirement:
+                names.append(requirement.name)
+        lines.append(
+            "Checklist hiện tại: " + "; ".join(names) + f" [{cite(requirement_chunk)}]."
+        )
+    return ("\n".join(lines), used_chunks) if lines else None
+
+
+def _special_intent_answer(
+    intents: list[str],
+) -> tuple[str, str] | None:
+    intent_set = set(intents)
+    if "greeting" in intent_set:
+        return (
+            "Chào bạn! Mình hỗ trợ hướng dẫn thủ tục hành chính, xác định thủ tục "
+            "và lập checklist hồ sơ theo catalog hiện có.",
+            "answer",
+        )
+    if "thanks" in intent_set:
+        return "Rất vui được hỗ trợ bạn.", "answer"
+    if "capabilities" in intent_set:
+        return (
+            "Mình có thể nhận diện thủ tục trong catalog, hỏi thông tin làm rõ, "
+            "lập checklist và trả lời về lệ phí, thời hạn, nơi nộp, căn cứ pháp lý, biểu mẫu.",
+            "answer",
+        )
+    if "status_tracking" in intent_set:
+        return (
+            "Chat hiện chưa được nối với hệ thống tra cứu trạng thái hồ sơ. "
+            "Bạn cần dùng mã hồ sơ trên Cổng Dịch vụ công hoặc liên hệ cơ quan tiếp nhận.",
+            "fallback",
+        )
+    if "submission" in intent_set or "document_upload" in intent_set:
+        return (
+            "Chat hiện chỉ hướng dẫn chuẩn bị hồ sơ; chức năng upload hoặc nộp hồ sơ "
+            "chưa được kích hoạt tại endpoint này.",
+            "fallback",
+        )
+    if "out_of_scope" in intent_set:
+        return (
+            "Yêu cầu này nằm ngoài phạm vi trợ lý thủ tục hành chính. "
+            "Bạn có thể mô tả thủ tục hoặc hồ sơ hành chính cần hỗ trợ.",
+            "fallback",
+        )
+    if "unknown" in intent_set:
+        return (
+            "Mình chưa hiểu rõ yêu cầu. Bạn hãy nêu tên thủ tục hoặc việc hành chính "
+            "cần làm, ví dụ: đăng ký khai sinh, hỏi lệ phí hoặc giấy tờ cần chuẩn bị.",
+            "fallback",
+        )
     return None
 
 

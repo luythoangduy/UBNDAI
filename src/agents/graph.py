@@ -112,6 +112,8 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         case_id=case.id,
         reply=reply,
         kind=final.get("reply_kind") or "fallback",
+        primary_intent=final.get("primary_intent") or "unknown",
+        detected_intents=final.get("detected_intents") or [],
         clarifying_questions=final.get("pending_questions") or [],
         citations=[
             Citation.model_validate(item) for item in final.get("citations") or []

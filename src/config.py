@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # LLM cho engine vision_llm (chữ viết tay) — key/model riêng, không dùng chung với chatbot.
     ocr_llm_provider: str = "openai"  # 'openai' | 'anthropic' | 'gemini'
     ocr_llm_api_key: str = ""
-    ocr_llm_model: str = "gpt-5"
+    ocr_llm_model: str = "gpt-5-mini"
 
     readiness_submit_threshold: float = 0.9
 

@@ -1,7 +1,12 @@
-"""Tests cho VisionLlmEngine + factory. Mock Gemini qua httpx.MockTransport."""
+"""Tests cho VisionLlmEngine + factory.
+
+Gemini mock qua httpx.MockTransport trực tiếp; Anthropic mock qua MockTransport
+gắn vào http_client của official SDK (giữ nguyên wire format Messages API).
+"""
 
 import json
 
+import anthropic
 import httpx
 import pytest
 
@@ -24,6 +29,19 @@ def _gemini_response(payload: dict) -> dict:
     }
 
 
+def _anthropic_response(payload: dict) -> dict:
+    return {
+        "id": "msg_test",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-test",
+        "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {"input_tokens": 100, "output_tokens": 50},
+    }
+
+
 def _engine_with_mock(payload: dict | None = None, status_code: int = 200, raw_text: str | None = None):
     captured: dict = {}
 
@@ -37,7 +55,32 @@ def _engine_with_mock(payload: dict | None = None, status_code: int = 200, raw_t
         return httpx.Response(status_code, json=body)
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    engine = VisionLlmEngine(api_key="test-key", model="gemini-test", client=client)
+    engine = VisionLlmEngine(
+        provider="gemini", api_key="test-key", model="gemini-test", client=client
+    )
+    return engine, captured
+
+
+def _anthropic_engine_with_mock(payload: dict):
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["request"] = json.loads(request.content)
+        captured["url"] = str(request.url)
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, json=_anthropic_response(payload))
+
+    sdk_client = anthropic.Anthropic(
+        api_key="test-anthropic-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        max_retries=0,
+    )
+    engine = VisionLlmEngine(
+        provider="anthropic",
+        api_key="test-anthropic-key",
+        model="claude-test",
+        anthropic_client=sdk_client,
+    )
     return engine, captured
 
 
@@ -112,10 +155,46 @@ def test_extract_raises_on_non_json_answer():
 
 
 def test_extract_requires_api_key():
-    engine = VisionLlmEngine(api_key="", model="m")
+    engine = VisionLlmEngine(provider="gemini", api_key="", model="m")
 
     with pytest.raises(OcrEngineError):
         engine.extract(FAKE_IMAGE)
+
+
+def test_extract_rejects_unsupported_provider():
+    engine = VisionLlmEngine(provider="openai", api_key="k", model="m")
+
+    with pytest.raises(OcrEngineError):
+        engine.extract(FAKE_IMAGE)
+
+
+def test_anthropic_provider_parses_fields_and_sends_image_block():
+    engine, captured = _anthropic_engine_with_mock(
+        {
+            "raw_text": "GIẤY CHỨNG SINH",
+            "doc_type": "giay_chung_sinh",
+            "doc_type_confidence": 0.9,
+            "fields": [{"key": "ho_ten_con", "value": "Nguyễn Văn Bé", "confidence": 0.88}],
+        }
+    )
+
+    result = engine.extract(FAKE_IMAGE, field_keys=["ho_ten_con"])
+
+    assert result.doc_type_hint == "giay_chung_sinh"
+    assert result.fields[0].key == "ho_ten_con"
+    assert result.engine == "vision_llm"
+    # Đúng endpoint + headers Anthropic (SDK tự set version header)
+    assert "api.anthropic.com/v1/messages" in captured["url"]
+    assert captured["headers"]["x-api-key"] == "test-anthropic-key"
+    assert "anthropic-version" in captured["headers"]
+    # Payload: structured output schema + image block base64, KHÔNG có temperature
+    assert captured["request"]["model"] == "claude-test"
+    assert "temperature" not in captured["request"]
+    assert captured["request"]["output_config"]["format"]["type"] == "json_schema"
+    content = captured["request"]["messages"][0]["content"]
+    assert content[0]["type"] == "text" and "ho_ten_con" in content[0]["text"]
+    assert content[1]["type"] == "image"
+    assert content[1]["source"]["media_type"] == "image/jpeg"
 
 
 def test_factory_resolves_all_engines():

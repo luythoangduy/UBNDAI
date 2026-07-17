@@ -3,8 +3,9 @@
 Bước:
 1. Tiền xử lý ảnh (EXIF, làm phẳng/deskew, chính diện/perspective, CLAHE) — ``preprocessing.py``.
 2. ``engine.extract`` (chạy trong thread — engine sync theo Protocol).
-3. doc_type: dùng hint từ engine (vision LLM tự nhận diện); TODO(B) đối chiếu
-   ``classifier.classify(raw_text)`` khi PaddleOCR vào — keyword matching làm cross-check.
+3. doc_type: hint từ engine (vision LLM tự nhận diện) cross-check với
+   ``classifier.classify(raw_text)`` (keyword matching): khớp nhau → tin cậy hơn;
+   lệch nhau khi classifier chắc chắn → needs_human_review.
 4. Trường/doc_type dưới ngưỡng OCR_CONFIDENCE_THRESHOLD → needs_human_review=True
    (AGENTS §5: confidence thấp bắt buộc needs_human_review, không im lặng điền form).
 5. TODO(B) Sprint 1: lưu file qua upload_storage (port từ C2) → file_id thật.
@@ -20,8 +21,30 @@ from uuid import uuid4
 
 from src.config import settings
 from src.models import ExtractedDocument, ExtractedField
-from src.services.ocr.engine import VisionLlmEngine, get_engine
+from src.services.ocr.classifier import classify
+from src.services.ocr.engine import OcrResult, VisionLlmEngine, get_engine
 from src.services.ocr.preprocessing import preprocess_document_image
+
+_CLASSIFIER_STRONG_CONFIDENCE = 0.8
+
+
+def _resolve_doc_type(result: OcrResult) -> tuple[str, float, bool]:
+    """Cross-check doc_type giữa engine hint và keyword classifier.
+
+    Trả (doc_type, confidence, conflicting). Hai nguồn khớp nhau → lấy confidence
+    cao hơn; engine không biết → dùng classifier; lệch nhau khi classifier chắc
+    chắn → giữ hint của engine nhưng đánh dấu conflicting để bắt human review.
+    """
+    cls_type, cls_confidence = classify(result.raw_text)
+    engine_type = result.doc_type_hint
+
+    if engine_type == "unknown":
+        return cls_type, cls_confidence, False
+    if cls_type == "unknown" or cls_type == engine_type:
+        return engine_type, max(result.doc_type_confidence, cls_confidence), False
+    if cls_confidence >= _CLASSIFIER_STRONG_CONFIDENCE:
+        return engine_type, result.doc_type_confidence, True
+    return engine_type, result.doc_type_confidence, False
 
 
 async def process(
@@ -44,14 +67,17 @@ async def process(
     else:
         result = await asyncio.to_thread(engine.extract, image_bytes)
 
+    doc_type, doc_type_confidence, conflicting = _resolve_doc_type(result)
+
     threshold = settings.ocr_confidence_threshold
     fields = [
         ExtractedField(key=f.key, value=f.value, confidence=f.confidence)
         for f in result.fields
     ]
     needs_human_review = (
-        result.doc_type_hint == "unknown"
-        or result.doc_type_confidence < threshold
+        conflicting
+        or doc_type == "unknown"
+        or doc_type_confidence < threshold
         or any(f.confidence < threshold for f in fields)
     )
 
@@ -59,8 +85,8 @@ async def process(
         id=f"doc_{uuid4().hex}",
         case_id=case_id,
         file_id=f"file_{uuid4().hex}",  # TODO(B) Sprint 1: id thật từ upload_storage
-        doc_type=result.doc_type_hint,
-        doc_type_confidence=result.doc_type_confidence,
+        doc_type=doc_type,
+        doc_type_confidence=doc_type_confidence,
         fields=fields,
         raw_text=result.raw_text or None,
         needs_human_review=needs_human_review,

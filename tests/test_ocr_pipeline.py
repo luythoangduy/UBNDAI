@@ -99,3 +99,54 @@ async def test_undecodable_image_falls_back_to_original_bytes(monkeypatch):
 
     assert engine.received == junk
     assert isinstance(doc, ExtractedDocument)
+
+
+async def test_classifier_conflict_with_engine_hint_forces_human_review(monkeypatch):
+    # Engine nói cccd nhưng raw_text rõ ràng là giấy chứng sinh → conflict.
+    conflicted = OcrResult(
+        raw_text="GIẤY CHỨNG SINH\nHọ tên mẹ: Nguyễn Thị B\nNơi sinh: BV Từ Dũ",
+        fields=[OcrField(key="ho_ten_me", value="Nguyễn Thị B", confidence=0.95)],
+        doc_type_hint="cccd",
+        doc_type_confidence=0.95,
+        engine="fake",
+    )
+    _install(monkeypatch, conflicted)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.doc_type == "cccd"
+    assert doc.needs_human_review is True
+
+
+async def test_classifier_agreement_boosts_doc_type_confidence(monkeypatch):
+    # Engine đoán đúng nhưng rụt rè; classifier khớp tiêu đề chuẩn → tin cậy hơn.
+    agreeing = OcrResult(
+        raw_text="GIẤY CHỨNG SINH\nHọ tên mẹ: Nguyễn Thị B",
+        fields=[OcrField(key="ho_ten_me", value="Nguyễn Thị B", confidence=0.95)],
+        doc_type_hint="giay_chung_sinh",
+        doc_type_confidence=0.6,
+        engine="fake",
+    )
+    _install(monkeypatch, agreeing)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.doc_type == "giay_chung_sinh"
+    assert doc.doc_type_confidence >= 0.85
+    assert doc.needs_human_review is False
+
+
+async def test_engine_unknown_falls_back_to_classifier(monkeypatch):
+    fallback = OcrResult(
+        raw_text="CĂN CƯỚC CÔNG DÂN\nSố: 012345678901",
+        fields=[OcrField(key="so_cccd", value="012345678901", confidence=0.95)],
+        doc_type_hint="unknown",
+        doc_type_confidence=0.0,
+        engine="fake",
+    )
+    _install(monkeypatch, fallback)
+
+    doc = await pipeline.process("case_1", "don.png", _png_bytes())
+
+    assert doc.doc_type == "cccd"
+    assert doc.needs_human_review is False

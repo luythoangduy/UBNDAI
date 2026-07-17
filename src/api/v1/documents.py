@@ -1,17 +1,24 @@
 """Upload giấy tờ + OCR. Owner: Dev B."""
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile
 
 from src.models import ExtractedDocument
+from src.services.ocr import pipeline
+from src.services.ocr.engine import OcrEngineError
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post("/upload", response_model=ExtractedDocument)
 async def upload_and_extract(case_id: str, file: UploadFile) -> ExtractedDocument:
-    """Lưu file → phân loại doc_type → trích trường → cập nhật checklist item tương ứng."""
-    # TODO(B): services.ocr.pipeline.process(case_id, file)
-    raise NotImplementedError
+    """Tiền xử lý ảnh → OCR → trích trường. TODO(B): persist + cập nhật checklist."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="File rỗng")
+    try:
+        return await pipeline.process(case_id, file.filename or "", content)
+    except OcrEngineError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.patch("/{document_id}/fields", response_model=ExtractedDocument)

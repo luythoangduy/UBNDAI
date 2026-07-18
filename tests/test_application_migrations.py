@@ -41,7 +41,7 @@ def test_application_migration_round_trip_preserves_baseline_data(tmp_path: Path
     }
     assert {fk["name"] for fk in inspector.get_foreign_keys("validation_findings")} >= {
         "fk_validation_findings_case_id_application_cases",
-        "fk_validation_findings_submission_version_id_case_submission_versions",
+        "fk_validation_findings_submission",
     }
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT case_code FROM application_cases WHERE id='case'")) == "CASE"

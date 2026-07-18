@@ -46,7 +46,7 @@
 .officer-logout svg { width: 18px; }
 .officer-main { min-width: 0; flex: 1; }
 .officer-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px clamp(16px, 3vw, 32px); background: var(--am-surface); border-bottom: 1px solid var(--am-border); }
-.officer-topbar h1 { margin: 0; color: var(--am-text); font-family: Inter, "Segoe UI", Arial, sans-serif; font-size: 22px; }
+.officer-topbar h1 { margin: 0; color: var(--am-text); font-family: var(--font-sans); font-size: 22px; }
 .officer-topbar p { margin: 3px 0 0; color: var(--am-text-muted); font-size: 12px; }
 .officer-container { width: min(1440px, 100%); margin: 0 auto; padding: 24px clamp(16px, 3vw, 32px) 40px; }
 .am-legacy-embedded { padding-top: 18px; }
@@ -97,7 +97,7 @@
 .am-readonly-word { height: 100%; min-height: 690px; border: 0; border-radius: 0; box-shadow: none; }
 .am-readonly-word .word-canvas { height: 570px; padding: 18px; overflow: auto; }
 .am-readonly-word .word-page { width: min(100%, 620px); min-height: 760px; margin: 0 auto; transform: none !important; transform-origin: top center; }
-.am-form-document { padding: 42px 48px; color: #172033; font-family: "Times New Roman", serif; }
+.am-form-document { padding: 42px 48px; color: #172033; font-family: var(--font-serif); }
 .am-form-document header { display: grid; justify-items: center; gap: 5px; margin-bottom: 28px; text-align: center; }
 .am-form-document header i { width: 150px; border-top: 1px solid currentColor; }
 .am-form-document h1 { margin: 0 0 8px; font-size: 22px; text-align: center; }

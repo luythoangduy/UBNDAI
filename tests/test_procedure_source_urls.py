@@ -1,20 +1,23 @@
-"""Catalog phải trỏ vào URL Cổng DVC còn sống.
+"""Catalog phải trỏ vào URL Cổng DVC còn sống và đọc được.
 
-Bối cảnh: Cổng DVC đã đổi kiến trúc. `thutuc.dichvucong.gov.vn` ngừng phục vụ
-(503 toàn subdomain) và định dạng cũ `?ma_thu_tuc=…` không còn được đọc — SPA mới
-hoàn toàn không tham chiếu tham số đó, nên link cũ chỉ mở ra trang trống. Test này
-chạy offline: nó khoá định dạng URL, không gọi mạng.
+Bối cảnh (đã kiểm chứng bằng cách fetch thật):
+- `thutuc.dichvucong.gov.vn` ngừng phục vụ — 503 toàn subdomain.
+- `dichvucong.gov.vn` đã dựng lại thành SPA render phía client; bundle của nó không
+  hề đọc tham số `ma_thu_tuc`, nên link cũ trả 200 rồi hiện trang trống.
+- `vpcp.dichvucong.gov.vn` trả HTML đầy đủ ngay khi fetch, tra theo mã thủ tục quốc
+  gia, và có link tải biểu mẫu thật — nên đây là nguồn trích dẫn dùng được.
+
+Test chạy offline: chỉ khoá định dạng URL, không gọi mạng.
 """
 
 import glob
 import json
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from src.services.chat_experience import is_official_url
 
 DEAD_HOST = "thutuc.dichvucong.gov.vn"
-LEGACY_QUERY = "ma_thu_tuc="
-NEW_DETAIL_PATH = "/thu-tuc-hanh-chinh/"
+SOURCE_HOST = "vpcp.dichvucong.gov.vn"
 
 
 def _catalog() -> list[tuple[str, dict]]:
@@ -43,20 +46,18 @@ def test_source_urls_stay_on_official_government_hosts():
         assert is_official_url(url), f"{procedure['id']}: nguồn không thuộc danh sách chính thức — {url}"
 
 
-def test_migrated_procedures_use_the_current_detail_url_format():
-    """Thủ tục đã đối chiếu được trên cổng mới phải dùng URL chi tiết hiện hành.
+def test_source_url_code_matches_the_procedure_national_code():
+    """URL nguồn phải tra đúng mã thủ tục của chính thủ tục đó.
 
-    giay_phep_xay_dung cố tình nằm ngoài: mã 1.007262 không tra được trên Cổng DVC
-    mới, và gán đại sang một mã gần giống (vd 1.009122 "có thời hạn" — thủ tục
-    khác) sẽ là bịa mã thủ tục, vi phạm AGENTS.md §5.
+    Đây là ràng buộc grounding: trích dẫn nguồn mà lại mở ra thủ tục khác thì tệ
+    hơn không trích dẫn. Kiểm tra này bắt được cả lỗi copy nhầm URL giữa các file.
     """
-    migrated = {"can_cuoc", "ket_hon", "khai_sinh", "tam_tru"}
-    seen = set()
     for _, procedure in _catalog():
-        if procedure["id"] not in migrated:
-            continue
-        seen.add(procedure["id"])
         url = procedure["source_url"]
-        assert NEW_DETAIL_PATH in url, f"{procedure['id']}: chưa dùng URL chi tiết mới — {url}"
-        assert LEGACY_QUERY not in url, f"{procedure['id']}: còn sót định dạng cũ — {url}"
-    assert seen == migrated, f"thiếu thủ tục trong catalog: {migrated - seen}"
+        assert urlparse(url).hostname == SOURCE_HOST, (
+            f"{procedure['id']}: nguồn phải dùng {SOURCE_HOST} (đọc được không cần JS) — {url}"
+        )
+        code = parse_qs(urlparse(url).query).get("ma_thu_tuc", [None])[0]
+        assert code == procedure["national_code"], (
+            f"{procedure['id']}: URL tra mã {code} nhưng thủ tục mang mã {procedure['national_code']}"
+        )

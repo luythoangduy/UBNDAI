@@ -24,6 +24,8 @@ describe('officer application-management routing', () => {
 
   it('opens the legacy form workspace for a selected application', () => {
     expect(legacyReviewCaseId('/officer/review/case-demo-001')).toBe('case-demo-001');
+    expect(legacyReviewCaseId('/officer/applications/case-demo-001')).toBe('case-demo-001');
     expect(legacyReviewCaseId('/officer/applications')).toBeUndefined();
+    expect(isApplicationManagementPath('/officer/applications/case-demo-001')).toBe(false);
   });
 });

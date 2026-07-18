@@ -44,3 +44,16 @@ def test_all_dashboard_distributions_return_envelopes():
         response = client.get(f"/api/v1/officer-dashboard/{endpoint}", headers=headers)
         assert response.status_code == 200
         assert response.json()["success"] is True
+
+
+def test_dashboard_accepts_naive_persisted_timestamps():
+    headers = _headers()
+    summary = client.get("/api/v1/officer-dashboard/summary", headers=headers)
+    status_distribution = client.get("/api/v1/officer-dashboard/status-distribution", headers=headers)
+    timeseries = client.get("/api/v1/officer-dashboard/timeseries", headers=headers)
+
+    assert summary.status_code == 200
+    assert summary.json()["data"]["total"] >= 1
+    assert status_distribution.status_code == 200
+    assert status_distribution.json()["data"]
+    assert timeseries.status_code == 200

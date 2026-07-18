@@ -125,8 +125,15 @@ def _filtered_cases(claims, from_date, to_date, timezone_name):
     start, end, zone = _period(from_date, to_date, timezone_name)
     lower = datetime.combine(start, time.min, zone).astimezone(UTC)
     upper = datetime.combine(end + timedelta(days=1), time.min, zone).astimezone(UTC)
-    cases = [item for item in store.list_cases(claims.organization_id) if lower <= (item.submitted_at or item.created_at) < upper]
+    cases = [item for item in store.list_cases(claims.organization_id) if lower <= _as_utc(item.submitted_at or item.created_at) < upper]
     return cases, start, end, zone
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Treat legacy SQLite naive timestamps as UTC before metric comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _metric_params(from_date, to_date, timezone_name, granularity):
@@ -154,7 +161,7 @@ async def management_timeseries(from_date: date | None = Query(None, alias="from
         if granularity == "month":
             return value.replace(day=1).isoformat()
         return value.isoformat()
-    buckets = Counter(label((item.submitted_at or item.created_at).astimezone(zone).date()) for item in cases)
+    buckets = Counter(label(_as_utc(item.submitted_at or item.created_at).astimezone(zone).date()) for item in cases)
     cursor, labels = start, []
     while cursor <= end:
         bucket = label(cursor)

@@ -61,7 +61,11 @@ class OfficerStore:
         self.routing_decisions: dict[str, RoutingDecision] = {}
         self.consents: list[ConsentRecord] = []
         self.idempotency_results: dict[tuple[str, str], dict] = {}
-        self._db = database or (Database(settings.database_url) if settings.persistence_enabled else None)
+        self._db = database or (
+            Database(settings.database_url)
+            if settings.database_persistence_enabled
+            else None
+        )
         if self._db:
             if settings.app_env != "production":
                 self._db.create_schema()

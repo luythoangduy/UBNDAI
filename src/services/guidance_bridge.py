@@ -23,7 +23,10 @@ async def resolve_case_id(case_id: str | None, citizen_id: str | None) -> str:
         return case.id
 
     try:
-        await cases.get(case_id)
+        case = await cases.get(case_id)
+        expected_owner = citizen_id or "anonymous"
+        if case.citizen_id != expected_owner:
+            raise CaseNotFoundError(case_id)
         if citizen_id:
             portal_case = store.get_citizen_case(case_id, citizen_id)
             if portal_case is None:

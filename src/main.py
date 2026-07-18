@@ -25,7 +25,7 @@ if settings.app_env == "production" and (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    if settings.persistence_enabled and settings.app_env != "production":
+    if settings.database_persistence_enabled and settings.app_env != "production":
         database = create_async_database(settings.database_url)
         await database.create_schema()
         await database.engine.dispose()
@@ -105,7 +105,14 @@ elif frontend_dir.exists():
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    dialect = settings.database_url.split(":", 1)[0]
+    return {
+        "status": "ok",
+        "database": dialect,
+        "persistence": (
+            "enabled" if settings.database_persistence_enabled else "disabled"
+        ),
+    }
 
 
 __all__ = ["app"]

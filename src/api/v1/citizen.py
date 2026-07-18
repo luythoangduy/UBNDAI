@@ -4,13 +4,14 @@ import asyncio
 import base64
 import hashlib
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Response, UploadFile, status
 
 from src.config import settings
 from src.models import (
     CitizenCaseCreate,
     CitizenCaseUpdate,
     CitizenSubmitRequest,
+    ImageFormatReview,
     TokenClaims,
     UploadCompleteRequest,
     UploadIntentRequest,
@@ -20,10 +21,36 @@ from src.services.procedure_capabilities import capabilities_for, ocr_field_keys
 from src.services.ocr.pdf import rasterize_pdf
 from src.services.ocr.pipeline import process as process_ocr
 from src.services.ocr.preprocessing import preprocess_document_image
+from src.services.ocr.format_review import review_document_image
 from src.services.officer_store import store
 from src.services.storage import StorageError, storage, validate_magic
 
 router = APIRouter(prefix="/citizen", tags=["citizen"])
+
+
+@router.post("/format-review", response_model=ImageFormatReview)
+async def review_image_format(
+    file: UploadFile = File(...),
+    _: TokenClaims = Depends(require_role("citizen")),
+) -> ImageFormatReview:
+    """Check image format/readability before a user attaches it to a case.
+
+    The upload is never persisted and this endpoint does not perform OCR or a
+    legal-content check.
+    """
+    media_type = file.content_type or ""
+    if media_type not in {"image/jpeg", "image/png"}:
+        raise HTTPException(status_code=422, detail="Chỉ hỗ trợ ảnh JPEG hoặc PNG để rà soát định dạng")
+    content = await file.read(settings.upload_max_bytes + 1)
+    if not content:
+        raise HTTPException(status_code=422, detail="Ảnh tải lên đang trống")
+    if len(content) > settings.upload_max_bytes:
+        raise HTTPException(status_code=422, detail="Ảnh vượt quá dung lượng cho phép (10 MB)")
+    try:
+        validate_magic(media_type, content)
+        return review_document_image(content, media_type)
+    except (StorageError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/me")

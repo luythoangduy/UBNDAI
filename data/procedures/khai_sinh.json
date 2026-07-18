@@ -27,7 +27,10 @@
     "Luật Hộ tịch 2014",
     "Nghị định 123/2015/NĐ-CP",
     "Thông tư 04/2020/TT-BTP",
-    "Thông tư 04/2024/TT-BTP"
+    "Thông tư 04/2024/TT-BTP",
+    "Nghị định 07/2025/NĐ-CP",
+    "Nghị định 120/2025/NĐ-CP",
+    "Thông tư 08/2025/TT-BTP"
   ],
   "processing_days": 1,
   "fee_vnd": 0,
@@ -76,7 +79,8 @@
       "condition_label": "Áp dụng khi bé sinh ngoài cơ sở y tế",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["van_ban_lam_chung"]
+      "accepted_doc_types": ["van_ban_lam_chung"],
+      "notes": "Nếu không có người làm chứng, thay bằng giấy cam đoan về việc sinh (Nghị định 120/2025/NĐ-CP). Trường hợp đặc biệt (trẻ bị bỏ rơi, mang thai hộ) cần biên bản/văn bản riêng — liên hệ cán bộ hộ tịch."
     },
     {
       "code": "cccd_cha_me",

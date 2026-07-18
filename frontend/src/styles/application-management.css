@@ -1,4 +1,4 @@
-.officer-app {
+.officer-app, .management-login {
   --am-primary: var(--blue);
   --am-primary-hover: var(--navy-2);
   --am-primary-subtle: #eef6ff;
@@ -24,7 +24,10 @@
 .management-login h1 { margin: 0; font-size: 24px; }
 .management-login label { display: grid; gap: 7px; font-weight: 650; }
 .management-login input { min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; }
-.management-login button { justify-content: center; border: 0; }
+.management-login__submit { width: 100%; min-height: 44px; justify-content: center; border: 0; font-weight: 750; transition: background .18s ease, transform .18s ease; }
+.management-login__submit:hover:not(:disabled) { background: var(--am-primary-hover); }
+.management-login__submit:active:not(:disabled) { transform: translateY(1px); }
+.management-login__submit:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
 
 .officer-app *, .officer-app *::before, .officer-app *::after { box-sizing: border-box; }
 .officer-app-shell { min-height: 100vh; display: flex; }
@@ -70,7 +73,10 @@
 .am-button-danger { background: var(--am-danger); border: 0; }
 .officer-chart { height: 280px; margin: 16px 0; }
 .am-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.am-chart-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--am-text-muted); font-size: 12px; }
+.am-chart-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; color: var(--am-text-muted); font-size: 12px; list-style: none; }
+.am-chart-summary li { display: inline-flex; align-items: center; gap: 6px; }
+.am-chart-summary strong { color: var(--am-text); font-variant-numeric: tabular-nums; }
+.am-chart-swatch { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 2px; }
 .am-route-loading, .am-loading { display: grid; min-height: 180px; place-items: center; color: var(--am-text-muted); }
 .am-tabs { display: flex; gap: 22px; overflow-x: auto; margin-bottom: 14px; border-bottom: 1px solid var(--am-border); }
 .am-tabs button { flex: 0 0 auto; padding: 11px 2px; color: var(--am-text-muted); background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; }
@@ -171,4 +177,4 @@
   .am-document-preview { height: 320px; }
   .officer-logout span { display: inline; }
 }
-@media (prefers-reduced-motion: reduce) { .officer-app * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) { .officer-app *, .management-login * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

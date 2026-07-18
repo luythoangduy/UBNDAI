@@ -9,7 +9,7 @@ const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
 const ApplicationListPage = lazy(() => import('../features/applications/ApplicationListPage'));
 const ApplicationDetailPage = lazy(() => import('../features/applications/ApplicationDetailPage'));
 
-function OfficerLoginGate({ children }: { children: React.ReactNode }) {
+export function OfficerLoginGate({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState(() => !needsOfficerAuthentication(token()));
   const [username, setUsername] = useState('officer.demo');
   const [password, setPassword] = useState('');
@@ -18,7 +18,7 @@ function OfficerLoginGate({ children }: { children: React.ReactNode }) {
   useEffect(() => { const expired = () => setAuthenticated(false); window.addEventListener('officer-session-expired', expired); return () => window.removeEventListener('officer-session-expired', expired); }, []);
   if (authenticated) return <>{children}</>;
   const login = async (event: React.FormEvent) => { event.preventDefault(); setBusy(true); setError(''); try { const result = await api<{ access_token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }); setToken(result.access_token, 'officer'); setAuthenticated(true); } catch { setError('Tài khoản hoặc mật khẩu không đúng.'); } finally { setBusy(false); } };
-  return <main className="management-login"><form onSubmit={login}><span className="brand-mark">AI</span><h1>Đăng nhập cổng cán bộ</h1><label>Tài khoản<input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" /></label><label>Mật khẩu<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" /></label>{error && <p className="am-error" role="alert">{error}</p>}<button className="am-button" disabled={busy || password.length < 8}>{busy ? 'Đang đăng nhập…' : 'Đăng nhập'}</button></form></main>;
+  return <main className="management-login"><form onSubmit={login}><span className="brand-mark">AI</span><h1>Đăng nhập cổng cán bộ</h1><label>Tài khoản<input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" /></label><label>Mật khẩu<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" /></label>{error && <p className="am-error" role="alert">{error}</p>}<button className="am-button management-login__submit" disabled={busy || password.length < 8}>{busy ? 'Đang đăng nhập…' : 'Đăng nhập'}</button></form></main>;
 }
 
 export function ApplicationManagementRouter() {

@@ -690,7 +690,30 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 .chat-actions button b { color: var(--navy); font-size: 12px; white-space: nowrap; }
 /* Mô tả giữ lại để không mất ngữ cảnh, nhưng ẩn ở khung hẹp cho gọn. */
 .chat-actions button small { color: var(--muted); font-size: 10px; line-height: 1.3; white-space: nowrap; }
-@media (max-width: 1180px) { .chat-actions button small { display: none; } }
+@media (max-width: 1180px) { .chat-actions:not(.as-cards) button small { display: none; } }
+
+/* Gợi ý thủ tục (action icon "search") là lựa chọn chính, nhãn dài 1–2 dòng nên
+   dùng hộp 2 cột thay vì chip: chip buộc nowrap sẽ kéo dài quá khổ và cắt mô tả.
+   Các nút hành động ngắn ("Phí & thời hạn", "Bắt đầu điền"…) vẫn là chip. */
+/* auto-fit: 2 cột khi đủ chỗ, tự rơi về 1 cột khi khung hẹp (mobile, hoặc khi mở
+   bản nháp) — không cần thêm breakpoint riêng. */
+.chat-actions.as-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.chat-actions.as-cards button {
+  align-items: flex-start;
+  min-height: 72px;
+  padding: 13px 14px;
+  border-radius: 11px;
+}
+.chat-actions.as-cards button > i {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.chat-actions.as-cards button span { display: grid; align-items: start; gap: 3px; }
+.chat-actions.as-cards button b { font-size: 13px; line-height: 1.35; white-space: normal; }
+.chat-actions.as-cards button small { font-size: 11.5px; line-height: 1.4; white-space: normal; }
 .template-results { display: grid; gap: 8px; margin-top: 10px; }
 .template-card { display: grid; grid-template-columns: 1fr auto; gap: 5px 8px; padding: 10px; border: 1px solid #cfe1da; border-radius: 10px; background: #fbfefd; }
 .template-card h4 { margin: 4px 0 2px; color: var(--navy); font-size: 11px; }
@@ -1609,8 +1632,9 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   .chat-topline h1 { font-size: 13px; }
   /* Chip đổi thành mục danh sách full-width: nhãn thủ tục quá dài để nằm một dòng
      ở 390px — giữ nowrap sẽ đẩy khung chat trượt ngang. */
-  .chat-actions { flex-direction: column; }
-  .chat-actions button { width: 100%; border-radius: 11px; }
+  /* Chip xếp dọc; .as-cards đã là grid auto-fit nên tự về 1 cột, không đụng vào. */
+  .chat-actions:not(.as-cards) { flex-direction: column; }
+  .chat-actions:not(.as-cards) button { width: 100%; border-radius: 11px; }
   .chat-actions button span { display: grid; gap: 2px; }
   .chat-actions button b { white-space: normal; line-height: 1.35; }
   /* Mobile: giữ footer đúng một dòng, chỉ còn dòng miễn trừ (bỏ dòng copyright)

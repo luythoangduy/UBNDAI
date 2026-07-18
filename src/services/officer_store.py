@@ -20,7 +20,9 @@ from src.models import (
     ValidationFinding,
 )
 from src.config import settings
-from src.services.application_repository import ApplicationRepository, RepositoryNotFound
+from src.services import catalog
+from src.services.application_repository import ApplicationFilters, ApplicationRepository, RepositoryNotFound
+from src.services.checklist import build_checklist
 from src.services.persistence import (
     ApplicationCaseORM,
     AuditEventORM,
@@ -309,7 +311,10 @@ class OfficerStore:
     def list_cases(self, organization_id: str) -> list[ApplicationCase]:
         if self._db:
             with self._db.session() as session:
-                rows, _ = ApplicationRepository(session).list(organization_id)
+                # Callers want every case for the org (queue/dashboard scans), not
+                # page 1 of the default 20 — the paginated `list()` default silently
+                # dropped every case past #20 for orgs above that size.
+                rows, _ = ApplicationRepository(session).list(organization_id, ApplicationFilters(page_size=None))
                 cases = [self._case_model(row) for row in rows]
                 with self._lock:
                     self.cases.update({case.id: case for case in cases})
@@ -317,9 +322,17 @@ class OfficerStore:
         with self._lock:
             return [deepcopy(c) for c in self.cases.values() if c.organization_id == organization_id]
 
-    def create_citizen_case(self, citizen_id: str, procedure_id: str, locality_code: str) -> ApplicationCase:
+    def create_citizen_case(
+        self, citizen_id: str, procedure_id: str, locality_code: str
+    ) -> ApplicationCase:
         timestamp = now()
         case_id = str(uuid4())
+        procedure = catalog.get_procedure(procedure_id)
+        checklist = (
+            {item.requirement_code: item.status for item in build_checklist(procedure, {})}
+            if procedure is not None
+            else {}
+        )
         case = ApplicationCase(
             id=case_id,
             case_code=f"UBNDAI-{timestamp.year}-{case_id[:8].upper()}",
@@ -330,6 +343,7 @@ class OfficerStore:
             status="collecting",
             source_channel="citizen_portal",
             form_data={"locality_code": locality_code},
+            checklist=checklist,
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -502,9 +516,33 @@ class OfficerStore:
                 )
                 self.extracted_fields[record.id] = record
                 self._save_field(record)
+            new_checklist = self._checklist_after_document(case, document_type, manual_review)
+            if new_checklist != case.checklist:
+                case = case.model_copy(
+                    update={"checklist": new_checklist, "version": case.version + 1, "updated_at": now()}
+                )
+                self.cases[case.id] = case
+                self._save_case(case)
             self._audit(case, citizen_id, "document_completed", "case_document", document_id)
             self._save_document(updated)
             return deepcopy(updated)
+
+    @staticmethod
+    def _checklist_after_document(
+        case: ApplicationCase, document_type: str, needs_human_review: bool
+    ) -> dict[str, str]:
+        """Giấy tờ có doc_type khớp accepted_doc_types của catalog → item 'uploaded'
+        (hoặc 'uncertain' nếu cần cán bộ xác nhận). Item đã 'verified' giữ nguyên —
+        mirrors src/services/ocr/checklist.py cho model ApplicationCase (dict)."""
+        procedure = catalog.get_procedure(case.procedure_id)
+        if procedure is None:
+            return case.checklist
+        new_status = "uncertain" if needs_human_review else "uploaded"
+        updated = dict(case.checklist)
+        for requirement in procedure.requirements:
+            if document_type in requirement.accepted_doc_types and updated.get(requirement.code) != "verified":
+                updated[requirement.code] = new_status
+        return updated
 
     def submit_citizen_case(self, case_id: str, citizen_id: str, expected_version: int, consent_version: str, idempotency_key: str) -> dict:
         cache_key = (citizen_id, idempotency_key)

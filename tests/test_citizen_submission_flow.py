@@ -43,11 +43,18 @@ def test_citizen_submit_appears_in_officer_queue():
     )
     assert completed.status_code == 200, completed.text
 
+    # Completing the document may bump the case version (checklist item flips
+    # to 'uploaded'/'uncertain') — re-fetch to get the current version before
+    # the version-checked PATCH below, same as the citizen portal frontend does.
+    refreshed = client.get(f"/api/v1/citizen/cases/{case['id']}", headers=citizen_headers)
+    assert refreshed.status_code == 200, refreshed.text
+    case_version_after_upload = refreshed.json()["data"]["case"]["version"]
+
     updated = client.patch(
         f"/api/v1/citizen/cases/{case['id']}",
         headers=citizen_headers,
         json={
-            "expected_version": case["version"],
+            "expected_version": case_version_after_upload,
             "form_data": {"ho_ten_con": "Nguyễn An", "ho_ten_me": "Nguyễn Văn A"},
         },
     )

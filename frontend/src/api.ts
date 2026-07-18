@@ -31,9 +31,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api/v1${path}`, { ...init, headers: withHeaders(init) });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && location.pathname.startsWith('/officer')) {
-      clearOfficerSession();
-      window.dispatchEvent(new Event('officer-session-expired'));
+    if (response.status === 401) {
+      const role = location.pathname.startsWith('/officer') ? 'officer' : 'citizen';
+      setToken('', role);
+      window.dispatchEvent(new Event(`${role}-session-expired`));
     }
     throw new ApiError(body.detail ?? body.error ?? 'Yêu cầu thất bại', response.status);
   }

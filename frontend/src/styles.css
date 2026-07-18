@@ -316,9 +316,13 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 
 .editor-container {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 280px 1fr 340px;
   gap: 24px;
   align-items: start;
+}
+.checklist-panel {
+  position: sticky;
+  top: 24px;
 }
 .editor-main {
   background: #f3f6f9;

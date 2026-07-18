@@ -1,0 +1,31 @@
+# Luật kiểm tra hồ sơ Đăng ký tạm trú (Mẫu CT01). Owner: Dev B.
+# severity=error chỉ tồn tại ở file rule (AI checker không được sinh error).
+# CT01/giấy tờ chỗ ở chưa có doc_type OCR riêng — rule kiểm tra form + answers;
+# riêng CCCD (doc_type 'cccd') OCR nhận diện được và autofill các trường nhân thân.
+
+procedure: tam_tru
+rules:
+  - id: TT-R1
+    description: Phải khai họ tên và số định danh cá nhân của người đăng ký
+    check: filled(form.ho_ten) and filled(form.so_dinh_danh)
+    severity: error
+    message: "Thiếu họ tên hoặc số định danh cá nhân — Công an cấp xã cần thông tin này để tra cứu dữ liệu cư trú."
+
+  - id: TT-R2
+    description: Phải khai địa chỉ đề nghị đăng ký tạm trú
+    check: filled(form.dia_chi_tam_tru)
+    severity: error
+    message: "Chưa khai địa chỉ đề nghị đăng ký tạm trú."
+
+  - id: TT-R3
+    description: Nên khai rõ thời hạn tạm trú đề nghị
+    check: filled(form.thoi_han_tam_tru)
+    severity: warning
+    message: "Chưa khai thời hạn tạm trú đề nghị (tối đa 02 năm mỗi lần, được gia hạn theo Luật Cư trú 2020)."
+
+  - id: TT-R4
+    description: Người chưa thành niên cần ý kiến đồng ý của cha, mẹ hoặc người giám hộ
+    when: answers.nguoi_chua_thanh_nien == true
+    check: filled(form.y_kien_nguoi_dai_dien)
+    severity: warning
+    message: "Người đăng ký là người chưa thành niên: cần ghi ý kiến đồng ý của cha, mẹ hoặc người giám hộ vào tờ khai CT01 hoặc kèm văn bản đồng ý riêng."

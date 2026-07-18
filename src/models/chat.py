@@ -1,5 +1,6 @@
 """Contract API chat guidance. Owner: Dev A (nội dung), Dev C (frontend tiêu thụ)."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -122,3 +123,21 @@ class ChatResponse(BaseModel):
     templates: list[ChatTemplateResource] = Field(default_factory=list)
     evidence: list[EvidenceStep] = Field(default_factory=list)
     cache: ChatCacheInfo = Field(default_factory=ChatCacheInfo)
+
+
+class ChatHistoryMessage(BaseModel):
+    id: int = Field(ge=1)
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+    response: ChatResponse | None = Field(
+        default=None,
+        description="Structured assistant response when recorded; absent for legacy messages.",
+    )
+
+
+class ChatHistoryResponse(BaseModel):
+    case_id: str
+    procedure_id: str | None = None
+    status: str
+    messages: list[ChatHistoryMessage] = Field(default_factory=list)

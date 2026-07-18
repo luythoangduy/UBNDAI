@@ -66,12 +66,32 @@ async def run_guidance(
 
     async with cases.case_lock(case_id):
         case = await cases.get(case_id)
-        response = await _run_locked_turn(case, payload.message)
-        await sync_to_portal(case_id, citizen_id)
-        return response
+        case, response, assistant_message_id = await _run_locked_turn(
+            case, payload.message
+        )
+
+    # Source/template enrichment may involve network I/O. It must not serialize
+    # another turn for the same case after the state and core reply are committed.
+    experience = await build_experience(case.procedure_id, payload.message)
+    response = response.model_copy(
+        update={
+            "procedure_id": experience.procedure_id,
+            "actions": experience.actions,
+            "templates": experience.templates,
+            "evidence": experience.evidence,
+            "cache": experience.cache,
+        }
+    )
+    await cases.set_message_response(
+        case.id,
+        assistant_message_id,
+        response.model_dump(mode="json"),
+    )
+    await sync_to_portal(case_id, citizen_id)
+    return response
 
 
-async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
+async def _run_locked_turn(case: Any, message: str) -> tuple[Any, ChatResponse, int]:
     """Chạy và commit trọn một lượt trong critical section của case."""
 
     history = await cases.get_messages(case.id)
@@ -118,14 +138,8 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         updates["checklist"] = []
         updates["status"] = "draft"
     reply = final.get("reply") or NO_SOURCE_WARNING
-    case = await cases.commit_turn(
-        case.model_copy(update=updates),
-        message,
-        reply,
-    )
-    experience = await build_experience(case.procedure_id, message)
-
-    return ChatResponse(
+    updated_case = case.model_copy(update=updates)
+    response = ChatResponse(
         case_id=case.id,
         reply=reply,
         kind=final.get("reply_kind") or "fallback",
@@ -135,9 +149,12 @@ async def _run_locked_turn(case: Any, message: str) -> ChatResponse:
         citations=[
             Citation.model_validate(item) for item in final.get("citations") or []
         ],
-        procedure_id=experience.procedure_id,
-        actions=experience.actions,
-        templates=experience.templates,
-        evidence=experience.evidence,
-        cache=experience.cache,
+        procedure_id=updated_case.procedure_id,
     )
+    case, assistant_message_id = await cases.commit_turn(
+        updated_case,
+        message,
+        reply,
+        assistant_response=response.model_dump(mode="json"),
+    )
+    return case, response, assistant_message_id

@@ -421,6 +421,7 @@ name = "c3-tthc-assistant"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aiosqlite" },
     { name = "alembic" },
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -448,7 +449,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "aiosqlite" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -469,7 +469,7 @@ ocr-local = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosqlite", marker = "extra == 'dev'", specifier = ">=0.20" },
+    { name = "aiosqlite", specifier = ">=0.20" },
     { name = "alembic", specifier = ">=1.13" },
     { name = "anthropic", specifier = ">=0.60" },
     { name = "asyncpg", specifier = ">=0.29" },

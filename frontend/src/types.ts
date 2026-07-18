@@ -87,6 +87,16 @@ export type DashboardSummary = {
 
 export type PreprocessStep = { name: string; image: string };
 export type PreprocessResult = { applied_steps: string[]; steps: PreprocessStep[] };
+export type ImageFormatCheck = { code: string; status: 'pass' | 'warning' | 'error'; message: string };
+export type ImageFormatReview = {
+  status: 'ready' | 'needs_attention' | 'rejected';
+  media_type: 'image/jpeg' | 'image/png';
+  width: number;
+  height: number;
+  file_size_bytes: number;
+  checks: ImageFormatCheck[];
+  layout_findings: Array<{ code: string; status: 'warning' | 'error'; message: string; bounding_box?: [number, number, number, number] }>;
+};
 
 export type ChatCitation = { index: number; section?: string; excerpt?: string; source_url?: string };
 export type ChatAction = {
@@ -145,6 +155,19 @@ export type ChatResponse = {
   citations?: ChatCitation[];
 } & ChatExperience;
 export type ChatStarterResponse = { reply: string } & ChatExperience;
+export type ChatHistoryMessage = {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+  response?: ChatResponse | null;
+};
+export type ChatHistoryResponse = {
+  case_id: string;
+  procedure_id?: string | null;
+  status?: string;
+  messages: ChatHistoryMessage[];
+};
 
 export type ProcedureSummary = {
   id: string;

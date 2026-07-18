@@ -1342,3 +1342,15 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   .chat-first-page *::before,
   .chat-first-page *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* --- Panel giấy tờ (bấm từ checklist) --- */
+.checklist-item-button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; background: none; text-align: left; }
+.checklist-item-button:hover { background: var(--s2); }
+.checklist-item-button.selected { border-color: var(--blue); background: #eaf3fa; }
+.requirement-pane { width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 14px; padding: 28px 32px; background: white; border: 1px solid var(--bd); border-radius: 12px; align-self: start; }
+.requirement-pane h2 { margin: 0; color: var(--navy); font-family: var(--font-serif); font-size: 24px; }
+.requirement-pane h3 { margin: 0 0 8px; font-size: 13px; color: var(--tx); }
+.requirement-pane .text-button { align-self: flex-start; }
+.requirement-docs { padding: 14px; background: var(--s1); border: 1px solid var(--bd); border-radius: 8px; }
+.requirement-docs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.requirement-docs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }

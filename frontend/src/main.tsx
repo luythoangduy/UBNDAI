@@ -4,7 +4,7 @@ import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethroug
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
-import type { CaseDetail, CaseDocument, CaseRecord, ChatAction, ChatExperience, ChatResponse, ChatStarterResponse, DashboardSummary, DraftRevision, DraftTemplateInfo, ExtractedField, Finding, GeneratedDraft, PortalRole, PreprocessResult, PreprocessStep, ProcedureCapabilities, ProcedureFormSchema, ProcedureSummary } from './types';
+import type { CaseDetail, CaseDocument, CaseRecord, ChatAction, ChatExperience, ChatResponse, ChatStarterResponse, DashboardSummary, DraftRevision, DraftTemplateInfo, ExtractedField, Finding, GeneratedDraft, PortalRole, PreprocessResult, PreprocessStep, ProcedureCapabilities, ProcedureFormSchema, ProcedureRequirement, ProcedureSummary } from './types';
 import { diffDraftBlocks, type DiffBlock } from './draft-diff';
 import { buildCaseQuery, clarificationAnswerEntries, formatBytes, formatDate, formatSubmissionValue, humanizeStatus, visibleSubmissionEntries } from './utils';
 import { draftValuesFromCase, isMissingAnswer, validateClarifyingAnswers, type ClarifyingAnswers } from './citizen-form';
@@ -592,6 +592,9 @@ function CitizenPortal() {
   const [directoryStatus, setDirectoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [formSchema, setFormSchema] = useState<ProcedureFormSchema>();
   const [capabilities, setCapabilities] = useState<ProcedureCapabilities>();
+  const [requirements, setRequirements] = useState<ProcedureRequirement[]>([]);
+  const [caseDocuments, setCaseDocuments] = useState<CaseDocument[]>([]);
+  const [activeRequirement, setActiveRequirement] = useState<string | null>(null);
 
   const [started, setStarted] = useState(false);
   const [docContent, setDocContent] = useState('');
@@ -614,6 +617,13 @@ function CitizenPortal() {
   const readiness = requiredFields.length ? Math.round(requiredFields.filter(field => draftValues[field.key]?.trim()).length / requiredFields.length * 100) : 0;
   const reviewCount = extractedFields?.filter(item => item.confidence < 0.85).length ?? 0;
   const checklistItems = Object.entries(current?.checklist ?? {}).filter(([, status]) => status !== 'not_applicable');
+  const foldName = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+  // Requirement trùng tên với biểu mẫu đang soạn = chính tờ khai — mở editor thay vì panel upload.
+  const isFormRequirement = (requirement: ProcedureRequirement) =>
+    !!formSchema && foldName(requirement.name).startsWith(foldName(formSchema.title));
+  const activeRequirementInfo = activeRequirement ? requirements.find(item => item.code === activeRequirement) : undefined;
+  const documentsForRequirement = (requirement: ProcedureRequirement) =>
+    caseDocuments.filter(document => requirement.accepted_doc_types.includes(document.document_type));
   const updateDraftValue = (key: string, value: string) => setDraftValues(current => {
     const next = { ...current, [key]: value };
     if (formSchema) setDocContent(buildDynamicFormHtml(formSchema, next));
@@ -651,14 +661,18 @@ function CitizenPortal() {
   // Một luồng duy nhất: mở tờ khai mẫu để tự điền, OCR là bước "AI điền hộ" tùy chọn.
   const startCase = (procedure: ProcedureSummary) => {
     run('create', async () => {
-      const [schema, caps, item] = await Promise.all([
+      const [schema, caps, detail, item] = await Promise.all([
         api<ProcedureFormSchema>(`/procedures/${procedure.id}/form-schema`),
         api<ProcedureCapabilities>(`/procedures/${procedure.id}/capabilities`),
+        api<{ requirements: ProcedureRequirement[] }>(`/procedures/${procedure.id}`),
         api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) }),
       ]);
       setStarted(true);
       setFormSchema(schema);
       setCapabilities(caps);
+      setRequirements(detail.requirements);
+      setCaseDocuments([]);
+      setActiveRequirement(null);
       setDocContent(buildDynamicFormHtml(schema, {}));
       setSignature('');
       setSignerName('');
@@ -748,7 +762,16 @@ function CitizenPortal() {
     setNotice('Hồ sơ đã được chuyển tới cán bộ tiếp nhận.');
     await refresh();
   });
-  const refreshCurrent = async (id: string) => { const detail = await api<{case: CaseRecord}>(`/citizen/cases/${id}`); setCurrent(detail.case); await refresh(); };
+  const refreshCurrent = async (id: string) => {
+    const detail = await api<{ case: CaseRecord; documents: CaseDocument[] }>(`/citizen/cases/${id}`);
+    setCurrent(detail.case);
+    setCaseDocuments(detail.documents ?? []);
+    if (detail.case.procedure_id && detail.case.procedure_id !== formSchema?.procedure_id) {
+      const info = await api<{ requirements: ProcedureRequirement[] }>(`/procedures/${detail.case.procedure_id}`).catch(() => null);
+      if (info) setRequirements(info.requirements);
+    }
+    await refresh();
+  };
   return (
     <Shell role="citizen">
       <main className="citizen-page document-centric">
@@ -792,6 +815,36 @@ function CitizenPortal() {
                           fields={extractedFields}
                         />
                       </div>
+                    ) : activeRequirementInfo ? (
+                      <section className="requirement-pane">
+                        <button className="text-button" onClick={() => setActiveRequirement(null)}>← Quay lại tờ khai</button>
+                        <h2>{activeRequirementInfo.name}</h2>
+                        <p className="muted">
+                          {activeRequirementInfo.condition_label ?? (activeRequirementInfo.original_required ? 'Giấy tờ bắt buộc của thủ tục.' : 'Giấy tờ không bắt buộc.')}
+                          {activeRequirementInfo.notes ? ` ${activeRequirementInfo.notes}` : ''}
+                        </p>
+                        <div className="requirement-docs">
+                          <h3>Bản chụp đã tải lên</h3>
+                          {documentsForRequirement(activeRequirementInfo).length ? (
+                            <ul>
+                              {documentsForRequirement(activeRequirementInfo).map(document => (
+                                <li key={document.id}>
+                                  <strong>{document.original_filename ?? document.document_type}</strong>
+                                  <Status value={document.ocr_status}/>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted">Chưa có bản chụp nào cho giấy tờ này. Tải lên bên dưới — hệ thống tự nhận dạng loại giấy tờ và tích ✓ vào danh sách.</p>
+                          )}
+                        </div>
+                        <label className="dropzone">
+                          <input type="file" accept="image/jpeg,image/png,application/pdf" onChange={event => setFile(event.target.files?.[0])}/>
+                          <b>{file ? file.name : 'Chọn bản chụp giấy tờ'}</b>
+                          <span>JPG, PNG hoặc PDF · tối đa 10 MB</span>
+                        </label>
+                        <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang xử lý…' : 'Tải lên & kiểm tra'}</button>
+                      </section>
                     ) : (
                       <WordWorkspace
                         content={docContent}
@@ -855,15 +908,22 @@ function CitizenPortal() {
                          <div className="checklist-display">
                            <h3>Danh sách giấy tờ cần thiết <small>Đã cá nhân hóa</small></h3>
                            <ul className="checklist-items">
-                             {checklistItems.map(([key, status]) => (
-                               <li key={key} className={`checklist-item ${status}`}>
-                                 <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
-                                 <div className="check-text">
-                                   <strong>{humanizeStatus(key)}</strong>
-                                   <small>{humanizeStatus(String(status))}</small>
-                                 </div>
-                               </li>
-                             ))}
+                             {checklistItems.map(([key, status]) => {
+                               const requirement = requirements.find(item => item.code === key);
+                               const isForm = requirement ? isFormRequirement(requirement) : false;
+                               const selected = isForm ? activeRequirement === null : activeRequirement === key;
+                               return (
+                                 <li key={key} className={`checklist-item ${status}`}>
+                                   <button className={`checklist-item-button ${selected ? 'selected' : ''}`} onClick={() => setActiveRequirement(isForm ? null : key)} title={isForm ? 'Mở tờ khai trong trình soạn thảo' : 'Xem và tải lên giấy tờ này'}>
+                                     <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
+                                     <div className="check-text">
+                                       <strong>{requirement?.name ?? humanizeStatus(key)}</strong>
+                                       <small>{humanizeStatus(String(status))}{isForm ? ' · soạn trực tiếp' : ''}</small>
+                                     </div>
+                                   </button>
+                                 </li>
+                               );
+                             })}
                            </ul>
                          </div>
                        )}

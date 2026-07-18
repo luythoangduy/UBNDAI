@@ -156,6 +156,17 @@ export type ProcedureSummary = {
   source_url?: string | null;
 };
 
+export type ProcedureRequirement = {
+  code: string;
+  name: string;
+  condition?: string | null;
+  condition_label?: string | null;
+  original_required: boolean;
+  copies: number;
+  accepted_doc_types: string[];
+  notes?: string | null;
+};
+
 export type ProcedureCapabilities = {
   chat: boolean;
   checklist: boolean;

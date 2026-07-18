@@ -86,17 +86,17 @@ _DOC_TYPE_KEYWORDS: dict[str, list[tuple[str, float]]] = {
     "phieu_cc01": [
         ("mau cc01", 0.95),
         ("cc01", 0.8),
-        ("phieu thu thap thong tin dan cu", 0.2),
+        ("phieu thu nhan thong tin can cuoc", 0.9),
     ],
     "phieu_dc01": [
         ("mau dc01", 0.95),
         ("dc01", 0.8),
-        ("phieu thu thap thong tin dan cu", 0.2),
+        ("phieu thu thap thong tin dan cu", 0.9),
     ],
     "phieu_dc02": [
         ("mau dc02", 0.95),
         ("dc02", 0.8),
-        ("phieu cap nhat thong tin dan cu", 0.3),
+        ("phieu de nghi giai quyet thu tuc ve can cuoc", 0.9),
     ],
     "giay_to_phap_ly": [
         ("giay to phap ly ve thong tin cong dan", 0.95),

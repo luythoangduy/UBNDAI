@@ -813,15 +813,15 @@ class OfficerStore:
             created_at=case.created_at,
             updated_at=case.updated_at,
         )
+        case_documents = [
+            document for document in self.documents.values() if document.case_id == case.id
+        ]
+        records_by_document: dict[str, list[ExtractedFieldRecord]] = {}
+        for field in self.extracted_fields.values():
+            records_by_document.setdefault(field.document_id, []).append(field)
         validation_documents: list[ExtractedDocument] = []
-        for document in self.documents.values():
-            if document.case_id != case.id:
-                continue
-            records = [
-                field
-                for field in self.extracted_fields.values()
-                if field.document_id == document.id
-            ]
+        for document in case_documents:
+            records = records_by_document.get(document.id, [])
             validation_documents.append(
                 ExtractedDocument(
                     id=document.id,

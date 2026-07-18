@@ -113,6 +113,34 @@ def test_citizen_can_update_form_data_and_clarification_answers():
     assert updated.json()["data"]["version"] == created["version"] + 1
 
 
+def test_clarification_answers_rebuild_conditional_checklist():
+    headers = auth("citizen.demo")
+    created = client.post(
+        "/api/v1/citizen/cases",
+        headers=headers,
+        json={"procedure_id": "can_cuoc", "locality_code": "00001"},
+    ).json()["data"]
+    assert created["checklist"]["phieu_dc02"] == "missing"
+
+    updated = client.patch(
+        f"/api/v1/citizen/cases/{created['id']}",
+        headers=headers,
+        json={
+            "expected_version": created["version"],
+            "answers": {
+                "nop_truc_tuyen": False,
+                "co_thong_tin_csdl_dan_cu": True,
+            },
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    checklist = updated.json()["data"]["checklist"]
+    assert checklist["phieu_cc01"] == "missing"
+    assert checklist["phieu_dc02"] == "not_applicable"
+    assert checklist["phieu_dc01"] == "not_applicable"
+    assert checklist["giay_to_phap_ly_thong_tin_cong_dan"] == "not_applicable"
+
+
 def test_preprocess_endpoint_returns_step_snapshots():
     import cv2
     import numpy as np

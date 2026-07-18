@@ -91,7 +91,7 @@
       "fields": [
         {"key": "ho_ten", "label": "Họ, chữ đệm và tên", "type": "text", "required": true},
         {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true},
-        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true},
+        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "options": ["Nam", "Nữ"]},
         {"key": "so_dinh_danh", "label": "Số định danh cá nhân (nếu đã có)", "type": "text", "required": false},
         {"key": "noi_cu_tru", "label": "Nơi cư trú", "type": "text", "required": true},
         {"key": "noi_dung_de_nghi", "label": "Nội dung đề nghị (vd: cấp thẻ căn cước lần đầu)", "type": "text", "required": true},

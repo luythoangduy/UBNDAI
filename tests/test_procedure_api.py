@@ -15,6 +15,13 @@ def test_procedure_api_drives_catalog_form_and_capabilities():
     assert schema.status_code == 200
     assert schema.json()["fields"]
     assert any(field["required"] for field in schema.json()["fields"])
+    assert schema.json()["clarifying_questions"]
+
+    identity_schema = client.get("/api/v1/procedures/can_cuoc/form-schema")
+    assert identity_schema.status_code == 200
+    gender = next(field for field in identity_schema.json()["fields"] if field["key"] == "gioi_tinh")
+    assert gender["type"] == "select"
+    assert gender["options"] == ["Nam", "Nữ"]
 
     capabilities = client.get("/api/v1/procedures/khai_sinh/capabilities")
     assert capabilities.status_code == 200

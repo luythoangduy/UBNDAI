@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, apiBlob } from '../../api';
 import type { CaseDetail, CaseDocument, ExtractedField, Finding } from '../../types';
-import { formatBytes, formatDate, humanizeStatus } from '../../utils';
+import { clarificationAnswerEntries, formatBytes, formatDate, formatSubmissionValue, humanizeStatus, visibleSubmissionEntries } from '../../utils';
 import { procedureNames } from './procedureCatalog';
 
 const activeFindingStatuses = new Set<Finding['status']>(['open', 'accepted', 'escalated']);
@@ -143,10 +143,12 @@ function DataPanel({ submission, fields, editable, onSaved, onError }: { submiss
       setBusy(false);
     }
   };
-  const rows = Object.entries(submission);
+  const rows = visibleSubmissionEntries(submission);
+  const answerRows = clarificationAnswerEntries(submission);
   return <section className="review-panel data-panel">
-    <div className="column-heading"><span>DỮ LIỆU CÓ CẤU TRÚC</span><b>{rows.length + fields.length}</b></div>
-    <div className="data-section"><h3>Thông tin người khai</h3>{rows.length ? rows.map(([key, item]) => <div className="data-row" key={key}><span>{humanizeStatus(key)}</span><strong>{String(item || '—')}</strong><small className="verified">✓ Đã khai</small></div>) : <p className="empty">Không có dữ liệu biểu mẫu.</p>}</div>
+    <div className="column-heading"><span>DỮ LIỆU CÓ CẤU TRÚC</span><b>{rows.length + answerRows.length + fields.length}</b></div>
+    <div className="data-section"><h3>Thông tin người khai</h3>{rows.length ? rows.map(([key, item]) => <div className="data-row" key={key}><span>{humanizeStatus(key)}</span><strong>{formatSubmissionValue(item)}</strong><small className="verified">✓ Đã khai</small></div>) : <p className="empty">Không có dữ liệu biểu mẫu.</p>}</div>
+    {answerRows.length > 0 && <div className="data-section"><h3>Thông tin xác định trường hợp</h3>{answerRows.map(([key, item]) => <div className="data-row" key={key}><span>{humanizeStatus(key)}</span><strong>{formatSubmissionValue(item)}</strong><small className="verified">✓ Đã áp dụng</small></div>)}</div>}
     <div className="data-section"><div className="section-title"><h3>Kết quả OCR</h3>{fields.some(item => item.review_status === 'needs_human_review') && <span className="needs-review">Cần xác minh</span>}</div>{fields.length ? fields.map(field => <div className={`ocr-row ${field.review_status === 'needs_human_review' ? 'low-confidence' : ''}`} key={field.id}><div><span>{humanizeStatus(field.field_key)}</span><small>Độ tin cậy {Math.round(field.confidence * 100)}%</small></div>{editing === field.id ? <div className="edit-field"><input value={value} onChange={event => setValue(event.target.value)} autoFocus/><button onClick={() => save(field)} disabled={busy}>Lưu</button><button className="text-button" onClick={() => setEditing(undefined)}>Hủy</button></div> : <div className="field-value"><strong>{field.normalized_value || field.raw_value || '—'}</strong>{editable && <button aria-label={`Sửa ${field.field_key}`} onClick={() => { setEditing(field.id); setValue(field.normalized_value || field.raw_value); }}>✎</button>}</div>}</div>) : <p className="empty">Chọn tài liệu có dữ liệu OCR để xem.</p>}</div>
   </section>;
 }

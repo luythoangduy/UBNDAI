@@ -52,6 +52,7 @@ def form_schema(procedure: Procedure) -> ProcedureFormSchema | None:
             template_id=template.id,
             title=template.name,
             fields=template.fields,
+            clarifying_questions=procedure.clarifying_questions,
         )
     return form_schema_for(procedure.id)
 
@@ -81,6 +82,7 @@ def form_schema_for(
                 else "text"
             ),
             required=field.required,
+            options=field.allowed_values,
             ocr_sources=[f"unknown.{field.key}"],
         )
         for field in template.fields
@@ -90,6 +92,7 @@ def form_schema_for(
         template_id=template.id,
         title=template.output_name,
         fields=fields,
+        clarifying_questions=(procedure.clarifying_questions if procedure else []),
     )
 
 

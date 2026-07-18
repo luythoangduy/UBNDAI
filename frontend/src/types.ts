@@ -171,7 +171,17 @@ export type ProcedureFormField = {
   label: string;
   type: 'text' | 'date' | 'number' | 'select' | 'checkbox';
   required: boolean;
+  options: string[];
   ocr_sources: string[];
+};
+
+export type ClarifyingQuestion = {
+  key: string;
+  text: string;
+  answer_type: 'boolean' | 'integer' | 'text' | 'choice';
+  options: string[];
+  minimum?: number | null;
+  maximum?: number | null;
 };
 
 export type ProcedureFormSchema = {
@@ -179,6 +189,7 @@ export type ProcedureFormSchema = {
   template_id: string;
   title: string;
   fields: ProcedureFormField[];
+  clarifying_questions: ClarifyingQuestion[];
 };
 
 export type DraftFieldSpec = {

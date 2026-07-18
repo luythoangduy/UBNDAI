@@ -9,13 +9,15 @@ văn bản hành chính (Nghị định 30/2020/NĐ-CP dùng Times New Roman).
 
 from __future__ import annotations
 
+import base64
+import binascii
 import io
 import re
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from docx.shared import Pt
+from docx.shared import Inches, Pt
 
 from src.models import DraftHtmlExportRequest
 
@@ -23,7 +25,14 @@ DOCX_FONT_NAME = "Times New Roman"
 
 _BLOCK_PATTERN = re.compile(r"<(p|h[1-6]|ul|ol)[^>]*>(.*?)</\1>", re.IGNORECASE)
 _LI_PATTERN = re.compile(r"<li[^>]*>(.*?)</li>", re.IGNORECASE)
-_INLINE_SPLIT = re.compile(r"(</?(?:b|i|u|strong|em|br|span)[^>]*>)", re.IGNORECASE)
+_INLINE_SPLIT = re.compile(
+    r"(<img\b[^>]*>|</?(?:b|i|u|strong|em|br|span)[^>]*>)", re.IGNORECASE
+)
+_DATA_IMAGE = re.compile(
+    r'''\bsrc=["']data:image/(?:png|jpe?g);base64,([^"']+)["']''',
+    re.IGNORECASE,
+)
+_MAX_SIGNATURE_IMAGE_BYTES = 2 * 1024 * 1024
 
 
 def _apply_font(run) -> None:
@@ -47,8 +56,26 @@ def _extract_font_size_pt(tag: str) -> float | None:
     return value * 0.75 if unit == "px" else value
 
 
+def _add_data_image(paragraph, tag: str) -> None:
+    """Embed a small PNG/JPEG data URI, used by the browser signature canvas."""
+    match = _DATA_IMAGE.search(tag)
+    if not match:
+        return
+    try:
+        payload = base64.b64decode(match.group(1), validate=True)
+    except (binascii.Error, ValueError):
+        return
+    if not payload or len(payload) > _MAX_SIGNATURE_IMAGE_BYTES:
+        return
+    try:
+        paragraph.add_run().add_picture(io.BytesIO(payload), width=Inches(1.8))
+    except (ValueError, TypeError, OSError):
+        # Invalid user-controlled image data must not break the whole DOCX export.
+        return
+
+
 def _parse_runs(paragraph, html_content: str) -> None:
-    clean_html = re.sub(r"</?(div|a|img)[^>]*>", "", html_content)
+    clean_html = re.sub(r"</?(div|a)[^>]*>", "", html_content)
     tokens = _INLINE_SPLIT.split(clean_html)
 
     bold = False
@@ -77,6 +104,8 @@ def _parse_runs(paragraph, html_content: str) -> None:
                 font_size_stack.pop()
         elif token_lower in ("<br>", "<br/>", "<br />"):
             paragraph.add_run("\n")
+        elif token_lower.startswith("<img"):
+            _add_data_image(paragraph, token)
         elif token and not token.startswith("<"):
             text = (
                 token.replace("&nbsp;", " ")

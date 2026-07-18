@@ -35,3 +35,22 @@ export function buildCaseQuery(search: string, status: string, sort: string, pag
   if (status) query.set('status', status);
   return query.toString();
 }
+
+export function visibleSubmissionEntries(submission: Record<string, unknown>) {
+  return Object.entries(submission).filter(([key]) => !key.startsWith('_'));
+}
+
+export function clarificationAnswerEntries(submission: Record<string, unknown>) {
+  const answers = submission._answers;
+  if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return [];
+  return Object.entries(answers as Record<string, unknown>);
+}
+
+export function formatSubmissionValue(value: unknown): string {
+  if (value === true) return 'Có';
+  if (value === false) return 'Không';
+  if (value === undefined || value === null || value === '') return '—';
+  if (Array.isArray(value)) return value.map(formatSubmissionValue).join(', ');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}

@@ -165,8 +165,20 @@ checklist tạm và trả lại các câu hỏi còn thiếu cho frontend.
 
 Env chính (xem `src/config.py`, mẫu ở `.env.example`): `LLM_API_KEY` — API key Anthropic,
 model mặc định `claude-haiku-4-5` (thiếu key planner/answer tự rơi về rule-based/extractive
-fallback, luồng vẫn chạy); `EMBEDDING_PROVIDER` (`auto`/`google`/`bge-m3`/`fake` — phải khớp
+fallback, luồng vẫn chạy); `EMBEDDING_PROVIDER` (`auto`/`google`/`huggingface`/`bge-m3`/`fake` — phải khớp
 lúc index; `google` cần `GOOGLE_API_KEY` riêng); `DATABASE_URL`, `CHROMA_PERSIST_DIR`.
+
+`huggingface` gọi Feature Extraction từ xa với `HF_TOKEN`, model mặc định
+`BAAI/bge-m3`, vector chuẩn hoá 1024 chiều và không tải model vào container.
+Container Render tạo lại dense index từ catalog khi khởi động; nếu inference
+tạm thời lỗi thì API vẫn khởi động và fallback về BM25.
+
+Trên Render, container tự chạy `alembic upgrade head` trước khi khởi động API.
+Production persistence cần `PERSISTENCE_ENABLED=true`, PostgreSQL trong `DATABASE_URL`,
+và Redis/Render Key Value trong `REDIS_URL`. `OFFICIAL_SOURCE_LIVE_FETCH=true` bật
+tra cứu trực tiếp nguồn thủ tục. BGE-M3 local cần cài extra
+`local-embeddings` và máy có đủ RAM/disk cho model; không bật trên instance
+512 MB.
 
 OCR dùng **bộ env riêng, không chung với chatbot**: `OCR_ENGINE=vision_llm`,
 `OCR_LLM_PROVIDER` (`openai`/`anthropic`/`gemini`) + `OCR_LLM_API_KEY` + `OCR_LLM_MODEL`

@@ -91,6 +91,21 @@ def test_list_cases_returns_every_case_not_just_first_page():
     assert len(cases) == 25
 
 
+def test_guidance_case_is_persisted_before_its_audit_event():
+    database = create_sqlite_database()
+    runtime_store = OfficerStore(database=database, seed=False)
+
+    case = runtime_store.ensure_guidance_case("guidance-case", "citizen")
+
+    with database.session() as session:
+        assert session.get(ApplicationCaseORM, case.id) is not None
+        audit = session.scalar(
+            select(AuditEventORM).where(AuditEventORM.case_id == case.id)
+        )
+        assert audit is not None
+        assert audit.event_type == "case_created_from_guidance"
+
+
 def test_assignment_and_resubmit_are_durable_transactions():
     database, runtime_store = _persistent_store(status="needs_citizen_update")
     service = ApplicationManagementService(runtime_store)

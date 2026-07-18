@@ -27,3 +27,5 @@ secrets/
 # Claude Code local settings / AI session logs
 .claude/settings.local.json
 **/.ai-log/
+.vercel
+.env.local

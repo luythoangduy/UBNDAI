@@ -12,6 +12,8 @@ import math
 import os
 from typing import Any
 
+from huggingface_hub import InferenceClient
+
 from src.config import settings
 from src.services.retrieval.common import tokenize
 
@@ -31,6 +33,12 @@ def has_real_api_key(value: str | None) -> bool:
 def google_api_key() -> str:
     """Key riêng cho embedding Google — KHÔNG dùng llm_api_key (đó là key Anthropic)."""
     return os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+
+
+def huggingface_api_token() -> str:
+    return os.environ.get("HF_TOKEN", "") or os.environ.get(
+        "HUGGINGFACE_API_TOKEN", ""
+    )
 
 
 class FakeEmbeddingModel:
@@ -108,6 +116,38 @@ class BgeM3EmbeddingModel:
         return _LOCAL_MODEL_CACHE[self.model_name]
 
 
+class HuggingFaceInferenceEmbeddingModel:
+    """Remote feature-extraction adapter for BGE-M3 via HF Inference Providers."""
+
+    def __init__(self, model_name: str) -> None:
+        token = huggingface_api_token()
+        if not has_real_api_key(token):
+            raise RuntimeError(
+                "Cần HF_TOKEN/HUGGINGFACE_API_TOKEN hợp lệ cho Hugging Face embedding."
+            )
+        self.model_name = model_name
+        self.client = InferenceClient(
+            provider=settings.huggingface_inference_provider,
+            api_key=token,
+            timeout=settings.huggingface_inference_timeout_s,
+        )
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        encoded = self.client.feature_extraction(
+            texts,
+            model=self.model_name,
+            normalize=True,
+            truncate=True,
+        )
+        values = encoded.tolist() if hasattr(encoded, "tolist") else encoded
+        return [[float(value) for value in row] for row in values]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+
 def resolve_embedding_provider(provider: str | None = None) -> str:
     chosen = (provider or settings.embedding_provider or "auto").strip()
     if chosen != "auto":
@@ -125,6 +165,10 @@ def get_embedding_model(provider: str | None = None) -> Any:
         return HashingEmbeddingModel(settings.hash_embedding_dimension)
     if resolved == "bge-m3":
         return BgeM3EmbeddingModel(settings.local_embedding_model_name)
+    if resolved in {"huggingface", "hf-inference"}:
+        return HuggingFaceInferenceEmbeddingModel(
+            settings.huggingface_embedding_model_name
+        )
     if resolved == "google":
         key = google_api_key()
         if not has_real_api_key(key):

@@ -43,7 +43,15 @@ def main() -> int:
     parser.add_argument(
         "--embedding-provider",
         default=settings.embedding_provider,
-        choices=["auto", "google", "bge-m3", "fake"],
+        choices=[
+            "auto",
+            "google",
+            "huggingface",
+            "hf-inference",
+            "bge-m3",
+            "hashing",
+            "fake",
+        ],
     )
     parser.add_argument(
         "--build-bm25",

@@ -268,9 +268,27 @@ class NotificationEventORM(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+def _normalize_sync_database_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        return f"postgresql+psycopg://{url.removeprefix('postgres://')}"
+    if url.startswith("postgresql://"):
+        return f"postgresql+psycopg://{url.removeprefix('postgresql://')}"
+    return url
+
+
+def _normalize_async_database_url(url: str) -> str:
+    if url.startswith("sqlite://") and "+aiosqlite" not in url:
+        return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+    if url.startswith("postgres://"):
+        return f"postgresql+asyncpg://{url.removeprefix('postgres://')}"
+    if url.startswith("postgresql://"):
+        return f"postgresql+asyncpg://{url.removeprefix('postgresql://')}"
+    return url
+
+
 class Database:
     def __init__(self, url: str):
-        self.engine = create_engine(url, future=True)
+        self.engine = create_engine(_normalize_sync_database_url(url), future=True)
         if self.engine.dialect.name == "sqlite":
             event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
         self._session_factory = sessionmaker(self.engine, expire_on_commit=False)
@@ -294,11 +312,7 @@ class AsyncDatabase:
     """Async SQLAlchemy 2 database used by API/worker processes in production."""
 
     def __init__(self, url: str):
-        normalized = url
-        if normalized.startswith("sqlite://") and "+aiosqlite" not in normalized:
-            normalized = normalized.replace("sqlite://", "sqlite+aiosqlite://", 1)
-        if normalized.startswith("postgresql://"):
-            normalized = normalized.replace("postgresql://", "postgresql+asyncpg://", 1)
+        normalized = _normalize_async_database_url(url)
         self.engine: AsyncEngine = create_async_engine(normalized, future=True)
         self._session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
 

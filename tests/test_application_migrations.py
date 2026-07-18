@@ -2,6 +2,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -13,6 +14,12 @@ def migration_config(database_path: Path) -> Config:
     config.set_main_option("script_location", str(REPO_ROOT / "alembic"))
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database_path.as_posix()}")
     return config
+
+
+def test_revision_ids_fit_default_alembic_version_column():
+    config = migration_config(Path("unused.db"))
+    revisions = ScriptDirectory.from_config(config).walk_revisions()
+    assert all(len(revision.revision) <= 32 for revision in revisions)
 
 
 def test_application_migration_round_trip_preserves_baseline_data(tmp_path: Path):
@@ -41,7 +48,7 @@ def test_application_migration_round_trip_preserves_baseline_data(tmp_path: Path
     }
     assert {fk["name"] for fk in inspector.get_foreign_keys("validation_findings")} >= {
         "fk_validation_findings_case_id_application_cases",
-        "fk_validation_findings_submission_version_id_case_submission_versions",
+        "fk_validation_findings_submission",
     }
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT case_code FROM application_cases WHERE id='case'")) == "CASE"

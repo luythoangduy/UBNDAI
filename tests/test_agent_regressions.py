@@ -88,7 +88,6 @@ async def test_chunk_without_procedure_id_does_not_crash_identify(monkeypatch):
     [
         "đăng ký kết hôn",
         "làm căn cước công dân",
-        "xin giấy phép xây dựng",
         "thủ tục đất đai",
     ],
 )
@@ -97,6 +96,15 @@ async def test_unrelated_query_does_not_select_birth_registration(query):
     result = await identify.run({"rewritten_query": query})
     assert result.get("selected_procedure_id") is None
     assert result["reply_kind"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_construction_permit_query_selects_new_procedure():
+    # "xin giấy phép xây dựng" used to be a negative example above (no matching
+    # procedure existed). data/procedures/giay_phep_xay_dung.json now covers it,
+    # so it should resolve to that procedure instead of falling back.
+    result = await identify.run({"rewritten_query": "xin giấy phép xây dựng"})
+    assert result.get("selected_procedure_id") == "giay_phep_xay_dung"
 
 
 @pytest.mark.asyncio

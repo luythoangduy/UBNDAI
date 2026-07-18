@@ -1,0 +1,26 @@
+# Luật kiểm tra hồ sơ Cấp giấy phép xây dựng (công trình, nhà ở riêng lẻ). Owner: Dev B.
+# severity=error chỉ tồn tại ở file rule (AI checker không được sinh error).
+# Field path: <doc_type>.<field_key> — khớp ExtractedDocument.field_map().
+# Thủ tục này chưa có doc_type OCR riêng (xem src/services/ocr/classifier.py),
+# nên rule chỉ kiểm tra dữ liệu form đã điền — không dùng exists(doc.*).
+
+procedure: giay_phep_xay_dung
+rules:
+  - id: GPXD-R1
+    description: Phải xác định được vị trí xây dựng (thửa đất, tờ bản đồ)
+    check: filled(form.so_to_ban_do)
+    severity: error
+    message: "Chưa điền thông tin thửa đất/tờ bản đồ. Đây là căn cứ để đối chiếu quy hoạch và xác định thẩm quyền cấp phép."
+
+  - id: GPXD-R2
+    description: Phải khai diện tích xây dựng tầng 1 và tổng diện tích sàn
+    check: filled(form.dien_tich_xay_dung_tang_1) and filled(form.tong_dien_tich_san)
+    severity: warning
+    message: "Chưa khai đầy đủ diện tích xây dựng tầng 1 và tổng diện tích sàn — cán bộ cần số liệu này để thẩm định."
+
+  - id: GPXD-R3
+    description: Công trình thuộc diện thẩm duyệt PCCC cần khai rõ số tầng để cán bộ xác định phạm vi thẩm duyệt
+    when: answers.cong_trinh_yeu_cau_pccc == true
+    check: filled(form.so_tang)
+    severity: info
+    message: "Công trình thuộc diện thẩm duyệt phòng cháy chữa cháy — nhớ mang kèm giấy chứng nhận thẩm duyệt PCCC khi nộp hồ sơ trực tiếp."

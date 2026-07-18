@@ -1,0 +1,116 @@
+{
+  "id": "giay_phep_xay_dung",
+  "national_code": "1.007262",
+  "name": "Cấp giấy phép xây dựng đối với công trình, nhà ở riêng lẻ",
+  "aliases": [
+    "xin giấy phép xây dựng",
+    "làm giấy phép xây dựng nhà ở",
+    "cấp phép xây nhà",
+    "xin phép xây nhà",
+    "giấy phép xây dựng nhà ở riêng lẻ"
+  ],
+  "example_queries": [
+    "tôi muốn xin giấy phép xây dựng nhà ở",
+    "làm giấy phép xây nhà cần giấy tờ gì",
+    "thủ tục cấp phép xây dựng nhà ở riêng lẻ"
+  ],
+  "negative_keywords": [
+    "đăng ký khai sinh",
+    "đăng ký kết hôn",
+    "căn cước công dân"
+  ],
+  "required_token_groups": [
+    ["giấy", "phép", "xây", "dựng"],
+    ["cấp", "phép", "xây", "dựng"],
+    ["xin", "phép", "xây", "nhà"]
+  ],
+  "agency": "UBND cấp xã",
+  "legal_basis": [
+    "Luật Xây dựng số 135/2025/QH15",
+    "Nghị định 217/2026/NĐ-CP"
+  ],
+  "processing_days": 7,
+  "fee_vnd": null,
+  "clarifying_questions": [
+    {
+      "key": "quy_mo_thuoc_dien_mien_phep",
+      "text": "Công trình có dưới 7 tầng, tổng diện tích sàn dưới 500m², và KHÔNG nằm trong khu đô thị mới/khu kinh tế/khu du lịch quốc gia hoặc khu vực có quy chế quản lý kiến trúc riêng không?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "cong_trinh_yeu_cau_pccc",
+      "text": "Công trình có thuộc diện phải thẩm duyệt thiết kế phòng cháy chữa cháy không?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "cong_trinh_lien_quan_di_tich",
+      "text": "Công trình có nằm trong khu vực bảo vệ di tích/di sản văn hóa không?",
+      "answer_type": "boolean"
+    }
+  ],
+  "requirements": [
+    {
+      "code": "don_de_nghi_cap_phep",
+      "name": "Đơn đề nghị cấp giấy phép xây dựng (theo Mẫu số 01 Phụ lục II, Nghị định 217/2026/NĐ-CP)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": [],
+      "notes": "Từ 01/7/2026, nhà ở riêng lẻ dưới 7 tầng, tổng diện tích sàn dưới 500m² và không thuộc khu vực đặc thù có thể được MIỄN giấy phép xây dựng theo Luật Xây dựng 2025 — hãy xác nhận với UBND cấp xã trước khi nộp hồ sơ nếu công trình của bạn thuộc diện này."
+    },
+    {
+      "code": "giay_to_quyen_su_dung_dat",
+      "name": "Giấy tờ hợp pháp về đất đai (Giấy chứng nhận quyền sử dụng đất/hợp đồng thuê đất/quyết định giao đất)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": []
+    },
+    {
+      "code": "ban_ve_thiet_ke_xay_dung",
+      "name": "Bản vẽ thiết kế xây dựng (mặt bằng, mặt đứng, mặt cắt, móng)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": [],
+      "notes": "Số lượng bộ theo hướng dẫn của UBND cấp xã nơi tiếp nhận hồ sơ."
+    },
+    {
+      "code": "van_ban_y_kien_van_hoa",
+      "name": "Ý kiến bằng văn bản của cơ quan quản lý văn hóa cấp tỉnh",
+      "condition": "answers.cong_trinh_lien_quan_di_tich == true",
+      "condition_label": "Áp dụng khi công trình liên quan đến khu vực bảo vệ di tích/di sản văn hóa",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": []
+    },
+    {
+      "code": "giay_chung_nhan_tham_duyet_pccc",
+      "name": "Giấy chứng nhận thẩm duyệt thiết kế phòng cháy chữa cháy",
+      "condition": "answers.cong_trinh_yeu_cau_pccc == true",
+      "condition_label": "Áp dụng khi công trình thuộc diện phải thẩm duyệt PCCC",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": []
+    }
+  ],
+  "form_templates": [
+    {
+      "id": "MAU-01-PL-II-ND-217-2026-GPXD",
+      "name": "Đơn đề nghị cấp giấy phép xây dựng",
+      "fields": [
+        {"key": "ho_ten_chu_dau_tu", "label": "Họ tên/Tên tổ chức đề nghị cấp phép", "type": "text", "required": true},
+        {"key": "so_cccd_chu_dau_tu", "label": "Số CCCD/hộ chiếu (cá nhân) hoặc mã số doanh nghiệp (tổ chức)", "type": "text", "required": true},
+        {"key": "dia_chi_lien_he", "label": "Địa chỉ liên hệ", "type": "text", "required": true},
+        {"key": "dia_diem_xay_dung", "label": "Địa điểm xây dựng", "type": "text", "required": true},
+        {"key": "so_to_ban_do", "label": "Thửa đất số, tờ bản đồ số", "type": "text", "required": true},
+        {"key": "dien_tich_xay_dung_tang_1", "label": "Diện tích xây dựng tầng 1 (m²)", "type": "number", "required": true},
+        {"key": "tong_dien_tich_san", "label": "Tổng diện tích sàn (m²)", "type": "number", "required": true},
+        {"key": "chieu_cao_cong_trinh", "label": "Chiều cao công trình (m)", "type": "number", "required": true},
+        {"key": "so_tang", "label": "Số tầng", "type": "number", "required": true},
+        {"key": "don_vi_thiet_ke", "label": "Đơn vị hoặc cá nhân thiết kế (nếu có)", "type": "text", "required": false}
+      ]
+    }
+  ],
+  "source_url": "https://dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-hanh-chinh.html?ma_thu_tuc=1.007262"
+}

@@ -4,7 +4,7 @@ The deployment runs this module as a separate process. Jobs are claimed with
 row locks so multiple workers can run safely without Redis.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from uuid import uuid4
 
 from sqlalchemy import select, update
@@ -29,7 +29,7 @@ async def claim_one(database: AsyncDatabase) -> BackgroundJobORM | None:
             return None
         job.status = "processing"
         job.attempts += 1
-        job.locked_at = datetime.now(timezone.utc)
+        job.locked_at = datetime.now(UTC)
         await session.commit()
         return job
 

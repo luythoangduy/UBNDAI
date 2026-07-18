@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 
@@ -21,7 +21,7 @@ def _raw(body: bytes, url: str = "https://dichvucong.gov.vn/detail?ma_thu_tuc=1.
         url=url,
         content_type="text/html",
         body=body,
-        retrieved_at=datetime.now(timezone.utc),
+        retrieved_at=datetime.now(UTC),
         checksum=f"sha256:{hashlib.sha256(body).hexdigest()}",
     )
 

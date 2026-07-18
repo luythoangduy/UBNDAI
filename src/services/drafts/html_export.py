@@ -77,24 +77,23 @@ def _parse_runs(paragraph, html_content: str) -> None:
                 font_size_stack.pop()
         elif token_lower in ("<br>", "<br/>", "<br />"):
             paragraph.add_run("\n")
-        elif not token.startswith("<"):
-            if token:
-                text = (
-                    token.replace("&nbsp;", " ")
-                    .replace("&lt;", "<")
-                    .replace("&gt;", ">")
-                    .replace("&quot;", '"')
-                    .replace("&amp;", "&")
-                )
-                run = paragraph.add_run(text)
-                run.bold = bold
-                run.italic = italic
-                run.underline = underline
-                active_font_size = next(
-                    (size for size in reversed(font_size_stack) if size), None
-                )
-                if active_font_size:
-                    run.font.size = Pt(active_font_size)
+        elif token and not token.startswith("<"):
+            text = (
+                token.replace("&nbsp;", " ")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", '"')
+                .replace("&amp;", "&")
+            )
+            run = paragraph.add_run(text)
+            run.bold = bold
+            run.italic = italic
+            run.underline = underline
+            active_font_size = next(
+                (size for size in reversed(font_size_stack) if size), None
+            )
+            if active_font_size:
+                run.font.size = Pt(active_font_size)
 
 
 def export_html_docx(request: DraftHtmlExportRequest) -> bytes:

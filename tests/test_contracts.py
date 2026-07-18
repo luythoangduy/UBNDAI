@@ -2,7 +2,7 @@
 
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
@@ -59,7 +59,7 @@ def test_extracted_document_field_map():
         doc_type_confidence=0.99,
         fields=[ExtractedField(key="ho_ten", value="Nguyễn Văn A", confidence=0.97)],
         ocr_engine="paddleocr",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     assert doc.field_map() == {"cccd.ho_ten": "Nguyễn Văn A"}
 

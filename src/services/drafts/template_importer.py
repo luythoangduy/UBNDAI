@@ -142,23 +142,22 @@ async def _download(url: str) -> tuple[bytes, str]:
         async with httpx.AsyncClient(
             timeout=settings.official_source_timeout_s,
             follow_redirects=False,
-        ) as client:
-            async with client.stream(
-                "GET", url, headers={"User-Agent": "TTHC-Assist/0.1 template-import"}
-            ) as response:
-                response.raise_for_status()
-                media_type = response.headers.get("content-type", "").split(";", 1)[0]
-                if media_type not in _ALLOWED_MEDIA_TYPES:
-                    raise TemplateImportError(
-                        "Searched template must be a JPEG, PNG or PDF file"
-                    )
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > _MAX_TEMPLATE_BYTES:
-                        raise TemplateImportError("Searched template exceeds 10 MB")
-                    chunks.append(chunk)
+        ) as client, client.stream(
+            "GET", url, headers={"User-Agent": "TTHC-Assist/0.1 template-import"}
+        ) as response:
+            response.raise_for_status()
+            media_type = response.headers.get("content-type", "").split(";", 1)[0]
+            if media_type not in _ALLOWED_MEDIA_TYPES:
+                raise TemplateImportError(
+                    "Searched template must be a JPEG, PNG or PDF file"
+                )
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > _MAX_TEMPLATE_BYTES:
+                    raise TemplateImportError("Searched template exceeds 10 MB")
+                chunks.append(chunk)
     except TemplateImportError:
         raise
     except httpx.HTTPError as exc:

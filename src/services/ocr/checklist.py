@@ -9,6 +9,17 @@ from __future__ import annotations
 from src.models import Case, ChecklistItem, ExtractedDocument, Procedure
 
 
+def status_after_document(doc_type: str, needs_human_review: bool) -> str:
+    return "uncertain" if needs_human_review else "uploaded"
+
+
+def codes_satisfied_by(procedure: Procedure, doc_type: str) -> set[str]:
+    """Các requirement code mà một giấy tờ ``doc_type`` này đáp ứng."""
+    return {
+        req.code for req in procedure.requirements if doc_type in req.accepted_doc_types
+    }
+
+
 def apply_document_to_checklist(
     case: Case, procedure: Procedure, document: ExtractedDocument
 ) -> list[ChecklistItem]:
@@ -18,15 +29,12 @@ def apply_document_to_checklist(
       ``uncertain`` nếu OCR đánh dấu needs_human_review) + gắn document_id.
     - Item đã ``verified`` giữ nguyên (rule engine đã xác nhận, OCR lại không hạ cấp).
     """
-    accepted_by_code = {
-        req.code: set(req.accepted_doc_types) for req in procedure.requirements
-    }
-    new_status = "uncertain" if document.needs_human_review else "uploaded"
+    satisfied = codes_satisfied_by(procedure, document.doc_type)
+    new_status = status_after_document(document.doc_type, document.needs_human_review)
 
     updated: list[ChecklistItem] = []
     for item in case.checklist:
-        accepted = accepted_by_code.get(item.requirement_code, set())
-        if document.doc_type in accepted and item.status != "verified":
+        if item.requirement_code in satisfied and item.status != "verified":
             updated.append(
                 item.model_copy(
                     update={"status": new_status, "document_id": document.id}
@@ -35,3 +43,23 @@ def apply_document_to_checklist(
         else:
             updated.append(item.model_copy())
     return updated
+
+
+def apply_document_to_checklist_map(
+    checklist: dict[str, str], procedure: Procedure, doc_type: str, needs_human_review: bool
+) -> dict[str, str]:
+    """Bản dict-shaped của ``apply_document_to_checklist`` cho ApplicationCase.checklist."""
+    satisfied = codes_satisfied_by(procedure, doc_type)
+    new_status = status_after_document(doc_type, needs_human_review)
+    return {
+        code: (
+            new_status
+            if code in satisfied and status != "verified"
+            else status
+        )
+        for code, status in checklist.items()
+    } | {
+        code: new_status
+        for code in satisfied
+        if code not in checklist
+    }

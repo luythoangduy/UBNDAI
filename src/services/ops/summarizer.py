@@ -1,6 +1,6 @@
 """Grounded deterministic summaries for the local P0 operations view."""
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from src.models import CaseSummary, DailyDigest
 from src.services import cases
@@ -11,7 +11,7 @@ async def summarize_case(case_id: str) -> CaseSummary:
     open_issues = [item.note or item.requirement_code for item in case.checklist if item.status in {"missing", "uncertain"}]
     procedure = case.procedure_id or "chưa xác định thủ tục"
     summary = f"Hồ sơ {procedure}, trạng thái {case.status}, mức sẵn sàng {case.readiness_score:.0%}."
-    return CaseSummary(case_id=case.id, summary=summary, open_issues=open_issues, generated_at=datetime.now(timezone.utc))
+    return CaseSummary(case_id=case.id, summary=summary, open_issues=open_issues, generated_at=datetime.now(UTC))
 
 
 async def daily_digest(officer_id: str, date: str) -> DailyDigest:

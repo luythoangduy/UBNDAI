@@ -7,9 +7,9 @@ import sqlite3
 import threading
 import uuid
 from contextlib import asynccontextmanager, closing
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from src.config import settings
 from src.models import Case, CaseCreate, CaseUpdate
@@ -50,7 +50,7 @@ async def case_lock(case_id: str) -> AsyncIterator[None]:
 
 
 async def create(payload: CaseCreate) -> Case:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     case = Case(
         id=uuid.uuid4().hex,
         citizen_id=payload.citizen_id,
@@ -95,7 +95,7 @@ async def save(case: Case) -> Case:
     """Persist Case bằng optimistic locking; version tăng đúng một đơn vị."""
     updated = case.model_copy(
         update={
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
             "version": case.version + 1,
         }
     )
@@ -107,7 +107,7 @@ async def commit_turn(case: Case, user_message: str, assistant_message: str) -> 
     """Atomic: cập nhật case và append cả user/assistant message."""
     updated = case.model_copy(
         update={
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
             "version": case.version + 1,
         }
     )
@@ -178,7 +178,7 @@ def _commit_turn_sync(
             )
             if cursor.rowcount != 1:
                 raise ConcurrentCaseUpdateError(case.id)
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             connection.executemany(
                 "INSERT INTO case_messages (case_id, role, content, created_at) "
                 "VALUES (?, ?, ?, ?)",
@@ -197,7 +197,7 @@ def _append_message_sync(case_id: str, role: str, content: str) -> None:
     with closing(_connect()) as connection, connection:
         connection.execute(
             "INSERT INTO case_messages (case_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-            (case_id, role, content, datetime.now(timezone.utc).isoformat()),
+            (case_id, role, content, datetime.now(UTC).isoformat()),
         )
 
 

@@ -7,7 +7,7 @@ import hashlib
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -180,7 +180,7 @@ class DvcNationalConnector(ProcedureConnector):
                     url=str(response.url),
                     content_type=response.headers.get("content-type", "application/octet-stream").split(";", 1)[0],
                     body=body,
-                    retrieved_at=datetime.now(timezone.utc),
+                    retrieved_at=datetime.now(UTC),
                     checksum=f"sha256:{hashlib.sha256(body).hexdigest()}",
                 )
             raise ValueError("Nguồn redirect quá nhiều lần")

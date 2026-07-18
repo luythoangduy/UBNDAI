@@ -4,7 +4,7 @@ Signature/JWKS verification belongs to the OIDC client callback; this module
 validates the verified claims before mapping them into application identities.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from src.config import settings
@@ -25,7 +25,7 @@ def validate_claims(claims: dict[str, Any]) -> dict[str, Any]:
         raise OIDCValidationError("Invalid OIDC audience")
     if not claims.get("sub"):
         raise OIDCValidationError("OIDC subject is required")
-    if int(claims.get("exp", 0)) <= int(datetime.now(timezone.utc).timestamp()):
+    if int(claims.get("exp", 0)) <= int(datetime.now(UTC).timestamp()):
         raise OIDCValidationError("OIDC token expired")
     if settings.oidc_required_mfa_claim == "amr:mfa" and "mfa" not in set(claims.get("amr", [])):
         raise OIDCValidationError("MFA claim is required")

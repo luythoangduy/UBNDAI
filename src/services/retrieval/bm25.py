@@ -81,7 +81,7 @@ class Bm25Index:
         )
 
     @classmethod
-    def load(cls, path: Path | str) -> "Bm25Index":
+    def load(cls, path: Path | str) -> Bm25Index:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         chunks = [
             RetrievedChunk(content=item["content"], metadata=item.get("metadata", {}))

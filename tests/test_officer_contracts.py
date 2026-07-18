@@ -1,6 +1,6 @@
 """Contract guards for the versioned officer-review workflow."""
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 from pydantic import ValidationError
@@ -16,7 +16,7 @@ from src.models import (
     ValidationFinding,
 )
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 def test_application_case_accepts_canonical_officer_status_and_lock_version():

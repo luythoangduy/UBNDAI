@@ -179,7 +179,7 @@ async def test_paddle_fallback_flags_low_confidence(monkeypatch):
     monkeypatch.setattr(pipeline.settings, "ocr_engine", "paddleocr")
 
     document = await pipeline.process(
-        "case_1", "document.png", "CCCD\nNguyen Van A".encode()
+        "case_1", "document.png", b"CCCD\nNguyen Van A"
     )
 
     assert document.doc_type == "cccd"

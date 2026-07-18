@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from fastapi.testclient import TestClient
 
@@ -87,7 +87,7 @@ def test_officer_detail_contains_authorized_case_documents():
         content_type="application/pdf",
         size_bytes=2048,
         ocr_status="ready",
-        uploaded_at=datetime.now(timezone.utc),
+        uploaded_at=datetime.now(UTC),
     )
     store.documents[document.id] = document
     try:
@@ -128,7 +128,7 @@ def test_officer_can_read_and_edit_extracted_field_then_rerun_validation():
         content_type="image/png",
         size_bytes=1024,
         ocr_status="manual_review_required",
-        uploaded_at=datetime.now(timezone.utc),
+        uploaded_at=datetime.now(UTC),
     )
     field = ExtractedFieldRecord(
         id="field-review-name",

@@ -1,6 +1,6 @@
 """Thin FastAPI routes for the officer portal."""
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
@@ -132,10 +132,10 @@ async def list_applications(
     if assigned_to:
         items = [item for item in items if item.assigned_to == assigned_to]
     if submitted_from:
-        lower = datetime.combine(submitted_from, time.min, timezone.utc)
+        lower = datetime.combine(submitted_from, time.min, UTC)
         items = [item for item in items if (item.submitted_at or item.created_at) >= lower]
     if submitted_to:
-        upper = datetime.combine(submitted_to, time.max, timezone.utc)
+        upper = datetime.combine(submitted_to, time.max, UTC)
         items = [item for item in items if (item.submitted_at or item.created_at) <= upper]
     if has_anomaly is not None or severity:
         filtered = []

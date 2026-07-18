@@ -5,7 +5,7 @@ one public case id and an authenticated citizen projection. This keeps the
 chat checklist, document intake and officer review in one demo journey.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from src.models import Case, ChecklistItem
 from src.services import cases
@@ -39,7 +39,7 @@ async def resolve_case_id(case_id: str | None, citizen_id: str | None) -> str:
         ChecklistItem(requirement_code=code, status=status)
         for code, status in portal_case.checklist.items()
     ]
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     legacy_case = Case(
         id=portal_case.id,
         citizen_id=citizen_id,

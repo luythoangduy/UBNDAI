@@ -1,6 +1,6 @@
 """Deterministic local-P0 assignment for legacy cases."""
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from src.models import Assignment, CaseUpdate
 from src.services import cases
@@ -17,7 +17,7 @@ async def auto_assign(case_id: str) -> Assignment:
     return Assignment(
         case_id=case_id,
         officer_id=officer_id,
-        assigned_at=datetime.now(timezone.utc),
+        assigned_at=datetime.now(UTC),
         reason="local_p0:default_officer;uncertain_items_first",
         priority=priority,
     )

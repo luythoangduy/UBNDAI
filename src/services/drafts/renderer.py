@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, UTC
 from typing import Any
 from uuid import uuid4
 
@@ -57,7 +57,7 @@ def generate(payload: DraftGenerateRequest) -> GeneratedDraft:
         warnings=warnings,
         legal_sources=template.legal_sources,
         disclaimer=template.disclaimer,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
     )
 
 

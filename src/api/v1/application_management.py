@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, UTC
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -123,8 +123,8 @@ def _period(from_date: date | None, to_date: date | None, timezone_name: str):
 
 def _filtered_cases(claims, from_date, to_date, timezone_name):
     start, end, zone = _period(from_date, to_date, timezone_name)
-    lower = datetime.combine(start, time.min, zone).astimezone(timezone.utc)
-    upper = datetime.combine(end + timedelta(days=1), time.min, zone).astimezone(timezone.utc)
+    lower = datetime.combine(start, time.min, zone).astimezone(UTC)
+    upper = datetime.combine(end + timedelta(days=1), time.min, zone).astimezone(UTC)
     cases = [item for item in store.list_cases(claims.organization_id) if lower <= (item.submitted_at or item.created_at) < upper]
     return cases, start, end, zone
 

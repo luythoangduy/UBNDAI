@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
-from typing import Callable
+from collections.abc import Callable
 
 from docx import Document
 from docx.document import Document as DocxDocument

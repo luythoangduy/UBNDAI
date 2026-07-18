@@ -1,7 +1,7 @@
 """Repository-like in-memory officer workflow store for local P0/demo."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from hashlib import sha256
 from pathlib import Path
 from threading import RLock
@@ -23,6 +23,7 @@ from src.config import settings
 from src.services import catalog
 from src.services.application_repository import ApplicationFilters, ApplicationRepository, RepositoryNotFound
 from src.services.checklist import build_checklist
+from src.services.ocr.checklist import apply_document_to_checklist_map
 from src.services.persistence import (
     ApplicationCaseORM,
     AuditEventORM,
@@ -38,7 +39,7 @@ from src.services.storage import storage
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class OfficerStore:
@@ -531,18 +532,12 @@ class OfficerStore:
     def _checklist_after_document(
         case: ApplicationCase, document_type: str, needs_human_review: bool
     ) -> dict[str, str]:
-        """Giấy tờ có doc_type khớp accepted_doc_types của catalog → item 'uploaded'
-        (hoặc 'uncertain' nếu cần cán bộ xác nhận). Item đã 'verified' giữ nguyên —
-        mirrors src/services/ocr/checklist.py cho model ApplicationCase (dict)."""
         procedure = catalog.get_procedure(case.procedure_id)
         if procedure is None:
             return case.checklist
-        new_status = "uncertain" if needs_human_review else "uploaded"
-        updated = dict(case.checklist)
-        for requirement in procedure.requirements:
-            if document_type in requirement.accepted_doc_types and updated.get(requirement.code) != "verified":
-                updated[requirement.code] = new_status
-        return updated
+        return apply_document_to_checklist_map(
+            case.checklist, procedure, document_type, needs_human_review
+        )
 
     def submit_citizen_case(self, case_id: str, citizen_id: str, expected_version: int, consent_version: str, idempotency_key: str) -> dict:
         cache_key = (citizen_id, idempotency_key)

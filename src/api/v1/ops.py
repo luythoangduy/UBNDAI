@@ -1,6 +1,6 @@
 """Legacy operations endpoints backed by deterministic local-P0 services."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -52,7 +52,7 @@ async def metrics(metric: str, days: int = Query(default=14, ge=1, le=90)) -> li
     if metric not in {"error_rate", "late_rate", "volume", "avg_readiness"}:
         raise HTTPException(status_code=422, detail="Unsupported metric")
     all_cases = await cases.list_all()
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     points: list[MetricPoint] = []
     for offset in range(days - 1, -1, -1):
         bucket = today - timedelta(days=offset)
@@ -62,7 +62,7 @@ async def metrics(metric: str, days: int = Query(default=14, ge=1, le=90)) -> li
         elif metric == "avg_readiness":
             value = sum(case.readiness_score for case in bucket_cases) / len(bucket_cases) if bucket_cases else 0.0
         elif metric == "late_rate":
-            value = sum(bool(case.due_at and case.due_at < datetime.now(timezone.utc) and case.status not in {"done", "rejected"}) for case in bucket_cases) / len(bucket_cases) if bucket_cases else 0.0
+            value = sum(bool(case.due_at and case.due_at < datetime.now(UTC) and case.status not in {"done", "rejected"}) for case in bucket_cases) / len(bucket_cases) if bucket_cases else 0.0
         else:
             value = sum(any(item.status in {"missing", "uncertain"} for item in case.checklist) for case in bucket_cases) / len(bucket_cases) if bucket_cases else 0.0
         points.append(MetricPoint(metric=metric, value=value, bucket_start=bucket))

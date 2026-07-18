@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 import re
 import unicodedata
-from typing import Any, Iterable, Mapping
+from typing import Any
+from collections.abc import Iterable, Mapping
 
 
 @dataclass(frozen=True)

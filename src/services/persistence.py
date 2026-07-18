@@ -7,8 +7,9 @@ same schema can be exercised with SQLite in tests and deployed on PostgreSQL.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Iterator
+from datetime import datetime, UTC
+from typing import Any
+from collections.abc import Iterator
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, event, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -16,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:

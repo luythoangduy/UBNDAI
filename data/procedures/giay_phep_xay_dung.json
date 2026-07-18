@@ -1,13 +1,14 @@
 {
   "id": "giay_phep_xay_dung",
-  "national_code": "1.007262",
-  "name": "Cấp giấy phép xây dựng đối với công trình, nhà ở riêng lẻ",
+  "national_code": "1.013225",
+  "name": "Cấp giấy phép xây dựng mới đối với công trình cấp III, cấp IV và nhà ở riêng lẻ",
   "aliases": [
     "xin giấy phép xây dựng",
     "làm giấy phép xây dựng nhà ở",
     "cấp phép xây nhà",
     "xin phép xây nhà",
-    "giấy phép xây dựng nhà ở riêng lẻ"
+    "giấy phép xây dựng nhà ở riêng lẻ",
+    "Cấp giấy phép xây dựng mới đối với công trình cấp III, cấp IV (Công trình không theo tuyến/Theo tuyến trong đô thị/Tín ngưỡng, tôn giáo/Tượng đài, tranh hoành tráng/Theo giai đoạn cho công trình không theo tuyến/Theo giai đoạn cho công trình theo tuyến trong đô thị/Dự án) và nhà ở riêng lẻ"
   ],
   "example_queries": [
     "tôi muốn xin giấy phép xây dựng nhà ở",
@@ -26,17 +27,14 @@
   ],
   "agency": "UBND cấp xã",
   "legal_basis": [
-    "Luật Xây dựng số 135/2025/QH15",
-    "Nghị định 217/2026/NĐ-CP"
+    "Luật Xây dựng năm 2014",
+    "Nghị định 175/2024/NĐ-CP",
+    "Nghị định 105/2025/NĐ-CP",
+    "Nghị định 144/2025/NĐ-CP"
   ],
-  "processing_days": 7,
+  "processing_days": 15,
   "fee_vnd": null,
   "clarifying_questions": [
-    {
-      "key": "quy_mo_thuoc_dien_mien_phep",
-      "text": "Công trình có dưới 7 tầng, tổng diện tích sàn dưới 500m², và KHÔNG nằm trong khu đô thị mới/khu kinh tế/khu du lịch quốc gia hoặc khu vực có quy chế quản lý kiến trúc riêng không?",
-      "answer_type": "boolean"
-    },
     {
       "key": "cong_trinh_yeu_cau_pccc",
       "text": "Công trình có thuộc diện phải thẩm duyệt thiết kế phòng cháy chữa cháy không?",
@@ -51,29 +49,30 @@
   "requirements": [
     {
       "code": "don_de_nghi_cap_phep",
-      "name": "Đơn đề nghị cấp giấy phép xây dựng (theo Mẫu số 01 Phụ lục II, Nghị định 217/2026/NĐ-CP)",
+      "name": "Đơn đề nghị cấp giấy phép xây dựng (theo Mẫu số 1 Phụ lục II, Nghị định 175/2024/NĐ-CP)",
       "condition": null,
       "original_required": true,
       "copies": 0,
       "accepted_doc_types": ["don_de_nghi_cap_phep"],
-      "notes": "Từ 01/7/2026, nhà ở riêng lẻ dưới 7 tầng, tổng diện tích sàn dưới 500m² và không thuộc khu vực đặc thù có thể được MIỄN giấy phép xây dựng theo Luật Xây dựng 2025 — hãy xác nhận với UBND cấp xã trước khi nộp hồ sơ nếu công trình của bạn thuộc diện này."
+      "notes": "Bản chính: 1 — Bản sao: 1. Tệp mẫu do Cổng DVC công bố: Mau01PLII.docx."
     },
     {
       "code": "giay_to_quyen_su_dung_dat",
-      "name": "Giấy tờ hợp pháp về đất đai (Giấy chứng nhận quyền sử dụng đất/hợp đồng thuê đất/quyết định giao đất)",
+      "name": "Một trong những giấy tờ hợp pháp về đất đai chứng minh sự phù hợp mục đích sử dụng đất và sở hữu công trình",
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_to_quyen_su_dung_dat"]
+      "accepted_doc_types": ["giay_to_quyen_su_dung_dat"],
+      "notes": "Danh mục giấy tờ được chấp nhận quy định tại Điều 53 Nghị định 175/2024/NĐ-CP (gồm Giấy chứng nhận quyền sử dụng đất qua các thời kỳ, hoặc giấy tờ đủ điều kiện cấp giấy chứng nhận theo Điều 137 Luật Đất đai 2024)."
     },
     {
       "code": "ban_ve_thiet_ke_xay_dung",
-      "name": "Bản vẽ thiết kế xây dựng (mặt bằng, mặt đứng, mặt cắt, móng)",
+      "name": "Hồ sơ thiết kế xây dựng (bản vẽ mặt bằng, mặt đứng, mặt cắt, móng)",
       "condition": null,
       "original_required": true,
       "copies": 0,
       "accepted_doc_types": ["ban_ve_thiet_ke_xay_dung"],
-      "notes": "Kèm sơ đồ đấu nối hạ tầng kỹ thuật (cấp nước, thoát nước, cấp điện) và bản cam kết bảo đảm an toàn đối với công trình liền kề (Điều 60 Nghị định 217/2026/NĐ-CP). Số lượng bộ theo hướng dẫn của UBND cấp xã nơi tiếp nhận."
+      "notes": "Đối với nhà ở riêng lẻ của hộ gia đình, cá nhân: 02 bộ bản vẽ thiết kế xây dựng kèm theo."
     },
     {
       "code": "van_ban_y_kien_van_hoa",
@@ -82,7 +81,8 @@
       "condition_label": "Áp dụng khi công trình liên quan đến khu vực bảo vệ di tích/di sản văn hóa",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["van_ban_y_kien_van_hoa"]
+      "accepted_doc_types": ["van_ban_y_kien_van_hoa"],
+      "notes": "Không thuộc danh mục thành phần hồ sơ cơ bản của mục (1.7) nhà ở riêng lẻ; phát sinh theo yêu cầu, điều kiện thực hiện của thủ tục. Đề nghị xác nhận với UBND cấp xã nơi tiếp nhận."
     },
     {
       "code": "giay_chung_nhan_tham_duyet_pccc",
@@ -91,12 +91,13 @@
       "condition_label": "Áp dụng khi công trình thuộc diện phải thẩm duyệt PCCC",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_chung_nhan_tham_duyet_pccc"]
+      "accepted_doc_types": ["giay_chung_nhan_tham_duyet_pccc"],
+      "notes": "Không thuộc danh mục thành phần hồ sơ cơ bản của mục (1.7) nhà ở riêng lẻ; bắt nguồn từ yêu cầu bảo đảm an toàn phòng, chống cháy, nổ trong phần Yêu cầu, điều kiện thực hiện."
     }
   ],
   "form_templates": [
     {
-      "id": "MAU-01-PL-II-ND-217-2026-GPXD",
+      "id": "MAU-01-PL-II-ND-175-2024-GPXD",
       "name": "Đơn đề nghị cấp giấy phép xây dựng",
       "fields": [
         {"key": "ho_ten_chu_dau_tu", "label": "Họ tên/Tên tổ chức đề nghị cấp phép", "type": "text", "required": true},
@@ -112,5 +113,5 @@
       ]
     }
   ],
-  "source_url": "https://vpcp.dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-dung-chung.html?ma_thu_tuc=1.007262"
+  "source_url": "https://vpcp.dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-dung-chung.html?ma_thu_tuc=1.013225"
 }

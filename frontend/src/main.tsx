@@ -719,32 +719,6 @@ function CitizenPortal() {
 
            {(started || current) && (
               <div className="editor-container">
-                 <aside className="checklist-panel">
-                   {!current ? (
-                     <div className="sidebar-block">
-                       <h3>Đang khởi tạo...</h3>
-                       <div className="skeleton-loader"><div className="skeleton-line"></div></div>
-                     </div>
-                   ) : (
-                     <div className="checklist-display">
-                       <h3>Danh sách giấy tờ cần thiết</h3>
-                       {Object.keys(current.checklist ?? {}).length ? (
-                         <ul className="checklist-items">
-                           {Object.entries(current.checklist ?? {}).map(([key, status]) => (
-                             <li key={key} className={`checklist-item ${status}`}>
-                               <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
-                               <div className="check-text">
-                                 <strong>{humanizeStatus(key)}</strong>
-                                 <small>{humanizeStatus(String(status))}</small>
-                               </div>
-                             </li>
-                           ))}
-                         </ul>
-                       ) : <p className="muted">Thủ tục này chưa khai báo danh sách giấy tờ.</p>}
-                     </div>
-                   )}
-                 </aside>
-
                  <div className="editor-main">
                     {ocrPhase !== 'idle' && ocrPhase !== 'ready' ? (
                       <div className="ocr-studio">
@@ -794,6 +768,23 @@ function CitizenPortal() {
                             <label key={field.key}>{field.label}{field.required ? ' *' : ''}<input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)} placeholder="Chưa có dữ liệu"/></label>
                           ))}
                         </details>
+
+                       {Object.keys(current.checklist ?? {}).length > 0 && (
+                         <div className="checklist-display">
+                           <h3>Danh sách giấy tờ cần thiết</h3>
+                           <ul className="checklist-items">
+                             {Object.entries(current.checklist ?? {}).map(([key, status]) => (
+                               <li key={key} className={`checklist-item ${status}`}>
+                                 <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
+                                 <div className="check-text">
+                                   <strong>{humanizeStatus(key)}</strong>
+                                   <small>{humanizeStatus(String(status))}</small>
+                                 </div>
+                               </li>
+                             ))}
+                           </ul>
+                         </div>
+                       )}
 
                        {ocrPhase === 'ready' && prepSteps.length > 0 && (
                          <div className="sidebar-doc">

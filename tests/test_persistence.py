@@ -3,13 +3,16 @@ from sqlalchemy import select
 from src.services.persistence import (
     ApplicationCaseORM,
     AuditEventORM,
+    ApplicationCaseDecisionORM,
     BackgroundJobORM,
     CaseDocumentORM,
     CaseRepository,
+    ExtractedFieldRecordORM,
     ConsentRecordORM,
     NotificationEventORM,
     RoutingDecisionORM,
     SubmissionVersionORM,
+    ValidationFindingORM,
     create_sqlite_database,
 )
 
@@ -35,10 +38,12 @@ def test_sqlite_schema_and_case_repository():
 def test_versioned_related_records_and_json_columns():
     db = create_sqlite_database()
     with db.session() as session:
+        session.add(ApplicationCaseORM(id="c", case_code="C", organization_id="o", citizen_id="u", procedure_id="p", procedure_version_id="pv"))
+        session.flush()
+        session.add(SubmissionVersionORM(id="sv", case_id="c", version=1, form_data={"name": "A"}, checklist_snapshot={"x": "ok"}, procedure_version_id="pv", procedure_rule_version="r1", created_by="u"))
+        session.flush()
         session.add_all(
             [
-                ApplicationCaseORM(id="c", case_code="C", organization_id="o", citizen_id="u", procedure_id="p", procedure_version_id="pv"),
-                SubmissionVersionORM(id="sv", case_id="c", version=1, form_data={"name": "A"}, checklist_snapshot={"x": "ok"}, procedure_version_id="pv", procedure_rule_version="r1", created_by="u"),
                 CaseDocumentORM(id="d", case_id="c", submission_version_id="sv", document_type="cccd", object_key="private/c/d", original_filename="id.pdf", content_type="application/pdf", size_bytes=10, sha256="a" * 64),
                 AuditEventORM(id="a", case_id="c", actor_id="u", organization_id="o", event_type="created", object_type="case", object_id="c", metadata_={"source": "test"}),
                 RoutingDecisionORM(id="rd", case_id="c", submission_version_id="sv", procedure_id="p", procedure_version_id="pv", locality_code="01", organization_id="o", matched_rule="r"),
@@ -60,3 +65,22 @@ def test_case_repository_organization_scope():
         ])
         session.commit()
         assert [c.id for c in CaseRepository(session).list_for_organization("org-a")] == ["a"]
+
+
+def test_application_review_records_are_persistable_and_version_scoped():
+    db = create_sqlite_database()
+    with db.session() as session:
+        session.add(ApplicationCaseORM(id="c", case_code="C", organization_id="o", citizen_id="u", procedure_id="p", procedure_version_id="pv"))
+        session.flush()
+        session.add(SubmissionVersionORM(id="sv", case_id="c", version=1, procedure_version_id="pv", procedure_rule_version="r1"))
+        session.flush()
+        session.add(CaseDocumentORM(id="d", case_id="c", submission_version_id="sv", document_type="cccd", object_key="private/c/d", original_filename="id.pdf", content_type="application/pdf", size_bytes=10, sha256="a" * 64))
+        session.flush()
+        session.add_all([
+            ExtractedFieldRecordORM(id="field", document_id="d", field_key="citizen_id", raw_value="012345678901", confidence=1.0),
+            ValidationFindingORM(id="finding", case_id="c", submission_version_id="sv", type="missing_required_field", severity="warning", source="rule", message="Missing field"),
+            ApplicationCaseDecisionORM(id="decision", case_id="c", submission_version_id="sv", officer_id="officer", decision="CONTINUE_PROCESSING", note="Đã đối chiếu hồ sơ.", selected_finding_ids=[], previous_status="awaiting_officer_review", new_status="in_officer_review", expected_version=1, idempotency_key="idem-1"),
+        ])
+        session.commit()
+        assert session.get(ValidationFindingORM, "finding").submission_version_id == "sv"
+        assert session.get(ApplicationCaseDecisionORM, "decision").decision == "CONTINUE_PROCESSING"

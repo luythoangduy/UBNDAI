@@ -76,6 +76,12 @@ from src.models.officer import (
     TokenClaims,
     ValidationFinding,
 )
+from src.models.application_management import (
+    ApplicationDecisionRequest,
+    ApplicationStatus,
+    DecisionType,
+    project_application_status,
+)
 
 __all__ = [
     "AnomalyAlert",
@@ -135,6 +141,10 @@ __all__ = [
     "SupplementRequest",
     "TokenClaims",
     "ValidationFinding",
+    "ApplicationDecisionRequest",
+    "ApplicationStatus",
+    "DecisionType",
+    "project_application_status",
     "CitizenCaseCreate",
     "CitizenCaseUpdate",
     "CitizenSubmitRequest",

@@ -1,10 +1,13 @@
 """Thin FastAPI routes for the officer portal."""
 
+from datetime import date, datetime, time, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.models import TokenClaims
+from src.models.application_management import ApplicationDecisionRequest, project_application_status
 from src.services.auth import issue_token, require_role, verify_credentials
 from src.services.officer_store import store
 from src.services.storage import StorageError, storage
@@ -27,6 +30,30 @@ def _masked_document(document):
     payload.pop("file_uri", None)
     payload.pop("object_key", None)
     return payload
+
+
+def _application_summary(case, claims: TokenClaims) -> dict:
+    findings = store.findings_for(case.id, claims.organization_id)
+    projected = project_application_status(case.status, has_caution=bool(findings))
+    return {
+        "id": case.id,
+        "application_code": case.case_code,
+        "case_code": case.case_code,
+        "citizen_name": case.form_data.get("ho_ten_con") or case.form_data.get("citizen_name"),
+        "citizen_id": "***",
+        "application_type_code": case.procedure_id,
+        "application_type_name": case.procedure_id,
+        "classification_confidence": None,
+        "status": projected,
+        "application_status": projected,
+        "internal_status": case.status,
+        "anomaly_count": len(findings),
+        "assigned_officer_name": case.assigned_to,
+        "submitted_at": case.submitted_at,
+        "created_at": case.created_at,
+        "updated_at": case.updated_at,
+        "version": case.version,
+    }
 
 
 def _assert_case_mutation(case_id: str, claims: TokenClaims) -> None:
@@ -59,6 +86,103 @@ class SupplementRequestPayload(BaseModel):
 class FieldEditRequest(BaseModel):
     normalized_value: str = Field(min_length=1, max_length=2000)
     reason: str = Field(min_length=3, max_length=1000)
+
+
+@router.get("/applications")
+async def list_applications(
+    q: str | None = Query(default=None, max_length=100),
+    application_status: str | None = Query(default=None, alias="status", max_length=64),
+    procedure_id: str | None = Query(default=None, max_length=100),
+    application_type_code: str | None = Query(default=None, max_length=100),
+    has_anomaly: bool | None = Query(default=None),
+    severity: str | None = Query(default=None, pattern="^(error|warning|info)$"),
+    assigned_to: str | None = Query(default=None, max_length=100),
+    assigned_officer_id: str | None = Query(default=None, max_length=100),
+    submitted_from: date | None = Query(default=None, alias="from"),
+    submitted_to: date | None = Query(default=None, alias="to"),
+    submitted_from_alt: date | None = Query(default=None, alias="submitted_from"),
+    submitted_to_alt: date | None = Query(default=None, alias="submitted_to"),
+    sort: str = Query(default="updated_desc", pattern="^(updated_desc|updated_asc|priority_desc)$"),
+    sort_by: str | None = Query(default=None, max_length=32),
+    sort_order: str | None = Query(default=None, pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor")),
+):
+    """Canonical application-management list; legacy /officer/cases remains supported."""
+    procedure_id = procedure_id or application_type_code
+    assigned_to = assigned_to or assigned_officer_id
+    submitted_from = submitted_from or submitted_from_alt
+    submitted_to = submitted_to or submitted_to_alt
+    if sort_by:
+        sort = "priority_desc" if sort_by == "priority" else ("updated_asc" if sort_order == "asc" else "updated_desc")
+    items = store.list_cases(claims.organization_id)
+    if q:
+        needle = q.casefold().strip()
+        items = [item for item in items if needle in item.case_code.casefold() or needle in item.procedure_id.casefold()]
+    if application_status:
+        items = [item for item in items if project_application_status(item.status, has_caution=bool(store.findings_for(item.id, claims.organization_id))) == application_status]
+    if procedure_id:
+        items = [item for item in items if item.procedure_id == procedure_id]
+    if assigned_to:
+        items = [item for item in items if item.assigned_to == assigned_to]
+    if submitted_from:
+        lower = datetime.combine(submitted_from, time.min, timezone.utc)
+        items = [item for item in items if (item.submitted_at or item.created_at) >= lower]
+    if submitted_to:
+        upper = datetime.combine(submitted_to, time.max, timezone.utc)
+        items = [item for item in items if (item.submitted_at or item.created_at) <= upper]
+    if has_anomaly is not None or severity:
+        filtered = []
+        for item in items:
+            findings = store.findings_for(item.id, claims.organization_id)
+            matches = [finding for finding in findings if not severity or finding.severity == severity]
+            if (has_anomaly is None and matches) or (has_anomaly is True and matches) or (has_anomaly is False and not matches):
+                filtered.append(item)
+        items = filtered
+    if sort == "priority_desc":
+        items.sort(key=lambda item: (item.priority, item.updated_at), reverse=True)
+    else:
+        items.sort(key=lambda item: item.updated_at, reverse=sort == "updated_desc")
+    total = len(items)
+    start = (page - 1) * page_size
+    return {"success": True, "data": [_application_summary(item, claims) for item in items[start:start + page_size]], "pagination": {"page": page, "page_size": page_size, "total": total}}
+
+
+@router.get("/applications/{application_id}")
+async def get_application(application_id: str, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    case = store.get_case(application_id, claims.organization_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    findings = store.findings_for(application_id, claims.organization_id)
+    summary = _application_summary(case, claims)
+    anomalies = [{**item.model_dump(mode="json"), "code": item.type, "severity": item.severity.upper(), "detected_by": item.source} for item in findings]
+    events = [item.model_dump(mode="json") for item in store.timeline(application_id, claims.organization_id)]
+    documents = [_masked_document(document) for document in store.documents.values() if document.case_id == application_id]
+    return {"success": True, "data": {**summary, "citizen_id": "***", "documents": documents, "extracted_fields": [], "anomalies": anomalies, "events": events, "form_data": case.form_data, "checklist": case.checklist, "application": {**_masked_case(case), "application_status": summary["application_status"]}, "findings": anomalies, "timeline": events}}
+
+
+@router.post("/applications/{application_id}/decisions")
+async def decide_application(application_id: str, payload: ApplicationDecisionRequest, claims: TokenClaims = Depends(require_role("officer_reviewer", "specialist", "supervisor"))):
+    case = store.get_case(application_id, claims.organization_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _assert_case_mutation(application_id, claims)
+    key = (application_id, payload.idempotency_key)
+    if key in store.idempotency_results:
+        return {"success": True, "data": store.idempotency_results[key], "idempotent": True}
+    if payload.expected_version != case.version:
+        raise HTTPException(status_code=409, detail="Application version has changed")
+    target = "in_officer_review" if payload.decision == "CONTINUE_PROCESSING" else "needs_citizen_update"
+    try:
+        updated = store.transition(application_id, claims.organization_id, claims.user_id, target, payload.note or payload.citizen_message)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Application not found")
+        result = {"application": {**_masked_case(updated), "application_status": project_application_status(updated.status, has_caution=bool(store.findings_for(application_id, claims.organization_id)))}, "decision": payload.decision}
+        store.idempotency_results[key] = result
+        return {"success": True, "data": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/auth/login")

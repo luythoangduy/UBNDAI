@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.v1 import router as v1_router
 from src.config import settings
@@ -21,7 +22,7 @@ if settings.app_env == "production" and (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    if settings.persistence_enabled:
+    if settings.persistence_enabled and settings.app_env != "production":
         database = create_async_database(settings.database_url)
         await database.create_schema()
         await database.engine.dispose()
@@ -46,6 +47,18 @@ async def security_headers(request: Request, call_next) -> Response:
     return response
 
 
+class SPAStaticFiles(StaticFiles):
+    """Serve index.html for client-side routes while preserving asset 404s."""
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404 and "." not in Path(path).name:
+                return await super().get_response("index.html", scope)
+            raise
+
+
 frontend_dir = Path(__file__).resolve().parents[1] / "frontend"
 frontend_dist = frontend_dir / "dist"
 if frontend_dist.exists():
@@ -54,18 +67,18 @@ if frontend_dist.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="portal-assets")
     app.mount(
         "/citizen",
-        StaticFiles(directory=frontend_dist, html=True),
+        SPAStaticFiles(directory=frontend_dist, html=True),
         name="citizen-portal",
     )
     app.mount(
         "/officer",
-        StaticFiles(directory=frontend_dist, html=True),
+        SPAStaticFiles(directory=frontend_dist, html=True),
         name="officer-portal",
     )
 elif frontend_dir.exists():
     app.mount(
         "/officer",
-        StaticFiles(directory=frontend_dir, html=True),
+        SPAStaticFiles(directory=frontend_dir, html=True),
         name="officer-portal",
     )
 

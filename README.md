@@ -259,3 +259,41 @@ planning/        # TEAM_PLAN.md — kế hoạch 3 người, sprint, contract fr
 | `ARCHITECTURE.md` | Kiến trúc, data flow, data model, bản đồ tái sử dụng từ C2-App-108 |
 | `AGENTS.md` | Quy tắc cho AI coding agent |
 | `planning/TEAM_PLAN.md` | Phân công 3 dev, sprint plan, integration checkpoint |
+
+## 8. Quản lý hồ sơ cho cán bộ
+
+Sau khi đăng nhập bằng tài khoản cán bộ, các màn hình mới nằm tại:
+
+- `/officer/` — dashboard tổng quan và phân bố trạng thái ngay trong cổng cán bộ.
+- `/officer/applications` — danh sách hồ sơ theo phạm vi đơn vị.
+- `/officer/applications/:applicationId` — chi tiết, cảnh báo và quyết định xử lý.
+
+API tương ứng dùng tiền tố `/api/v1/applications`. Các API cũ dưới
+`/api/v1/officer/cases` vẫn được giữ để tương thích. Trạng thái hiển thị được chiếu từ
+trạng thái nội bộ hiện hữu; dữ liệu lưu trữ không bị đổi tên hàng loạt.
+
+Migration `0002_add_application_management` chỉ thêm cột/bảng và có đường downgrade.
+Ở môi trường triển khai, chạy Alembic trước khi bật persistence; ứng dụng không được
+dùng `create_all` như một cơ chế migration production.
+
+### API và kiểm thử application management
+
+Các endpoint canonical nằm dưới `/api/v1/applications` và
+`/api/v1/officer-dashboard`; API `/api/v1/officer/cases` vẫn được giữ cho
+compatibility. Tài khoản demo development là `officer.demo` với mật khẩu lấy
+từ `DEMO_PASSWORD` (mặc định local là `ChangeMe123!`).
+
+Với môi trường đã cài dependency dev, chạy migration bằng:
+
+```bash
+alembic -c alembic.ini upgrade head
+python scripts/seed_application_demo_data.py
+```
+
+Không chạy `create_all` trong production. Sau migration, chạy:
+
+```bash
+python -m pytest -q
+python -m ruff check src tests
+cd frontend && npm.cmd test -- --pool=threads --maxWorkers=1 && npm.cmd run build
+```

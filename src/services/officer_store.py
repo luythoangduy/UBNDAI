@@ -20,7 +20,17 @@ from src.models import (
     ValidationFinding,
 )
 from src.config import settings
-from src.services.persistence import ApplicationCaseORM, AuditEventORM, CaseDocumentORM, Database, SubmissionVersionORM
+from src.services.persistence import (
+    ApplicationCaseORM,
+    AuditEventORM,
+    CaseDocumentORM,
+    Database,
+    ExtractedFieldRecordORM,
+    FindingDecisionORM,
+    SubmissionVersionORM,
+    SupplementRequestORM,
+    ValidationFindingORM,
+)
 from src.services.storage import storage
 
 
@@ -44,7 +54,8 @@ class OfficerStore:
         self.idempotency_results: dict[tuple[str, str], dict] = {}
         self._db = Database(settings.database_url) if settings.persistence_enabled else None
         if self._db:
-            self._db.create_schema()
+            if settings.app_env != "production":
+                self._db.create_schema()
             self._load_persisted_cases()
         self._seed()
 
@@ -54,6 +65,18 @@ class OfficerStore:
         with self._db.session() as session:
             for row in session.query(ApplicationCaseORM).all():
                 self.cases[row.id] = ApplicationCase(id=row.id, case_code=row.case_code, organization_id=row.organization_id, citizen_id=row.citizen_id, procedure_id=row.procedure_id, procedure_version_id=row.procedure_version_id, status=row.status, source_channel=row.source_channel, assigned_to=row.assigned_to, assigned_at=row.assigned_at, priority=row.priority, submitted_at=row.submitted_at, sla_due_at=row.sla_due_at, current_submission_version=row.current_submission_version, version=row.version, form_data=row.form_data or {}, checklist=row.checklist or {}, created_at=row.created_at, updated_at=row.updated_at)
+            for row in session.query(SubmissionVersionORM).all():
+                self.submissions[row.id] = CaseSubmissionVersion(id=row.id, case_id=row.case_id, version=row.version, form_data=row.form_data or {}, checklist_snapshot=row.checklist_snapshot or {}, procedure_version_id=row.procedure_version_id, procedure_rule_version=row.procedure_rule_version, created_at=row.created_at, created_by=row.created_by, source=row.source)
+            for row in session.query(CaseDocumentORM).all():
+                self.documents[row.id] = CaseDocument(id=row.id, case_id=row.case_id, submission_version_id=row.submission_version_id or "", document_type=row.document_type, file_uri=f"private://{row.object_key}", object_key=row.object_key, original_filename=row.original_filename, content_type=row.content_type, size_bytes=row.size_bytes, sha256=row.sha256, ocr_status=row.ocr_status, ocr_engine=row.ocr_engine, ocr_version=row.ocr_version, uploaded_at=row.uploaded_at or row.created_at)
+            for row in session.query(ExtractedFieldRecordORM).all():
+                self.extracted_fields[row.id] = ExtractedFieldRecord(id=row.id, document_id=row.document_id, field_key=row.field_key, raw_value=row.raw_value, normalized_value=row.normalized_value, confidence=row.confidence, page=row.page, bounding_box=row.bounding_box, review_status=row.review_status, previous_value=row.previous_value)
+            for row in session.query(ValidationFindingORM).all():
+                self.findings[row.id] = ValidationFinding(id=row.id, case_id=row.case_id, submission_version_id=row.submission_version_id, type=row.type, severity=row.severity, source=row.source, message=row.message, suggestion=row.suggestion, rule_id=row.rule_id, rule_version=row.rule_version, confidence=row.confidence, status=row.status, field_keys=row.field_keys or [], evidence=row.evidence or [], created_at=row.created_at)
+            for row in session.query(SupplementRequestORM).all():
+                self.supplements.append(SupplementRequest(id=row.id, case_id=row.case_id, submission_version_id=row.submission_version_id, created_by=row.created_by, public_message=row.public_message, finding_ids=row.finding_ids or [], due_at=row.due_at, status=row.status, created_at=row.created_at))
+            for row in session.query(AuditEventORM).all():
+                self.audit.append(CaseAuditEvent(id=row.id, case_id=row.case_id, actor_id=row.actor_id, organization_id=row.organization_id, event_type=row.event_type, object_type=row.object_type, object_id=row.object_id, metadata=row.metadata_ or {}, created_at=row.created_at))
 
     def _save_case(self, case: ApplicationCase) -> None:
         if not self._db:
@@ -79,6 +102,34 @@ class OfficerStore:
             return
         with self._db.session() as session:
             session.merge(CaseDocumentORM(id=document.id, case_id=document.case_id, submission_version_id=document.submission_version_id, document_type=document.document_type, object_key=document.object_key or "", original_filename=document.original_filename or "document", content_type=document.content_type or "application/octet-stream", size_bytes=document.size_bytes or 0, sha256=document.sha256 or ("0" * 64), status=document.ocr_status, ocr_status=document.ocr_status, ocr_engine=document.ocr_engine, ocr_version=document.ocr_version, uploaded_at=document.uploaded_at, extracted_fields={}))
+            session.commit()
+
+    def _save_field(self, field: ExtractedFieldRecord) -> None:
+        if not self._db:
+            return
+        with self._db.session() as session:
+            session.merge(ExtractedFieldRecordORM(id=field.id, document_id=field.document_id, field_key=field.field_key, raw_value=field.raw_value, normalized_value=field.normalized_value, confidence=field.confidence, page=field.page, bounding_box=field.bounding_box, review_status=field.review_status, previous_value=field.previous_value))
+            session.commit()
+
+    def _save_finding(self, finding: ValidationFinding) -> None:
+        if not self._db:
+            return
+        with self._db.session() as session:
+            session.merge(ValidationFindingORM(id=finding.id, case_id=finding.case_id, submission_version_id=finding.submission_version_id, type=finding.type, severity=finding.severity, source=finding.source, message=finding.message, suggestion=finding.suggestion, rule_id=finding.rule_id, rule_version=str(finding.rule_version) if finding.rule_version is not None else None, confidence=finding.confidence, status=finding.status, field_keys=finding.field_keys, evidence=finding.evidence, created_at=finding.created_at, updated_at=now()))
+            session.commit()
+
+    def _save_supplement(self, request: SupplementRequest) -> None:
+        if not self._db:
+            return
+        with self._db.session() as session:
+            session.merge(SupplementRequestORM(id=request.id, case_id=request.case_id, submission_version_id=request.submission_version_id, created_by=request.created_by, public_message=request.public_message, finding_ids=request.finding_ids, due_at=request.due_at, status=request.status, created_at=request.created_at))
+            session.commit()
+
+    def _save_finding_decision(self, case_id: str, decision: OfficerDecision) -> None:
+        if not self._db:
+            return
+        with self._db.session() as session:
+            session.merge(FindingDecisionORM(id=decision.id, finding_id=decision.finding_id, case_id=case_id, officer_id=decision.officer_id, decision=decision.decision, reason=decision.reason, created_at=decision.created_at))
             session.commit()
 
     def _save_audit(self, event: CaseAuditEvent) -> None:
@@ -166,6 +217,7 @@ class OfficerStore:
                 bounding_box=bbox,
                 review_status="needs_human_review" if confidence < settings.ocr_confidence_threshold else "unreviewed",
             )
+            self._save_field(self.extracted_fields[field_id])
         finding = ValidationFinding(id="finding-demo-001", case_id=case.id, submission_version_id=submission.id, type="cross_document_mismatch", severity="error", source="rule", message="Họ tên mẹ trên Giấy chứng sinh chưa khớp dữ liệu tờ khai.", suggestion="Đối chiếu ảnh gốc và sửa trường OCR nếu hệ thống đọc sai dấu.", rule_id="KS-R2", rule_version=1, confidence=1.0, field_keys=["ho_ten_me"], created_at=timestamp)
         self.findings[finding.id] = finding
         self.findings["finding-demo-002"] = ValidationFinding(
@@ -181,6 +233,8 @@ class OfficerStore:
             field_keys=["ho_ten_me"],
             created_at=timestamp,
         )
+        self._save_finding(finding)
+        self._save_finding(self.findings["finding-demo-002"])
         self._audit(case, case.citizen_id, "case_created", "application_case", case.id)
         self._audit(case, case.citizen_id, "document_uploaded", "case_document", document.id)
         self._audit(case, "system-ai", "precheck_completed", "case_submission_version", submission.id)
@@ -201,7 +255,7 @@ class OfficerStore:
             self.idempotency_results.clear()
             if self._db:
                 with self._db.session() as session:
-                    for model in (AuditEventORM, CaseDocumentORM, SubmissionVersionORM, ApplicationCaseORM):
+                    for model in (FindingDecisionORM, SupplementRequestORM, ValidationFindingORM, ExtractedFieldRecordORM, AuditEventORM, CaseDocumentORM, SubmissionVersionORM, ApplicationCaseORM):
                         session.query(model).delete()
                     session.commit()
             self._seed()
@@ -394,6 +448,7 @@ class OfficerStore:
                     bounding_box=item.get("bbox") or item.get("bounding_box"),
                 )
                 self.extracted_fields[record.id] = record
+                self._save_field(record)
             self._audit(case, citizen_id, "document_completed", "case_document", document_id)
             self._save_document(updated)
             return deepcopy(updated)
@@ -496,6 +551,7 @@ class OfficerStore:
                 raise ValueError("invalid_finding_ids")
             request = SupplementRequest(id=str(uuid4()), case_id=case_id, submission_version_id=self.submission_for(case_id).id, created_by=officer_id, public_message=message, finding_ids=finding_ids, status="sent", created_at=now())
             self.supplements.append(request)
+            self._save_supplement(request)
             updated = case.model_copy(update={"status": "needs_citizen_update", "version": case.version + 1, "updated_at": now()})
             self.cases[case_id] = updated
             self._audit(updated, officer_id, "supplement_requested", "supplement_request", request.id)
@@ -543,6 +599,7 @@ class OfficerStore:
                 }
             )
             self.extracted_fields[field_id] = updated
+            self._save_field(updated)
             self._audit(
                 case,
                 officer_id,
@@ -574,6 +631,7 @@ class OfficerStore:
             for finding_id, finding in list(self.findings.items()):
                 if finding.case_id == case_id and finding.type == "ocr_human_review" and finding.status == "open":
                     self.findings[finding_id] = finding.model_copy(update={"status": "superseded"})
+                    self._save_finding(self.findings[finding_id])
             if needs_review:
                 finding = ValidationFinding(
                     id=str(uuid4()),
@@ -590,6 +648,7 @@ class OfficerStore:
                     created_at=now(),
                 )
                 self.findings[finding.id] = finding
+                self._save_finding(finding)
             self._audit(case, officer_id, "validation_rerun", "case_submission_version", submission.id)
             return self.findings_for(case_id, organization_id)
 
@@ -607,7 +666,10 @@ class OfficerStore:
                 raise KeyError("finding_not_found")
             updated = finding.model_copy(update={"status": decision})
             self.findings[finding_id] = updated
-            self.decisions.append(OfficerDecision(id=str(uuid4()), finding_id=finding_id, officer_id=officer_id, decision=decision, finding_severity=finding.severity, reason=reason, created_at=now()))
+            officer_decision = OfficerDecision(id=str(uuid4()), finding_id=finding_id, officer_id=officer_id, decision=decision, finding_severity=finding.severity, reason=reason, created_at=now())
+            self.decisions.append(officer_decision)
+            self._save_finding(updated)
+            self._save_finding_decision(case.id, officer_decision)
             self._audit(case, officer_id, f"finding_{decision}", "validation_finding", finding_id, {"reason": reason} if reason else {})
             return deepcopy(updated)
 

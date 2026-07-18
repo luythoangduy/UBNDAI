@@ -170,6 +170,8 @@ lúc index; `google` cần `GOOGLE_API_KEY` riêng); `DATABASE_URL`, `CHROMA_PER
 
 `huggingface` gọi Feature Extraction từ xa với `HF_TOKEN`, model mặc định
 `BAAI/bge-m3`, vector chuẩn hoá 1024 chiều và không tải model vào container.
+Container Render tạo lại dense index từ catalog khi khởi động; nếu inference
+tạm thời lỗi thì API vẫn khởi động và fallback về BM25.
 
 Trên Render, container tự chạy `alembic upgrade head` trước khi khởi động API.
 Production persistence cần `PERSISTENCE_ENABLED=true`, PostgreSQL trong `DATABASE_URL`,

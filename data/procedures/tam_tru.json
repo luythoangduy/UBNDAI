@@ -69,7 +69,7 @@
       "condition_label": "Áp dụng khi người đăng ký tạm trú là người chưa thành niên",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["van_ban_dong_y_nguoi_giam_ho"]
+      "accepted_doc_types": ["van_ban_dong_y_nguoi_giam_ho", "to_khai_ct01"]
     }
   ],
   "form_templates": [

@@ -1,11 +1,99 @@
 import hashlib
+from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.main import app
+from src.models import ExtractedDocument, ExtractedField
+from src.api.v1 import citizen as citizen_api
 
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize(
+    ("procedure_id", "document_type", "checklist_code", "field_key"),
+    [
+        ("ket_hon", "ho_chieu", "giay_to_tuy_than_hai_ben", "ho_ten_nam"),
+        ("tam_tru", "to_khai_ct01", "to_khai_ct01", "ho_ten"),
+        ("can_cuoc", "phieu_cc01", "phieu_cc01", "ho_ten"),
+        ("giay_phep_xay_dung", "don_de_nghi_cap_phep", "don_de_nghi_cap_phep", "ho_ten_chu_dau_tu"),
+    ],
+)
+def test_other_procedure_documents_reach_officer_queue(
+    monkeypatch, procedure_id, document_type, checklist_code, field_key
+):
+    async def fake_ocr(case_id, filename, content, field_keys=None):
+        return ExtractedDocument(
+            id=f"doc-{case_id}",
+            case_id=case_id,
+            file_id=f"file-{case_id}",
+            doc_type=document_type,
+            doc_type_confidence=0.98,
+            fields=[ExtractedField(key=field_key, value="Nguyen Van A", confidence=0.98)],
+            raw_text=document_type,
+            needs_human_review=False,
+            ocr_engine="fake",
+            created_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(citizen_api, "process_ocr", fake_ocr)
+    citizen_headers = auth("citizen.demo")
+    created = client.post(
+        "/api/v1/citizen/cases",
+        headers=citizen_headers,
+        json={"procedure_id": procedure_id, "locality_code": "00001"},
+    )
+    assert created.status_code == 201, created.text
+    case = created.json()["data"]
+    content = b"\x89PNG\r\n\x1a\nother-procedure-document"
+    intent = client.post(
+        f"/api/v1/citizen/cases/{case['id']}/documents/upload-intents",
+        headers=citizen_headers,
+        json={"filename": f"{document_type}.png", "content_type": "image/png", "size_bytes": len(content)},
+    )
+    assert intent.status_code == 201, intent.text
+    document = intent.json()["data"]
+    uploaded = client.put(
+        document["upload_url"],
+        headers={**citizen_headers, "Content-Type": "application/octet-stream"},
+        content=content,
+    )
+    assert uploaded.status_code == 204, uploaded.text
+    completed = client.post(
+        f"/api/v1/citizen/documents/{document['document_id']}/complete",
+        headers=citizen_headers,
+        json={"sha256": hashlib.sha256(content).hexdigest()},
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["data"]["document"]["document_type"] == document_type
+
+    detail = client.get(f"/api/v1/citizen/cases/{case['id']}", headers=citizen_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["data"]["case"]["checklist"][checklist_code] == "uploaded"
+
+    latest = detail.json()["data"]["case"]
+    updated = client.patch(
+        f"/api/v1/citizen/cases/{case['id']}",
+        headers=citizen_headers,
+        json={"expected_version": latest["version"], "form_data": {field_key: "Nguyen Van A"}},
+    )
+    assert updated.status_code == 200, updated.text
+    submitted = client.post(
+        f"/api/v1/citizen/cases/{case['id']}/submit",
+        headers={**citizen_headers, "Idempotency-Key": f"other-procedure-{case['id']}"},
+        json={
+            "expected_version": updated.json()["data"]["version"],
+            "consent_version": "privacy-v1",
+            "consent_accepted": True,
+        },
+    )
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["data"]["status"] == "awaiting_officer_review"
+    queue = client.get("/api/v1/officer/cases", headers=auth("officer.demo"))
+    assert queue.status_code == 200, queue.text
+    assert any(item["id"] == case["id"] for item in queue.json()["data"])
 
 
 def auth(username: str) -> dict[str, str]:

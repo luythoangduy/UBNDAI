@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from src.models import Case, ChecklistItem, ExtractedDocument, Procedure
-from src.services.ocr.checklist import apply_document_to_checklist
+from src.services import catalog
+from src.services.ocr.checklist import apply_document_to_checklist, codes_satisfied_by
 
 KHAI_SINH = Path(__file__).resolve().parents[1] / "data" / "procedures" / "khai_sinh.json"
 
@@ -84,3 +85,31 @@ def test_original_case_not_mutated(procedure):
     apply_document_to_checklist(case, procedure, _doc("giay_chung_sinh"))
 
     assert case.checklist[0].status == "missing"
+
+
+def test_every_catalog_requirement_declares_an_accepted_document_type():
+    missing = [
+        f"{procedure.id}:{requirement.code}"
+        for procedure in catalog.load_catalog().values()
+        for requirement in procedure.requirements
+        if not requirement.accepted_doc_types
+    ]
+
+    assert missing == []
+
+
+@pytest.mark.parametrize(
+    ("procedure_id", "document_type", "requirement_code"),
+    [
+        ("khai_sinh", "ho_chieu", "cccd_cha_me"),
+        ("khai_sinh", "van_ban_cam_doan_viec_sinh", "van_ban_nguoi_lam_chung"),
+        ("tam_tru", "to_khai_ct01", "y_kien_nguoi_dai_dien"),
+    ],
+)
+def test_catalog_declared_document_alternatives_satisfy_checklist(
+    procedure_id, document_type, requirement_code
+):
+    procedure = catalog.get_procedure(procedure_id)
+
+    assert procedure is not None
+    assert requirement_code in codes_satisfied_by(procedure, document_type)

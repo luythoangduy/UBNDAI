@@ -5,7 +5,14 @@ retrieval rơi về BM25 in-memory từ catalog — không load model thật tro
 (bài học C2: bge-m3 trong pytest gây access violation).
 """
 
+import os
+
 import pytest
+
+# Tests must never bootstrap the global OfficerStore against a developer's
+# persistent SQLite database from .env. Persistence-specific tests construct
+# their own Database/OfficerStore instances explicitly.
+os.environ["PERSISTENCE_ENABLED"] = "false"
 
 from src.config import settings
 from src.services import retrieval

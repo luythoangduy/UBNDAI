@@ -55,7 +55,7 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": [],
+      "accepted_doc_types": ["don_de_nghi_cap_phep"],
       "notes": "Từ 01/7/2026, nhà ở riêng lẻ dưới 7 tầng, tổng diện tích sàn dưới 500m² và không thuộc khu vực đặc thù có thể được MIỄN giấy phép xây dựng theo Luật Xây dựng 2025 — hãy xác nhận với UBND cấp xã trước khi nộp hồ sơ nếu công trình của bạn thuộc diện này."
     },
     {
@@ -64,7 +64,7 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": []
+      "accepted_doc_types": ["giay_to_quyen_su_dung_dat"]
     },
     {
       "code": "ban_ve_thiet_ke_xay_dung",
@@ -72,7 +72,7 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": [],
+      "accepted_doc_types": ["ban_ve_thiet_ke_xay_dung"],
       "notes": "Kèm sơ đồ đấu nối hạ tầng kỹ thuật (cấp nước, thoát nước, cấp điện) và bản cam kết bảo đảm an toàn đối với công trình liền kề (Điều 60 Nghị định 217/2026/NĐ-CP). Số lượng bộ theo hướng dẫn của UBND cấp xã nơi tiếp nhận."
     },
     {
@@ -82,7 +82,7 @@
       "condition_label": "Áp dụng khi công trình liên quan đến khu vực bảo vệ di tích/di sản văn hóa",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": []
+      "accepted_doc_types": ["van_ban_y_kien_van_hoa"]
     },
     {
       "code": "giay_chung_nhan_tham_duyet_pccc",
@@ -91,7 +91,7 @@
       "condition_label": "Áp dụng khi công trình thuộc diện phải thẩm duyệt PCCC",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": []
+      "accepted_doc_types": ["giay_chung_nhan_tham_duyet_pccc"]
     }
   ],
   "form_templates": [

@@ -60,7 +60,7 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": [],
+      "accepted_doc_types": ["to_khai_khai_sinh"],
       "notes": "Hệ thống tự điền từ giấy tờ đã upload"
     },
     {
@@ -79,7 +79,7 @@
       "condition_label": "Áp dụng khi bé sinh ngoài cơ sở y tế",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["van_ban_lam_chung"],
+      "accepted_doc_types": ["van_ban_lam_chung", "van_ban_cam_doan_viec_sinh"],
       "notes": "Nếu không có người làm chứng, thay bằng giấy cam đoan về việc sinh (Nghị định 120/2025/NĐ-CP). Trường hợp đặc biệt (trẻ bị bỏ rơi, mang thai hộ) cần biên bản/văn bản riêng — liên hệ cán bộ hộ tịch."
     },
     {
@@ -88,7 +88,7 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["cccd"]
+      "accepted_doc_types": ["cccd", "ho_chieu"]
     },
     {
       "code": "giay_dang_ky_ket_hon",

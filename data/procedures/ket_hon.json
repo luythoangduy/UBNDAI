@@ -48,7 +48,7 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": [],
+      "accepted_doc_types": ["to_khai_dang_ky_ket_hon"],
       "notes": "Hai bên có thể khai chung một tờ khai khi nộp trực tiếp; hồ sơ trực tuyến dùng mẫu hộ tịch điện tử tương tác."
     },
     {
@@ -67,7 +67,7 @@
       "condition_label": "Chỉ xuất trình khi cơ quan không khai thác được thông tin cư trú từ cơ sở dữ liệu",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_to_cu_tru"]
+      "accepted_doc_types": ["giay_to_cu_tru", "giay_xac_nhan_cu_tru"]
     }
   ],
   "form_templates": [

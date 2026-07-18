@@ -10,8 +10,10 @@ import anthropic
 import httpx
 import pytest
 
+from src.services import catalog
 from src.services.ocr.engine import (
     GoogleVisionEngine,
+    OCR_OUTPUT_SCHEMA,
     OcrEngineError,
     PaddleOcrEngine,
     VisionLlmEngine,
@@ -19,6 +21,18 @@ from src.services.ocr.engine import (
 )
 
 FAKE_IMAGE = b"\x89PNG fake-bytes"
+
+
+def test_vision_schema_supports_every_catalog_document_type():
+    catalog_types = {
+        document_type
+        for procedure in catalog.load_catalog().values()
+        for requirement in procedure.requirements
+        for document_type in requirement.accepted_doc_types
+    }
+    schema_types = set(OCR_OUTPUT_SCHEMA["properties"]["doc_type"]["enum"])
+
+    assert catalog_types <= schema_types
 
 
 def _gemini_response(payload: dict) -> dict:

@@ -30,6 +30,7 @@ from src.agents.prompts.ocr import (
     build_field_instruction,
 )
 from src.config import settings
+from src.services.ocr.classifier import SUPPORTED_DOCUMENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,7 @@ OCR_OUTPUT_SCHEMA = {
         "raw_text": {"type": "string"},
         "doc_type": {
             "type": "string",
-            "enum": [
-                "cccd",
-                "giay_chung_sinh",
-                "giay_dang_ky_ket_hon",
-                "giay_xac_nhan_cu_tru",
-                "don_viet_tay",
-                "van_ban_hanh_chinh",
-                "unknown",
-            ],
+            "enum": [*SUPPORTED_DOCUMENT_TYPES, "unknown"],
         },
         "doc_type_confidence": {"type": "number"},
         "fields": {

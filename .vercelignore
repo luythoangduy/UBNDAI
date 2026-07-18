@@ -1,3 +1,10 @@
-*
-!frontend/
-!frontend/**
+.git/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.run/
+data/app.db
+data/chroma/
+data/legal/
+outputs/
+uploads/

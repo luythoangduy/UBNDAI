@@ -13,8 +13,20 @@ from src.services.persistence import (
     RoutingDecisionORM,
     SubmissionVersionORM,
     ValidationFindingORM,
+    _normalize_async_database_url,
+    _normalize_sync_database_url,
     create_sqlite_database,
 )
+
+
+def test_render_postgres_urls_use_installed_database_drivers():
+    render_url = "postgresql://user:password@internal-host/database"
+    legacy_url = "postgres://user:password@internal-host/database"
+
+    assert _normalize_sync_database_url(render_url).startswith("postgresql+psycopg://")
+    assert _normalize_sync_database_url(legacy_url).startswith("postgresql+psycopg://")
+    assert _normalize_async_database_url(render_url).startswith("postgresql+asyncpg://")
+    assert _normalize_async_database_url(legacy_url).startswith("postgresql+asyncpg://")
 
 
 def test_sqlite_schema_and_case_repository():

@@ -355,8 +355,8 @@ class OfficerStore:
         )
         with self._lock:
             self.cases[case.id] = case
-            self._audit(case, citizen_id, "case_created", "application_case", case.id)
             self._save_case(case)
+            self._audit(case, citizen_id, "case_created", "application_case", case.id)
         return deepcopy(case)
 
     def ensure_guidance_case(
@@ -389,8 +389,8 @@ class OfficerStore:
                 updated_at=timestamp,
             )
             self.cases[case.id] = case
-            self._audit(case, citizen_id, "case_created_from_guidance", "application_case", case.id)
             self._save_case(case)
+            self._audit(case, citizen_id, "case_created_from_guidance", "application_case", case.id)
             return deepcopy(case)
 
     def sync_guidance_case(

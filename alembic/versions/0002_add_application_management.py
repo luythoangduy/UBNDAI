@@ -88,7 +88,7 @@ def upgrade() -> None:
         "validation_findings",
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("case_id", sa.String(64), sa.ForeignKey("application_cases.id", name="fk_validation_findings_case_id_application_cases", ondelete="CASCADE"), nullable=False),
-        sa.Column("submission_version_id", sa.String(64), sa.ForeignKey("case_submission_versions.id", name="fk_validation_findings_submission_version_id_case_submission_versions", ondelete="CASCADE"), nullable=False),
+        sa.Column("submission_version_id", sa.String(64), sa.ForeignKey("case_submission_versions.id", name="fk_validation_findings_submission", ondelete="CASCADE"), nullable=False),
         sa.Column("type", sa.String(128), nullable=False),
         sa.Column("severity", sa.String(32), nullable=False),
         sa.Column("source", sa.String(32), nullable=False),

@@ -24,14 +24,14 @@ class UploadIntentRequest(BaseModel):
     @field_validator("content_type")
     @classmethod
     def supported_content_type(cls, value: str) -> str:
-        if value not in {"image/jpeg", "image/png"}:
-            raise ValueError("Only JPEG and PNG images are supported for OCR")
+        if value not in {"image/jpeg", "image/png", "application/pdf"}:
+            raise ValueError("Only JPEG, PNG and PDF documents are supported for OCR")
         return value
 
     @field_validator("filename")
     @classmethod
     def supported_extension(cls, value: str) -> str:
-        if not value.casefold().endswith((".jpg", ".jpeg", ".png")):
+        if not value.casefold().endswith((".jpg", ".jpeg", ".png", ".pdf")):
             raise ValueError("Unsupported file extension")
         return value
 

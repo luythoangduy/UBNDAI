@@ -30,7 +30,7 @@ from docx.text.run import Run
 
 from src.models import DraftGenerateRequest, DraftTemplate, GeneratedDraft
 from src.services.drafts.registry import get_template
-from src.services.drafts.renderer import WATERMARK, generate
+from src.services.drafts.renderer import WATERMARK, _render_block, generate
 
 DOCX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -51,9 +51,7 @@ def generate_docx(payload: DraftGenerateRequest) -> GeneratedDocx:
     template = get_template(payload.procedure_id, payload.template_id)
     builder = _BUILDERS.get(template.id)
     if builder is None:
-        raise NotImplementedError(
-            f"Template {template.id!r} chưa có renderer DOCX được kiểm chứng"
-        )
+        builder = _build_generic_template
     document = builder(template, result)
     output = BytesIO()
     document.save(output)
@@ -61,6 +59,43 @@ def generate_docx(payload: DraftGenerateRequest) -> GeneratedDocx:
         content=output.getvalue(),
         filename=template.docx_style.filename,
     )
+
+
+def _build_generic_template(
+    template: DraftTemplate, result: GeneratedDraft
+) -> DocxDocument:
+    """Render any declarative template without a procedure-specific builder.
+
+    Specialized builders may still encode regulated physical forms, while this
+    fallback produces a clearly watermarked review draft from the manifest.
+    """
+    doc = Document()
+    _configure_document(doc, template)
+    for block in template.layout:
+        text = _render_block(block, template, result.normalized_values)
+        if block.kind == "title":
+            _add_title(doc, text, template)
+            continue
+        paragraph = doc.add_paragraph()
+        _format_body_paragraph(paragraph, template)
+        if block.kind != "spacer":
+            run = paragraph.add_run(text)
+            _format_run(
+                run,
+                template.docx_style.body_font,
+                template.docx_style.body_size_pt,
+            )
+    disclaimer = doc.add_paragraph()
+    _format_body_paragraph(disclaimer, template)
+    run = disclaimer.add_run(template.disclaimer)
+    _format_run(
+        run,
+        template.docx_style.body_font,
+        template.docx_style.notes_font_size_pt,
+        italic=True,
+        color="777777",
+    )
+    return doc
 
 
 def _build_birth_certificate(

@@ -27,6 +27,7 @@ from src.models.drafts import (
     DraftRevision,
     DraftReviseRequest,
     DraftTemplate,
+    DraftTemplateImportRequest,
     DraftTemplateInfo,
     GeneratedDraft,
 )
@@ -108,6 +109,7 @@ __all__ = [
     "DraftRevision",
     "DraftReviseRequest",
     "DraftTemplate",
+    "DraftTemplateImportRequest",
     "DraftTemplateInfo",
     "ExtractedDocument",
     "ExtractedField",

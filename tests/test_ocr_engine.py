@@ -115,6 +115,46 @@ def test_extract_sends_field_keys_instruction():
     task_text = captured["request"]["contents"][0]["parts"][0]["text"]
     assert "ho_ten" in task_text
     assert "so_cccd" in task_text
+    assert "nhiều tag nằm trên cùng một dòng" in task_text
+    assert "bbox riêng" in task_text
+
+
+def test_extract_preserves_multiple_semantic_tags_from_one_text_line():
+    engine, captured = _engine_with_mock(
+        {
+            "raw_text": "Họ tên: Nguyễn An   Ngày sinh: 01/02/2000   Giới tính: Nam",
+            "doc_type": "cccd",
+            "doc_type_confidence": 0.96,
+            "fields": [
+                {
+                    "key": "ho_ten",
+                    "value": "Nguyễn An",
+                    "confidence": 0.97,
+                    "bbox": [0.12, 0.3, 0.2, 0.04],
+                },
+                {
+                    "key": "ngay_sinh",
+                    "value": "01/02/2000",
+                    "confidence": 0.95,
+                    "bbox": [0.48, 0.3, 0.16, 0.04],
+                },
+                {
+                    "key": "gioi_tinh",
+                    "value": "Nam",
+                    "confidence": 0.98,
+                    "bbox": [0.82, 0.3, 0.06, 0.04],
+                },
+            ],
+        }
+    )
+
+    result = engine.extract(FAKE_IMAGE)
+
+    assert [field.key for field in result.fields] == ["ho_ten", "ngay_sinh", "gioi_tinh"]
+    assert len({tuple(field.bbox or []) for field in result.fields}) == 3
+    system_prompt = captured["request"]["system_instruction"]["parts"][0]["text"]
+    assert "KHÔNG phải một dòng chữ OCR" in system_prompt
+    assert "phải tách thành NHIỀU mục" in system_prompt
 
 
 def test_extract_clamps_out_of_range_confidence():

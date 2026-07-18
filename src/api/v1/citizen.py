@@ -16,8 +16,8 @@ from src.models import (
     UploadIntentRequest,
 )
 from src.services.auth import require_role
-from src.services import catalog
-from src.services.procedure_capabilities import capabilities
+from src.services.procedure_capabilities import capabilities_for, ocr_field_keys_for
+from src.services.ocr.pdf import rasterize_pdf
 from src.services.ocr.pipeline import process as process_ocr
 from src.services.ocr.preprocessing import preprocess_document_image
 from src.services.officer_store import store
@@ -33,11 +33,10 @@ async def me(claims: TokenClaims = Depends(require_role("citizen"))):
 
 @router.post("/cases", status_code=status.HTTP_201_CREATED)
 async def create_case(payload: CitizenCaseCreate, claims: TokenClaims = Depends(require_role("citizen"))):
-    procedure = catalog.get_procedure(payload.procedure_id)
-    if procedure is None or not capabilities(procedure).dynamic_form:
+    if not capabilities_for(payload.procedure_id).dynamic_form:
         raise HTTPException(
             status_code=409,
-            detail="Thủ tục chưa có biểu mẫu đã kiểm duyệt để soạn hồ sơ",
+            detail="Thủ tục chưa có template để soạn hồ sơ",
         )
     case = store.create_citizen_case(claims.user_id, payload.procedure_id, payload.locality_code)
     return {"success": True, "data": case.model_dump(mode="json")}
@@ -110,7 +109,10 @@ async def preprocess_document(document_id: str, claims: TokenClaims = Depends(re
         raise HTTPException(status_code=404, detail="Document not found")
     try:
         content = storage.get(document.object_key or "")
-    except StorageError as exc:
+        if document.content_type == "application/pdf":
+            pages = await asyncio.to_thread(rasterize_pdf, content)
+            content = pages[0]
+    except (StorageError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result = await asyncio.to_thread(preprocess_document_image, content, capture_steps=True)
     steps = [
@@ -133,7 +135,14 @@ async def complete_upload(document_id: str, payload: UploadCompleteRequest, clai
         if hashlib.sha256(content).hexdigest() != payload.sha256:
             raise StorageError("Checksum mismatch")
         validate_magic(document.content_type or "", content)
-        ocr = await process_ocr(document.case_id, document.original_filename or "document.bin", content)
+        case = store.get_citizen_case(document.case_id, claims.user_id)
+        field_keys = ocr_field_keys_for(case.procedure_id) if case else None
+        ocr = await process_ocr(
+            document.case_id,
+            document.original_filename or "document.bin",
+            content,
+            field_keys=field_keys,
+        )
     except (StorageError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     completed = store.complete_document(

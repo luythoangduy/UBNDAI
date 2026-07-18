@@ -357,42 +357,34 @@ function ChatPortal() {
   
   const run = async (name: string, work: () => Promise<void>) => { setBusy(name); setNotice(''); try { await work(); } catch (cause) { setNotice((cause as Error).message); } finally { setBusy(''); } };
   
-  const startDraftFromTemplate = (procedureId: string, templateId?: string) => {
+  const startDraftFromTemplate = (procedureId: string, templateId?: string, sourceUrl?: string, sourceTitle?: string) => {
     run('create', async () => {
       const procedure = procedures.find(item => item.id === procedureId);
-      if (!procedure) throw new Error('Chưa tải được thông tin thủ tục. Vui lòng thử lại.');
-      const [templates, caps] = await Promise.all([
-        api<DraftTemplateInfo[]>(`/drafts/templates/${procedureId}`),
-        api<ProcedureCapabilities>(`/procedures/${procedureId}/capabilities`),
-      ]);
-      const template = templates.find(item => item.id === templateId) ?? templates[0];
+      const imported = sourceUrl ? await api<DraftTemplateInfo>('/drafts/templates/import', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, source_url: sourceUrl, title: sourceTitle ?? 'Biểu mẫu từ nguồn chính thức' }) }) : undefined;
+      const templates = imported ? [imported] : await api<DraftTemplateInfo[]>(`/drafts/templates/${procedureId}`);
+      const caps = await api<ProcedureCapabilities>(`/procedures/${procedureId}/capabilities`);
+      const template = imported ?? templates.find(item => item.id === templateId) ?? templates[0];
       if (!template) throw new Error('Mẫu này chỉ có trên nguồn ngoài và chưa hỗ trợ sinh tự động.');
-      const schema: ProcedureFormSchema = {
-        procedure_id: procedureId,
-        template_id: template.id,
-        title: template.output_name,
-        fields: template.fields.map(field => ({
-          key: field.key,
-          label: field.label,
-          type: field.input_type === 'year' ? 'number' : field.input_type,
-          required: field.required,
-          ocr_sources: [],
-        })),
-      };
-      setSelectedTemplate(template);
-      setFormSchema(schema); setCapabilities(caps); setPanelOpen(true); setDraftStage('collect');
-      localStorage.setItem('ubndai.draft.panel', 'open');
-      setDocContent(''); setGeneratedDraft(undefined); setProposedRevision(undefined); setDiffBlocks([]); setRevisionInstruction('');
-      setExtractedFields(undefined);
-      setPreviewUrl(undefined);
-      setOcrPhase('idle');
-      setPrepSteps([]);
-      setPrepIndex(0);
-      setDraftValues({});
-      const item = current?.procedure_id === procedure.id ? current : await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) });
+
+      const item = current?.procedure_id === procedureId ? current : await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, locality_code: procedure?.locality_code ?? 'national' }) });
       setCurrent(item);
-      setNotice(`Đã chọn “${template.output_name}”. Hãy bổ sung thông tin hoặc sinh nháp ngay với chỗ trống được đánh dấu.`);
+      const currentValues = item?.form_data || {};
+
+      const blankBlob = await apiBlob('/drafts/generate.docx', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, template_id: template.id, values: {}, allow_incomplete: true }) });
+      let url = URL.createObjectURL(blankBlob);
+      let anchor = document.createElement('a');
+      anchor.href = url; anchor.download = `Mau-Trang-${template.output_name || 'to-khai'}.docx`; anchor.click();
+      URL.revokeObjectURL(url);
+      
+      const filledBlob = await apiBlob('/drafts/generate.docx', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, template_id: template.id, values: currentValues, allow_incomplete: true }) });
+      url = URL.createObjectURL(filledBlob);
+      anchor = document.createElement('a');
+      anchor.href = url; anchor.download = `Mau-Da-Dien-${template.output_name || 'to-khai'}.docx`; anchor.click();
+      URL.revokeObjectURL(url);
+
+      setNotice('Đã tải xuống 2 bản mẫu DOCX (mẫu trắng và mẫu đã điền).');
       await refresh();
+
     });
   };
 
@@ -499,6 +491,26 @@ function ChatPortal() {
         </div>
         {notice && <div className={`workspace-notice ${notice.includes('Đã') || notice.includes('đã') ? 'success' : ''}`} role="status">{notice}<button aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
         <div className={`chat-first-workspace ${selectedTemplate && panelOpen ? 'with-draft' : ''}`}>
+          <aside className="history-sidebar">
+            <div className="history-header">
+              <span>Lịch sử trò chuyện</span>
+            </div>
+            <div className="history-list">
+              {cases.length === 0 ? <p className="muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 20 }}>Chưa có lịch sử</p> : cases.map(c => {
+                const title = c.procedure_id ? procedures.find(p => p.id === c.procedure_id)?.name || c.procedure_id : 'Tư vấn thủ tục mới';
+                return (
+                  <button 
+                    key={c.id} 
+                    className={`history-item ${current?.id === c.id ? 'active' : ''}`} 
+                    onClick={() => refreshCurrent(c.id)}
+                  >
+                    {title}
+                    <small>{formatDate(c.created_at)}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
           <CitizenAssistant activeCaseId={current?.id} onChecklist={handleChecklist} onStartProcedure={startProcedureFromChat} onSelectTemplate={startDraftFromTemplate} selectedContext={selectedText}/>
 
           {selectedTemplate && !panelOpen && <button className="draft-launcher" onClick={() => setDraftPanelOpen(true)}><FileText size={18}/><span><b>Mở lại bản nháp</b><small>{readiness}% dữ liệu · {missingFields.length} chỗ thiếu</small></span><span>←</span></button>}

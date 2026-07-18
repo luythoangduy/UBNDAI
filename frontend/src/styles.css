@@ -752,7 +752,7 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 .chat-first-workspace {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 18px;
   width: 100%;
   min-width: 0;
@@ -760,8 +760,61 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   min-height: 0;
   align-items: stretch;
 }
-.chat-first-workspace.with-draft { grid-template-columns: clamp(320px, 30vw, 470px) minmax(0, 1fr); }
-.chat-first-workspace:not(.with-draft) { width: min(100%, 980px); margin-inline: auto; }
+.chat-first-workspace.with-draft { grid-template-columns: 260px clamp(320px, 30vw, 470px) minmax(0, 1fr); }
+.chat-first-workspace:not(.with-draft) { width: min(100%, 1240px); margin-inline: auto; }
+
+.history-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 1px solid #d7e1e9;
+  border-radius: 16px;
+  box-shadow: 0 16px 44px rgba(24, 50, 78, .1);
+  overflow: hidden;
+  height: 100%;
+}
+.history-header {
+  padding: 17px 20px;
+  background: linear-gradient(120deg, #fff 0%, #f4f9fc 100%);
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  color: var(--navy);
+  font-size: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.history-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--navy);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.history-item:hover {
+  background: #f1f6f9;
+}
+.history-item.active {
+  background: #eaf4fa;
+  font-weight: 600;
+}
+.history-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 4px;
+}
 
 .chat-dock { width: 100%; min-width: 0; height: 100%; }
 .assistant-card.docked {
@@ -789,6 +842,7 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   height: auto;
   min-height: 0;
   padding: 0;
+  overflow-y: auto !important;
   overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
   touch-action: pan-y;

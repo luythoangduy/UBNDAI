@@ -169,6 +169,14 @@ class DraftGenerateRequest(BaseModel):
     )
 
 
+class DraftTemplateImportRequest(BaseModel):
+    """Import an OCR-readable template found on a trusted official source."""
+
+    procedure_id: str = Field(min_length=1, max_length=200)
+    source_url: HttpUrl
+    title: str = Field(min_length=1, max_length=300)
+
+
 class DraftReviseRequest(BaseModel):
     """Yêu cầu AI sửa một bản nháp HTML nhưng giữ nguyên dữ kiện đã có."""
 

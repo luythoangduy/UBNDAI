@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from io import BytesIO
 from pathlib import Path
 
@@ -8,8 +9,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from src.models import DraftGenerateRequest
+from src.models import DraftGenerateRequest, DraftTemplateImportRequest
 from src.services import drafts
+from src.services.drafts import registry as draft_registry
+from src.services.drafts import template_importer
+from src.services.ocr.engine import OcrField, OcrResult, VisionLlmEngine
+from src.services.procedure_capabilities import capabilities_for, form_schema_for
 
 
 def _draft_api_client() -> TestClient:
@@ -267,3 +272,103 @@ def test_export_docx_rejects_bad_filename():
         json={"html": "<p>x</p>", "filename": "../../evil.docx"},
     )
     assert response.status_code == 422
+
+
+def test_non_catalog_template_can_generate_preview_and_generic_docx(
+    tmp_path, monkeypatch
+):
+    """A source-backed manifest must work without a catalog procedure record."""
+    source = Path(__file__).parents[1] / "data" / "draft_templates" / "khai_sinh_to_khai.json"
+    manifest = json.loads(source.read_text(encoding="utf-8"))
+    manifest.update(
+        {
+            "id": "searched-procedure.request-form",
+            "procedure_id": "searched-procedure",
+            "output_name": "Mẫu tìm từ nguồn chính thức",
+            "is_default": True,
+        }
+    )
+    (tmp_path / "searched.json").write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(draft_registry, "DEFAULT_TEMPLATE_DIR", tmp_path)
+    drafts.clear_cache()
+
+    result = drafts.generate(
+        DraftGenerateRequest(
+            procedure_id="searched-procedure",
+            values={},
+            allow_incomplete=True,
+        )
+    )
+    document = drafts.generate_docx(
+        DraftGenerateRequest(
+            procedure_id="searched-procedure",
+            values={},
+            allow_incomplete=True,
+        )
+    )
+    caps = capabilities_for("searched-procedure")
+    schema = form_schema_for("searched-procedure")
+
+    assert result.template_id == "searched-procedure.request-form"
+    assert result.ready_for_review is False
+    assert result.legal_sources
+    assert document.content.startswith(b"PK")
+    assert caps.dynamic_form is True
+    assert caps.ocr_autofill is True
+    assert caps.requires_human_review is True
+    assert schema is not None and schema.fields
+
+
+async def test_official_searched_template_is_ocr_imported_without_catalog(
+    monkeypatch,
+):
+    async def fake_download(url: str) -> tuple[bytes, str]:
+        return b"\xff\xd8\xff searched-template", "image/jpeg"
+
+    engine = VisionLlmEngine(provider="openai", api_key="test", model="test")
+    monkeypatch.setattr(template_importer, "_download", fake_download)
+    monkeypatch.setattr(template_importer, "get_engine", lambda: engine)
+    monkeypatch.setattr(
+        engine,
+        "extract",
+        lambda image, field_keys, task: OcrResult(
+            raw_text="Họ tên: ........ Ngày sinh: ../../....",
+            fields=[
+                OcrField(
+                    key="ho_ten",
+                    value="__TEXT__",
+                    confidence=0.96,
+                    note="Họ và tên",
+                ),
+                OcrField(
+                    key="ngay_sinh",
+                    value="__DATE__",
+                    confidence=0.94,
+                    note="Ngày sinh",
+                ),
+            ],
+            engine="vision_llm",
+        ),
+    )
+
+    template = await template_importer.import_template(
+        DraftTemplateImportRequest(
+            procedure_id="searched-live",
+            source_url="https://example.gov.vn/mau.pdf",
+            title="Mẫu trực tuyến",
+        )
+    )
+
+    assert template.procedure_id == "searched-live"
+    assert [field.key for field in template.fields] == ["ho_ten", "ngay_sinh"]
+    assert template.fields[1].input_type == "date"
+    assert template.fields[0].required is False
+    assert "đối chiếu" in template.disclaimer.casefold()
+    assert drafts.get_template("searched-live", template.id).id == template.id
+
+
+def test_searched_template_import_rejects_non_official_source():
+    with pytest.raises(template_importer.TemplateImportError):
+        template_importer._validate_source_url("https://example.com/form.pdf")

@@ -21,7 +21,7 @@ from src.models import (
 )
 from src.services import catalog
 from src.services.drafts import registry as draft_registry
-from src.services.procedure_capabilities import capabilities
+from src.services.procedure_capabilities import capabilities_for
 from src.services.response_cache import get_json, set_json
 from src.services.retrieval.raw_procedures import get_document as get_raw_document
 
@@ -133,10 +133,11 @@ async def build_experience(procedure_id: str | None, query: str) -> ChatExperien
         if procedure
         else raw.source_hash
     )
+    registered_templates = draft_registry.list_templates(procedure_id)
     template_version = ",".join(
         f"{item.id}:{item.version}:{item.source_checked_on}"
-        for item in draft_registry.list_templates(procedure_id)
-    ) if procedure else "raw"
+        for item in registered_templates
+    ) or "none"
     fingerprint = hashlib.sha256(f"{source_hash}:{template_version}".encode()).hexdigest()[:20]
     key = f"chat-experience:procedure:v2:{procedure_id}:{fingerprint}"
     cached = await get_json(key)
@@ -157,7 +158,7 @@ async def build_experience(procedure_id: str | None, query: str) -> ChatExperien
             cache=_cache_info(cached.backend, True),
         )
 
-    templates = _registry_templates(procedure_id) if procedure else []
+    templates = _registry_templates(procedure_id)
     remote_templates: list[ChatTemplateResource] = []
     evidence = [
         EvidenceStep(
@@ -253,13 +254,13 @@ def _actions(
     templates: list[ChatTemplateResource],
 ) -> list[ChatAction]:
     actions: list[ChatAction] = []
-    caps = capabilities(procedure) if procedure else None
-    if caps and caps.checklist:
+    caps = capabilities_for(procedure_id)
+    if caps.checklist:
         actions.append(ChatAction(id="checklist", label="Hồ sơ cần gì?", description="Tạo checklist theo trường hợp", kind="send_message", value="Hồ sơ cần chuẩn bị những gì?", icon="checklist", primary=True))
     actions.append(ChatAction(id="time-fee", label="Phí & thời hạn", description="Đối chiếu trực tiếp từ nguồn", kind="send_message", value="Lệ phí và thời hạn giải quyết là bao lâu?", icon="clock"))
     if templates:
         actions.append(ChatAction(id="templates", label="Lấy biểu mẫu", description=f"{len(templates)} mẫu có provenance", kind="send_message", value="Cho tôi xem các biểu mẫu và nguồn ban hành", icon="template"))
-    if caps and caps.dynamic_form:
+    if caps.dynamic_form:
         actions.append(ChatAction(id="start-form", label="Bắt đầu điền", description="Mở biểu mẫu động, có OCR hỗ trợ", kind="start_form", value=procedure_id, icon="form", primary=True))
     if source_url:
         actions.append(ChatAction(id="official-source", label="Mở nguồn gốc", description=urlparse(source_url).hostname or "Nguồn thủ tục", kind="open_url", value=source_url, icon="source"))

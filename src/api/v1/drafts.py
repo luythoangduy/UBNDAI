@@ -7,29 +7,40 @@ from src.models import (
     DraftHtmlExportRequest,
     DraftRevision,
     DraftReviseRequest,
+    DraftTemplateImportRequest,
     DraftTemplateInfo,
     GeneratedDraft,
 )
-from src.services import catalog
 from src.services import drafts as draft_service
+from src.services.drafts.template_importer import TemplateImportError, import_template
 
 router = APIRouter(prefix="/drafts", tags=["drafts"])
 
 
 @router.get("/templates/{procedure_id}", response_model=list[DraftTemplateInfo])
 async def get_draft_templates(procedure_id: str) -> list[DraftTemplateInfo]:
-    if catalog.get_procedure(procedure_id) is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thủ tục")
+    templates = draft_service.list_templates(procedure_id)
+    if not templates:
+        raise HTTPException(status_code=404, detail="Chưa tìm thấy template cho thủ tục")
     return [
         DraftTemplateInfo.model_validate(template, from_attributes=True)
-        for template in draft_service.list_templates(procedure_id)
+        for template in templates
     ]
+
+
+@router.post("/templates/import", response_model=DraftTemplateInfo)
+async def import_searched_template(
+    payload: DraftTemplateImportRequest,
+) -> DraftTemplateInfo:
+    try:
+        template = await import_template(payload)
+    except TemplateImportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return DraftTemplateInfo.model_validate(template, from_attributes=True)
 
 
 @router.post("/generate", response_model=GeneratedDraft)
 async def generate_draft(payload: DraftGenerateRequest) -> GeneratedDraft:
-    if catalog.get_procedure(payload.procedure_id) is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thủ tục")
     try:
         return draft_service.generate(payload)
     except draft_service.DraftTemplateNotFound as exc:
@@ -87,8 +98,6 @@ async def export_draft_docx(payload: DraftHtmlExportRequest) -> Response:
     },
 )
 async def generate_draft_docx(payload: DraftGenerateRequest) -> Response:
-    if catalog.get_procedure(payload.procedure_id) is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thủ tục")
     try:
         document = draft_service.generate_docx(payload)
     except draft_service.DraftTemplateNotFound as exc:

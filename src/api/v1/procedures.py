@@ -9,7 +9,7 @@ from src.models import (
     ProcedureSummary,
 )
 from src.services import catalog
-from src.services.procedure_capabilities import capabilities, form_schema
+from src.services.procedure_capabilities import capabilities_for, form_schema_for
 
 router = APIRouter(prefix="/procedures", tags=["procedures"])
 
@@ -37,19 +37,15 @@ async def get_procedure(procedure_id: str) -> Procedure:
 
 @router.get("/{procedure_id}/capabilities", response_model=ProcedureCapabilities)
 async def get_capabilities(procedure_id: str) -> ProcedureCapabilities:
-    procedure = catalog.get_procedure(procedure_id)
-    if procedure is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thủ tục")
-    return capabilities(procedure)
+    return capabilities_for(procedure_id)
 
 
 @router.get("/{procedure_id}/form-schema", response_model=ProcedureFormSchema)
 async def get_form_schema(procedure_id: str) -> ProcedureFormSchema:
-    procedure = catalog.get_procedure(procedure_id)
-    schema = form_schema(procedure) if procedure else None
+    schema = form_schema_for(procedure_id)
     if schema is None:
         raise HTTPException(
             status_code=409,
-            detail="Biểu mẫu chưa được kiểm duyệt hoặc chưa được cấu hình",
+            detail="Chưa tìm thấy cấu trúc biểu mẫu cho thủ tục",
         )
     return schema

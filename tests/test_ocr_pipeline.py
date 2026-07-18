@@ -17,8 +17,10 @@ def _clear_ocr_cache():
     pipeline._ocr_cache.clear()
 
 
-def _png_bytes() -> bytes:
-    ok, encoded = cv2.imencode(".png", np.full((400, 600, 3), 230, dtype=np.uint8))
+def _png_bytes(shade: int = 230) -> bytes:
+    ok, encoded = cv2.imencode(
+        ".png", np.full((400, 600, 3), shade, dtype=np.uint8)
+    )
     assert ok
     return encoded.tobytes()
 
@@ -249,3 +251,40 @@ async def test_cache_disabled_when_size_zero(monkeypatch):
     await pipeline.process("case_1", "don.png", image)
 
     assert engine.calls == 2
+
+
+async def test_pdf_runs_ocr_for_every_rasterized_page(monkeypatch):
+    engine = _install(monkeypatch, _result(doc_conf=0.95, field_conf=0.9))
+    pages = [_png_bytes(230), _png_bytes(180)]
+    monkeypatch.setattr(pipeline, "rasterize_pdf", lambda content: pages)
+
+    document = await pipeline.process("case_1", "form.pdf", b"%PDF-fake")
+
+    assert engine.calls == 2
+    assert document.doc_type == "giay_chung_sinh"
+    assert "--- Trang 1 ---" in (document.raw_text or "")
+    assert "--- Trang 2 ---" in (document.raw_text or "")
+
+
+def test_multi_page_conflicting_values_force_review_confidence():
+    merged = pipeline._merge_page_results(
+        [
+            OcrResult(
+                raw_text="Họ tên: Nguyễn A",
+                fields=[OcrField(key="ho_ten", value="Nguyễn A", confidence=0.95)],
+                doc_type_hint="cccd",
+                doc_type_confidence=0.95,
+                engine="fake",
+            ),
+            OcrResult(
+                raw_text="Họ tên: Nguyễn B",
+                fields=[OcrField(key="ho_ten", value="Nguyễn B", confidence=0.9)],
+                doc_type_hint="cccd",
+                doc_type_confidence=0.95,
+                engine="fake",
+            ),
+        ]
+    )
+
+    assert merged.ocr_confidence == 0.0
+    assert any("khác nhau giữa các trang" in issue for issue in merged.quality_issues)

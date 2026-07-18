@@ -57,11 +57,21 @@ OCR_OUTPUT_SCHEMA = {
         "doc_type_confidence": {"type": "number"},
         "fields": {
             "type": "array",
+            "description": (
+                "Các tag trường ngữ nghĩa, không phải các dòng OCR. Một dòng có nhiều "
+                "nhãn/giá trị phải tạo nhiều item với bbox riêng cho từng giá trị."
+            ),
             "items": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string"},
-                    "value": {"type": "string"},
+                    "key": {
+                        "type": "string",
+                        "description": "Key snake_case của đúng một trường ngữ nghĩa.",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Giá trị của riêng trường này, không gộp cả dòng.",
+                    },
                     "confidence": {"type": "number"},
                     "note": {"type": "string"},
                     # OpenAI strict mode: field tùy chọn phải khai anyOf [.., null]
@@ -71,7 +81,10 @@ OCR_OUTPUT_SCHEMA = {
                             {"type": "array", "items": {"type": "number"}},
                             {"type": "null"},
                         ],
-                        "description": "Tọa độ tương đối [x, y, width, height] 0.0–1.0; null nếu không xác định",
+                        "description": (
+                            "Tọa độ tương đối [x, y, width, height] 0.0–1.0 ôm sát "
+                            "giá trị của riêng tag này; null nếu không xác định."
+                        ),
                     },
                 },
                 # Mọi key đều required (OpenAI strict mode): model trả chuỗi rỗng
@@ -362,7 +375,12 @@ class VisionLlmEngine:
         except (KeyError, IndexError, TypeError) as exc:
             raise OcrEngineError("Unexpected Vision LLM response shape") from exc
 
-    def extract(self, image_bytes: bytes, field_keys: list[str] | None = None) -> OcrResult:
+    def extract(
+        self,
+        image_bytes: bytes,
+        field_keys: list[str] | None = None,
+        task: str | None = None,
+    ) -> OcrResult:
         if not image_bytes:
             raise OcrEngineError("Empty image")
         if not self._api_key:
@@ -373,7 +391,9 @@ class VisionLlmEngine:
                 "Supported: openai, anthropic, gemini"
             )
 
-        task = build_field_instruction(field_keys) if field_keys else VISION_OCR_DEFAULT_TASK
+        task = task or (
+            build_field_instruction(field_keys) if field_keys else VISION_OCR_DEFAULT_TASK
+        )
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
         if self._provider == "openai":
             text = self._extract_openai_text(task, image_b64)

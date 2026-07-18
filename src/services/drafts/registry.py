@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 
 from src.models import DraftTemplate
-from src.services import catalog
 
 DEFAULT_TEMPLATE_DIR = Path(__file__).resolve().parents[3] / "data" / "draft_templates"
 
 _CACHE: dict[str, dict[str, DraftTemplate]] = {}
+_RUNTIME_TEMPLATES: dict[str, DraftTemplate] = {}
 
 
 class DraftTemplateNotFound(LookupError):
@@ -27,22 +27,24 @@ def load_templates(
 
     templates: dict[str, DraftTemplate] = {}
     defaults: set[str] = set()
-    procedures = catalog.load_catalog()
     for path in sorted(directory.glob("*.json")):
         template = DraftTemplate.model_validate(
             json.loads(path.read_text(encoding="utf-8"))
         )
         if template.id in templates:
             raise ValueError(f"Duplicate draft template id {template.id!r}")
-        if template.procedure_id not in procedures:
-            raise ValueError(
-                f"Draft template {template.id!r} trỏ tới procedure không tồn tại "
-                f"{template.procedure_id!r}"
-            )
         if template.is_default and template.procedure_id in defaults:
             raise ValueError(
                 f"Procedure {template.procedure_id!r} có nhiều default draft template"
             )
+        templates[template.id] = template
+        if template.is_default:
+            defaults.add(template.procedure_id)
+    for template in _RUNTIME_TEMPLATES.values():
+        if template.id in templates:
+            continue
+        if template.is_default and template.procedure_id in defaults:
+            template = template.model_copy(update={"is_default": False})
         templates[template.id] = template
         if template.is_default:
             defaults.add(template.procedure_id)
@@ -75,5 +77,17 @@ def get_template(procedure_id: str, template_id: str | None = None) -> DraftTemp
     )
 
 
-def clear_cache() -> None:
+def register_template(template: DraftTemplate) -> DraftTemplate:
+    """Register a source-derived template for the lifetime of this process."""
+    existing = _RUNTIME_TEMPLATES.get(template.id)
+    if existing is not None:
+        return existing
+    _RUNTIME_TEMPLATES[template.id] = template
     _CACHE.clear()
+    return template
+
+
+def clear_cache(*, clear_runtime: bool = True) -> None:
+    _CACHE.clear()
+    if clear_runtime:
+        _RUNTIME_TEMPLATES.clear()

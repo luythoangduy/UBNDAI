@@ -51,7 +51,7 @@ powershell -ExecutionPolicy Bypass -File scripts/demo.ps1
 - Cổng cán bộ: `http://127.0.0.1:8000/officer`
 - Tài khoản: `citizen.demo` hoặc `officer.demo`; mật khẩu `ChangeMe123!`
 - Ảnh demo: `data/demo/giay_chung_sinh_demo.svg` chỉ chứa dữ liệu tổng hợp.
-- Upload OCR trong demo hỗ trợ JPEG/PNG, tối đa 10 MB.
+- Upload OCR trong demo hỗ trợ JPEG/PNG/PDF, tối đa 10 MB và tối đa 10 trang PDF.
 
 ```bash
 pip install -e ".[dev]"
@@ -184,6 +184,16 @@ Mẫu kết quả không dùng chung một thể thức pháp lý. Mỗi mẫu t
 `data/draft_templates/*.json` gắn với đúng `procedure_id`, khai báo nguồn pháp lý,
 phiên bản, trường dữ liệu và layout riêng. Service này dựng dữ liệu deterministic,
 không gọi OCR và không tự suy diễn căn cứ pháp lý.
+
+Template manifest là nguồn điều khiển độc lập và không bắt buộc `procedure_id` phải có
+sẵn trong catalog. Vì vậy thủ tục tìm được từ nguồn ngoài catalog vẫn có thể mở form,
+OCR và sinh bản nháp khi đã có manifest kèm nguồn; đầu ra luôn có watermark, placeholder
+cho dữ liệu thiếu và yêu cầu người dùng/cán bộ rà soát.
+
+Với template JPEG/PNG/PDF tìm trực tiếp trên miền HTTPS chính thức, giao diện có thể gọi
+`POST /api/v1/drafts/templates/import` để OCR cấu trúc trường và đăng ký manifest runtime.
+Nguồn ngoài danh sách miền Chính phủ chỉ được mở để tham khảo, không tự động nhập; trường
+OCR từ mẫu tìm kiếm mặc định không bắt buộc và luôn kèm cảnh báo đối chiếu bản gốc.
 
 ```bash
 # Xem template/các trường bắt buộc của thủ tục khai sinh

@@ -26,6 +26,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
     "redis>=5.0",
+    "pypdfium2>=4.30",
 ]
 
 [project.optional-dependencies]

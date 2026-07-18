@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     official_source_retry_ttl_s: int = 120
     official_source_live_fetch: bool = True
     official_source_timeout_s: float = 2.5
-    dvc_search_url: str = "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc.html"
+    # thutuc.dichvucong.gov.vn đã ngừng phục vụ (503 toàn subdomain); Cổng DVC nay
+    # gom về dichvucong.gov.vn với route tra cứu mới.
+    dvc_search_url: str = "https://dichvucong.gov.vn/tra-cuu-thu-tuc"
     # Tách index VBPL khỏi catalog thủ tục để có thể dùng lại index dựng sẵn.
     # Rỗng = dùng cùng CHROMA_PERSIST_DIR với catalog.
     legal_chroma_persist_dir: str = ""

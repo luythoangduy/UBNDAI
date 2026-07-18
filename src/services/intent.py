@@ -42,16 +42,10 @@ _PATTERNS: list[tuple[IntentName, tuple[str, ...]]] = [
 ]
 
 _ADMIN_HINTS = (
-    "thu tuc", "dang ky", "ho so", "giay phep", "giay to", "khai sinh",
-    "ket hon", "can cuoc", "cccd", "dat dai", "xay dung", "ho khau",
-    "chung thuc", "cong chung", "ubnd", "dich vu cong",
-)
-_OTHER_PROCEDURE_HINTS = (
-    "dang ky ket hon",
-    "can cuoc cong dan",
-    "cccd",
-    "dat dai",
-    "giay phep xay dung",
+    "thu tuc", "dang ky", "ho so", "giay phep", "giay to", "xin cap",
+    "cap lai", "cap doi", "de nghi", "xac nhan", "chung nhan", "chung thuc",
+    "cong chung", "noi nop", "co quan nao", "dich vu cong", "hanh chinh",
+    "toi muon lam", "toi can lam", "can lam gi",
 )
 _LEGAL_QUERY_HINTS = (
     "luat ", "nghi dinh", "thong tu", "van ban phap luat", "vbpl", "dieu ",
@@ -85,12 +79,6 @@ def detect_intents(message: str, *, has_selected_procedure: bool) -> IntentDetec
         found.append("legal_basis")
 
     has_admin_hint = any(hint in folded for hint in _ADMIN_HINTS)
-    if (
-        has_selected_procedure
-        and any(hint in folded for hint in _OTHER_PROCEDURE_HINTS)
-        and "switch_procedure" not in found
-    ):
-        found.insert(0, "switch_procedure")
     if not has_selected_procedure and "switch_procedure" in found:
         found = [
             "procedure_discovery" if intent == "switch_procedure" else intent

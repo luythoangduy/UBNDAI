@@ -71,16 +71,18 @@ def test_unresolved_condition_keys():
         "sinh_tai_co_so_y_te",
         "ket_hon",
     }
-    assert unresolved_condition_keys(
-        procedure, {"sinh_tai_co_so_y_te": True, "ket_hon": True}
-    ) == []
+    assert (
+        unresolved_condition_keys(
+            procedure, {"sinh_tai_co_so_y_te": True, "ket_hon": True}
+        )
+        == []
+    )
 
 
-def test_specific_negative_answer_does_not_fill_other_boolean():
+def test_descriptive_boolean_answer_is_left_for_semantic_planner():
     questions = _khai_sinh().clarifying_questions
     result = extract_answers("không kết hôn", questions)
-    assert result == {"ket_hon": False}
-    assert "sinh_tai_co_so_y_te" not in result
+    assert result == {}
 
 
 def test_generic_boolean_only_answers_first_pending_question():
@@ -107,39 +109,19 @@ def test_choice_and_single_text_have_deterministic_fallback():
     text = ClarifyingQuestion(
         key="ghi_chu", text="Bạn cần ghi chú gì?", answer_type="text"
     )
-    assert extract_answers("Tôi chọn trực tuyến", [choice]) == {
-        "noi_nop": "Trực tuyến"
-    }
+    assert extract_answers("Tôi chọn trực tuyến", [choice]) == {"noi_nop": "Trực tuyến"}
     assert extract_answers("Cần hỗ trợ bản sao", [text]) == {
         "ghi_chu": "Cần hỗ trợ bản sao"
     }
 
 
-@pytest.mark.parametrize(
-    ("message", "expected"),
-    [
-        (
-            "Có, bé sinh ở bệnh viện",
-            {"ket_hon": True, "sinh_tai_co_so_y_te": True},
-        ),
-        (
-            "Đã kết hôn, không",
-            {"ket_hon": True, "sinh_tai_co_so_y_te": False},
-        ),
-    ],
-)
-def test_multi_clause_boolean_answers_are_consumed_once(message, expected):
-    assert extract_answers(message, _khai_sinh().clarifying_questions) == expected
+def test_procedure_specific_phrasing_is_not_encoded_in_fallback_parser():
+    questions = _khai_sinh().clarifying_questions
+    assert extract_answers("đã kết hôn", questions) == {}
+    assert extract_answers("bé sinh ở bệnh viện", questions) == {}
 
 
 @pytest.mark.parametrize("message", ["5 ngày rồi", "bé 5 ngày tuổi", "mới sinh 5 ngày"])
 def test_common_age_phrases_are_parsed(message):
     result = extract_answers(message, _khai_sinh().clarifying_questions)
     assert result["so_ngay_tu_khi_sinh"] == 5
-
-
-def test_age_answer_produces_late_registration_warning():
-    from src.services.checklist import guidance_warnings
-
-    warnings = guidance_warnings(_khai_sinh(), {"so_ngay_tu_khi_sinh": 61})
-    assert warnings and "quá hạn" in warnings[0]

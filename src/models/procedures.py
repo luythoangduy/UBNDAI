@@ -111,8 +111,6 @@ class Procedure(BaseModel):
     )
     processing_days: int | None = None
     fee_vnd: int | None = None
-    late_registration_after_days: int | None = Field(default=None, ge=0)
-    late_registration_warning: str | None = None
     clarifying_questions: list[ClarifyingQuestion] = Field(
         default_factory=list,
         description="Câu hỏi làm rõ có key/type để parse và chỉ hỏi phần còn thiếu",
@@ -155,12 +153,6 @@ class Procedure(BaseModel):
             raise ValueError("FormTemplate.id phải unique trong một thủ tục")
         if any(len(set(group)) < 2 for group in self.required_token_groups):
             raise ValueError("Mỗi required_token_group phải có ít nhất hai token")
-        if bool(self.late_registration_after_days is not None) != bool(
-            self.late_registration_warning
-        ):
-            raise ValueError(
-                "late_registration_after_days và warning phải được khai báo cùng nhau"
-            )
         return self
 
 

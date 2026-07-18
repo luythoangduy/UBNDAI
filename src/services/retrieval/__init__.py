@@ -110,6 +110,15 @@ def _identity_score(query: str, procedure: Procedure) -> float:
     query_tokens = set(tokenize(query)) - _IDENTITY_GENERIC_TOKENS
     if not query_tokens:
         return 0.0
+    # Loại biến thể/thủ tục gần tên trước khi thưởng exact/signature match.
+    # Nếu cụm phủ định chỉ xuất hiện trong câu "không phải X, tôi cần Y" thì
+    # _phrase_is_negated giữ lại ứng viên Y đúng như mong đợi.
+    if any(
+        fold_ascii(keyword) in folded_query
+        and not _phrase_is_negated(folded_query, fold_ascii(keyword))
+        for keyword in procedure.negative_keywords
+    ):
+        return 0.0
     explicit_phrases = [procedure.name, *procedure.aliases]
     if any(
         fold_ascii(phrase) in folded_query
@@ -127,12 +136,6 @@ def _identity_score(query: str, procedure: Procedure) -> float:
     )
     if signature_match and not signature_negated:
         return 0.95
-    if any(
-        fold_ascii(keyword) in folded_query
-        and not _phrase_is_negated(folded_query, fold_ascii(keyword))
-        for keyword in procedure.negative_keywords
-    ):
-        return 0.0
     phrases = [*explicit_phrases, *procedure.example_queries]
     best = 0.0
     for phrase in phrases:

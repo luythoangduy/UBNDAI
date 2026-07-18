@@ -1,0 +1,77 @@
+{
+  "id": "tam_tru",
+  "national_code": "1.004194",
+  "name": "Đăng ký tạm trú",
+  "aliases": [
+    "làm tạm trú",
+    "đăng ký cư trú tạm thời",
+    "khai báo tạm trú"
+  ],
+  "example_queries": [
+    "tôi cần đăng ký tạm trú",
+    "chuyển đến chỗ ở mới thì làm tạm trú thế nào",
+    "hồ sơ tạm trú cần giấy tờ gì"
+  ],
+  "negative_keywords": [
+    "khai báo tạm vắng",
+    "đăng ký thường trú",
+    "khai sinh",
+    "đăng ký kết hôn",
+    "cấp thẻ căn cước"
+  ],
+  "required_token_groups": [
+    ["tạm", "trú"]
+  ],
+  "agency": "Công an cấp xã",
+  "legal_basis": [
+    "Luật Cư trú 2020",
+    "Nghị định 154/2024/NĐ-CP",
+    "Thông tư 75/2022/TT-BTC",
+    "Thông tư 53/2025/TT-BCA",
+    "Thông tư 54/2025/TT-BCA"
+  ],
+  "processing_days": 3,
+  "fee_vnd": null,
+  "clarifying_questions": [
+    {
+      "key": "khai_thac_duoc_cho_o",
+      "text": "Thông tin về chỗ ở hợp pháp của bạn đã có và khai thác được từ cơ sở dữ liệu hoặc VNeID chưa?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "nguoi_chua_thanh_nien",
+      "text": "Người đăng ký tạm trú có phải là người chưa thành niên không?",
+      "answer_type": "boolean"
+    }
+  ],
+  "requirements": [
+    {
+      "code": "to_khai_ct01",
+      "name": "Tờ khai thay đổi thông tin cư trú (Mẫu CT01 theo Thông tư 53/2025/TT-BCA)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["to_khai_ct01"]
+    },
+    {
+      "code": "chung_minh_cho_o_hop_phap",
+      "name": "Giấy tờ, tài liệu chứng minh chỗ ở hợp pháp",
+      "condition": "answers.khai_thac_duoc_cho_o == false",
+      "condition_label": "Chỉ xuất trình khi hệ thống không khai thác được thông tin về chỗ ở hợp pháp",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["giay_to_cho_o_hop_phap"]
+    },
+    {
+      "code": "y_kien_nguoi_dai_dien",
+      "name": "Ý kiến đồng ý của cha, mẹ hoặc người giám hộ trong Tờ khai CT01 hoặc bằng văn bản",
+      "condition": "answers.nguoi_chua_thanh_nien == true",
+      "condition_label": "Áp dụng khi người đăng ký tạm trú là người chưa thành niên",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["van_ban_dong_y_nguoi_giam_ho"]
+    }
+  ],
+  "form_templates": [],
+  "source_url": "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=5974"
+}

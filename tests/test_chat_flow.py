@@ -3,6 +3,7 @@
 identify → clarify → checklist → answer, mọi reply về thủ tục đều kèm citation.
 """
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.main import app
@@ -50,6 +51,56 @@ def test_gibberish_returns_grounding_fallback():
     assert result["kind"] == "fallback"
     assert result["citations"] == []
     assert "chưa hiểu rõ yêu cầu" in result["reply"].casefold()
+
+
+@pytest.mark.parametrize(
+    ("message", "procedure_id", "procedure_name"),
+    [
+        ("tôi muốn đăng ký kết hôn", "ket_hon", "Đăng ký kết hôn"),
+        ("tôi cần đăng ký tạm trú", "tam_tru", "Đăng ký tạm trú"),
+        ("tôi muốn làm căn cước công dân", "can_cuoc", "Cấp thẻ căn cước"),
+    ],
+)
+def test_common_procedures_are_not_routed_to_fallback(
+    message, procedure_id, procedure_name
+):
+    result = _post({"message": message})
+
+    assert result["kind"] != "fallback"
+    assert result["procedure_id"] == procedure_id
+    assert procedure_name in result["reply"]
+    assert result["citations"]
+    assert result["citations"][0]["procedure_id"] == procedure_id
+
+
+def test_unlisted_procedure_continues_to_open_legal_rag(monkeypatch):
+    from src.agents.nodes import answer
+    from src.services.retrieval.common import RetrievedChunk
+
+    monkeypatch.setattr(
+        answer,
+        "retrieve_legal",
+        lambda query: [
+            RetrievedChunk(
+                content="Quy định về điều kiện kinh doanh dịch vụ karaoke.",
+                metadata={
+                    "procedure_id": "legal:karaoke",
+                    "procedure_name": "Văn bản về dịch vụ karaoke",
+                    "chunk_id": "legal:karaoke::1",
+                    "section": "điều kiện",
+                    "source_type": "legal_corpus",
+                    "source_url": "https://vbpl.vn/example",
+                },
+                score=1.0,
+            )
+        ],
+    )
+
+    result = _post({"message": "tôi muốn xin giấy phép hoạt động karaoke"})
+
+    assert result["kind"] == "answer"
+    assert result["procedure_id"] is None
+    assert result["citations"][0]["procedure_id"] == "legal:karaoke"
 
 
 def test_unknown_case_id_returns_404():
@@ -103,15 +154,9 @@ def test_clarification_answer_is_extracted_and_persisted():
     import asyncio
 
     first = _post({"message": "Tôi muốn đăng ký khai sinh cho con"})
-    second = _post(
-        {
-            "case_id": first["case_id"],
-            "message": (
-                "Cha mẹ đã kết hôn, bé sinh ở bệnh viện, "
-                "bé sinh được 5 ngày"
-            ),
-        }
-    )
+    _post({"case_id": first["case_id"], "message": "có"})
+    _post({"case_id": first["case_id"], "message": "có"})
+    second = _post({"case_id": first["case_id"], "message": "5"})
 
     assert second["kind"] == "checklist"
     case = asyncio.run(cases_service.get(first["case_id"]))
@@ -125,7 +170,7 @@ def test_clarification_answer_is_extracted_and_persisted():
 def test_only_unanswered_questions_are_returned():
     first = _post({"message": "Tôi muốn đăng ký khai sinh cho con"})
     second = _post(
-        {"case_id": first["case_id"], "message": "Cha mẹ đã kết hôn"}
+        {"case_id": first["case_id"], "message": "có"}
     )
 
     assert second["kind"] == "clarify"
@@ -156,16 +201,13 @@ def test_user_can_correct_previous_answer_and_regenerate_checklist():
     import asyncio
 
     first = _post({"message": "đăng ký khai sinh cho con"})
-    _post(
-        {
-            "case_id": first["case_id"],
-            "message": "đã kết hôn, bé sinh ở bệnh viện, bé được 5 ngày",
-        }
-    )
+    _post({"case_id": first["case_id"], "message": "có"})
+    _post({"case_id": first["case_id"], "message": "có"})
+    _post({"case_id": first["case_id"], "message": "5"})
     corrected = _post(
         {
             "case_id": first["case_id"],
-            "message": "Cha mẹ chưa kết hôn",
+            "message": "thực ra: không",
         }
     )
     case = asyncio.run(cases_service.get(first["case_id"]))
@@ -189,10 +231,11 @@ def test_user_can_switch_away_from_selected_procedure():
         }
     )
     case = asyncio.run(cases_service.get(first["case_id"]))
-    assert switched["kind"] == "fallback"
-    assert case.procedure_id is None
+    assert switched["kind"] != "fallback"
+    assert switched["procedure_id"] == "ket_hon"
+    assert case.procedure_id == "ket_hon"
     assert case.answers == {}
-    assert "khai sinh" not in switched["reply"].casefold()
+    assert "đăng ký kết hôn" in switched["reply"].casefold()
 
 
 def test_mixed_checklist_persists_and_returns_pending_questions():

@@ -15,8 +15,9 @@ from src.models import Citation
 
 # Cảnh báo grounding (AGENTS.md §5): thiếu nguồn → không đoán.
 NO_SOURCE_WARNING = (
-    "Chưa đủ căn cứ trong catalog thủ tục hiện tại để trả lời chắc chắn. "
-    "Bạn vui lòng mô tả rõ hơn nhu cầu, hoặc liên hệ cán bộ tiếp nhận để được hướng dẫn."
+    "Chưa tìm thấy đủ căn cứ trong các nguồn thủ tục và văn bản pháp luật đã đồng bộ "
+    "để trả lời chắc chắn. Bạn có thể mở kết quả từ nguồn Chính phủ bên dưới, mô tả "
+    "cụ thể hơn nhu cầu, hoặc liên hệ cơ quan tiếp nhận."
 )
 
 RRF_K = 60

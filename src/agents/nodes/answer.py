@@ -61,9 +61,9 @@ async def run(state: GuidanceState) -> dict[str, Any]:
 
     if selected:
         chunks = retrieve(query, procedure_id=selected)
-    elif "legal_basis" in intents:
-        # Không có thủ tục được chọn: trả lời ở mức văn bản pháp luật, không
-        # biến các đoạn VBPL thành checklist hay yêu cầu hồ sơ cụ thể.
+    elif not selected:
+        # Không có workflow catalog vẫn tra cứu corpus VBPL. Catalog chỉ bật
+        # checklist/form đã duyệt, không phải allow-list giới hạn hỏi đáp.
         chunks = retrieve_legal(query)
     else:
         chunks = retrieve(query)
@@ -268,8 +268,6 @@ def _structured_answer(
                 "Để xác định chính xác các giấy tờ theo trường hợp của bạn, "
                 "vui lòng trả lời các câu hỏi làm rõ bên dưới."
             )
-        for warning in checklist_service.guidance_warnings(procedure, answers):
-            lines.append(f"Lưu ý: {warning}")
     return (
         StructuredAnswerResult(
             reply="\n".join(lines),
@@ -323,7 +321,7 @@ def _special_intent_answer(
     if "unknown" in intent_set:
         return (
             "Mình chưa hiểu rõ yêu cầu. Bạn hãy nêu tên thủ tục hoặc việc hành chính "
-            "cần làm, ví dụ: đăng ký khai sinh, hỏi lệ phí hoặc giấy tờ cần chuẩn bị.",
+            "cần làm, cùng nội dung muốn hỏi như hồ sơ, lệ phí hoặc nơi nộp.",
             "fallback",
         )
     return None

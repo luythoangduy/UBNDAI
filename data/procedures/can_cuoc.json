@@ -1,0 +1,89 @@
+{
+  "id": "can_cuoc",
+  "national_code": "2.000200",
+  "name": "Cấp thẻ căn cước cho người từ đủ 14 tuổi trở lên (thực hiện tại cấp tỉnh)",
+  "aliases": [
+    "cấp thẻ căn cước",
+    "làm căn cước công dân",
+    "làm thẻ căn cước",
+    "làm cccd"
+  ],
+  "example_queries": [
+    "tôi muốn làm căn cước công dân",
+    "đủ 14 tuổi làm thẻ căn cước cần gì",
+    "hồ sơ cấp thẻ căn cước"
+  ],
+  "negative_keywords": [
+    "cấp đổi thẻ căn cước",
+    "cấp lại thẻ căn cước",
+    "khai sinh",
+    "đăng ký kết hôn",
+    "đăng ký tạm trú"
+  ],
+  "required_token_groups": [
+    ["căn", "cước"]
+  ],
+  "agency": "Cơ quan quản lý căn cước của Công an cấp tỉnh",
+  "legal_basis": [
+    "Luật Căn cước 2023",
+    "Nghị định 70/2024/NĐ-CP",
+    "Thông tư 16/2024/TT-BCA",
+    "Thông tư 17/2024/TT-BCA",
+    "Thông tư 18/2024/TT-BCA",
+    "Thông tư 53/2025/TT-BCA"
+  ],
+  "processing_days": 7,
+  "fee_vnd": null,
+  "clarifying_questions": [
+    {
+      "key": "nop_truc_tuyen",
+      "text": "Bạn đăng ký thời gian, địa điểm làm căn cước theo hình thức trực tuyến phải không?",
+      "answer_type": "boolean"
+    },
+    {
+      "key": "co_thong_tin_csdl_dan_cu",
+      "text": "Thông tin của bạn đã có trong Cơ sở dữ liệu quốc gia về dân cư chưa?",
+      "answer_type": "boolean"
+    }
+  ],
+  "requirements": [
+    {
+      "code": "phieu_cc01",
+      "name": "Phiếu thu nhận thông tin căn cước (Mẫu CC01)",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["phieu_cc01"],
+      "notes": "Phiếu được tạo lập từ dữ liệu dân cư trong quá trình thu nhận để công dân kiểm tra và ký xác nhận."
+    },
+    {
+      "code": "phieu_dc02",
+      "name": "Phiếu đề nghị giải quyết thủ tục về căn cước (Mẫu DC02 điện tử)",
+      "condition": "answers.nop_truc_tuyen == true",
+      "condition_label": "Áp dụng khi đăng ký trực tuyến",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["phieu_dc02"]
+    },
+    {
+      "code": "phieu_dc01",
+      "name": "Phiếu thu thập thông tin dân cư (Mẫu DC01)",
+      "condition": "answers.co_thong_tin_csdl_dan_cu == false",
+      "condition_label": "Áp dụng khi công dân chưa có thông tin trong Cơ sở dữ liệu quốc gia về dân cư",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["phieu_dc01"]
+    },
+    {
+      "code": "giay_to_phap_ly_thong_tin_cong_dan",
+      "name": "Giấy tờ pháp lý chứa thông tin công dân",
+      "condition": "answers.co_thong_tin_csdl_dan_cu == false",
+      "condition_label": "Áp dụng khi công dân chưa có thông tin trong Cơ sở dữ liệu quốc gia về dân cư",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["giay_to_phap_ly"]
+    }
+  ],
+  "form_templates": [],
+  "source_url": "https://dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=642&open_popup=1"
+}

@@ -31,8 +31,6 @@
   ],
   "processing_days": 1,
   "fee_vnd": 0,
-  "late_registration_after_days": 60,
-  "late_registration_warning": "Bé đã sinh trên 60 ngày. Đây là trường hợp đăng ký khai sinh quá hạn; bạn nên liên hệ UBND cấp xã để được hướng dẫn hồ sơ phù hợp.",
   "clarifying_questions": [
     {
       "key": "ket_hon",

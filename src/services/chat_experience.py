@@ -95,8 +95,9 @@ async def starter_experience() -> ChatStarterResponse:
     cache = _cache_info(backend, cache_result.hit)
     return ChatStarterResponse(
         reply=(
-            "Bạn mô tả việc cần làm, mình sẽ tìm thủ tục, đối chiếu nguồn Chính phủ "
-            "và đưa ra các bước có thể thực hiện ngay."
+            "Bạn có thể hỏi bất kỳ thủ tục hành chính nào. Mình sẽ tra cứu nguồn đã "
+            "đồng bộ và nguồn Chính phủ; workflow có dữ liệu kiểm duyệt sẽ có thêm "
+            "checklist hoặc biểu mẫu để thực hiện ngay."
         ),
         actions=actions,
         evidence=[

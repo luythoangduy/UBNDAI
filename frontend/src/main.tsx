@@ -163,6 +163,15 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
     if (response?.procedure_id) onSelectTemplate?.(response.procedure_id, templateId);
   };
   const latestInteractiveIndex = latestInteractiveMessageIndex(messages);
+  // Rail nguồn hiển thị căn cứ của câu trả lời mới nhất (pattern Perplexity/NotebookLM):
+  // tách metadata khỏi dòng đọc để hội thoại liền mạch.
+  const latestEvidence = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const evidence = messages[index].response?.evidence;
+      if (evidence?.length) return evidence;
+    }
+    return undefined;
+  }, [messages]);
   return (
     <div className="chat-dock open">
       <section className="assistant-card docked" aria-label="Trợ lý hồ sơ AI">
@@ -186,6 +195,34 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
           </form>
           <p className="ai-note">Enter để gửi · Shift + Enter để xuống dòng · Bạn luôn duyệt trước khi dùng</p>
         </section>
+        {!!latestEvidence?.length && (
+          <aside className="evidence-rail" aria-label="Nguồn đã kiểm chứng cho câu trả lời mới nhất">
+            <div className="evidence-rail-head">
+              <b>Đã kiểm chứng nguồn</b>
+              <small>Căn cứ của câu trả lời mới nhất</small>
+            </div>
+            <div className="evidence-rail-body">
+              {latestEvidence.map(step => {
+                const verified = step.status === 'ready' || step.status === 'cache_hit';
+                return (
+                  <a
+                    key={`${step.id}-${step.detail}`}
+                    className={`trace-step ${step.status}`}
+                    href={step.source_url || undefined}
+                    target={step.source_url ? '_blank' : undefined}
+                    rel="noreferrer"
+                  >
+                    <i aria-hidden="true">{verified ? '✓' : '!'}</i>
+                    <span>
+                      <b>{step.label}</b>
+                      <small>{step.detail}</small>
+                    </span>
+                  </a>
+                );
+              })}
+            </div>
+          </aside>
+        )}
     </div>
   );
 }

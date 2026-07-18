@@ -955,7 +955,61 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   margin-top: 4px;
 }
 
-.chat-dock { width: 100%; min-width: 0; height: 100%; }
+/* Hội thoại + rail nguồn nằm cạnh nhau (pattern NotebookLM/Perplexity): metadata
+   RAG rời khỏi dòng đọc nên câu trả lời liền mạch, và người dùng vẫn thấy căn cứ
+   mà không phải cuộn. */
+.chat-dock {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Bắt buộc: thiếu dòng này hàng grid tự phình theo nội dung và đẩy composer ra
+     ngoài viewport (đúng lỗi đã gặp ở .chat-first-workspace). */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+}
+.chat-dock:has(.evidence-rail) { grid-template-columns: minmax(0, 1fr) clamp(268px, 21vw, 340px); }
+
+.evidence-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #d7e1e9;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 16px 44px rgba(24, 50, 78, .1);
+}
+.evidence-rail-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(120deg, #fff 0%, #f4f9fc 100%);
+}
+.evidence-rail-head b { display: block; color: var(--navy); font-size: 14px; font-weight: 700; }
+.evidence-rail-head small { display: block; margin-top: 3px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.evidence-rail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
+/* Rail rộng rãi hơn bong bóng chat nên chữ tăng từ 10/9px lên 13.5/12px — mức
+   đọc được thật, thay vì cỡ chú thích. */
+.evidence-rail .trace-step {
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 10px;
+  border-radius: 10px;
+}
+.evidence-rail .trace-step + .trace-step { margin-top: 4px; border-top: 0; }
+.evidence-rail .trace-step[href]:hover { background: #f2f8fc; }
+.evidence-rail .trace-step > i { flex: 0 0 22px; width: 22px; height: 22px; font-size: 11px; }
+.evidence-rail .trace-step b { font-size: 13.5px; line-height: 1.35; }
+.evidence-rail .trace-step small {
+  margin-top: 3px;
+  color: #5b7085;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+}
+.evidence-rail .trace-step[href] small::after { content: " ↗"; color: var(--blue); }
 .assistant-card.docked {
   width: 100%;
   height: 100%;
@@ -1516,6 +1570,25 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
 
 @media (max-width: 1440px) and (min-width: 921px) {
   .chat-first-workspace.with-draft { grid-template-columns: minmax(320px, 40%) minmax(0, 1fr); }
+}
+
+/* Căn cứ nguồn render ở hai nơi, CSS chỉ bật một: rail khi đủ rộng, khối inline
+   trong bong bóng khi hẹp. Không dùng JS vì `display:none` đã loại phần ẩn khỏi
+   accessibility tree — screen reader không đọc trùng.
+   Mặc định inline LUÔN hiện; chỉ ẩn đúng trong trường hợp rail thật sự hiển thị.
+   Viết một chiều như vậy để không có hai rule tranh specificity — bản trước ẩn cả
+   hai ở ~1000px, tức mất sạch bằng chứng grounding của một sản phẩm công. */
+.chat-first-workspace.with-draft .evidence-rail { display: none; }
+.chat-first-workspace.with-draft .chat-dock:has(.evidence-rail) { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 1180px) {
+  .evidence-rail { display: none; }
+  .chat-dock:has(.evidence-rail) { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Chỉ khi rail hiện (đủ rộng + không mở bản nháp) mới ẩn bản inline. */
+@media (min-width: 1181px) {
+  .chat-first-workspace:not(.with-draft) .source-trace { display: none; }
 }
 
 @media (max-width: 920px) {

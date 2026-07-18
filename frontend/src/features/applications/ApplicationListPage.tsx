@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { applicationStatusLabels, serializeApplicationFilters, type ApplicationSummary, type ApplicationStatus } from '../../application-management-types';
 import { readApplicationFilters, updateApplicationFilters } from './filters';
@@ -30,8 +30,8 @@ export default function ApplicationListPage() {
         <label><span className="sr-only">Đến ngày</span><input aria-label="Đến ngày" type="date" value={filters.to} onChange={event => change('submitted_to', event.target.value)} /></label>
       </div>
       {result.isLoading ? <div className="am-loading" aria-live="polite">Đang tải hồ sơ…</div> : result.error ? <div className="am-error" role="alert">Không thể tải danh sách. <button onClick={() => result.refetch()}>Thử lại</button></div> : !items.length ? <div className="am-empty"><h2>Không có hồ sơ phù hợp</h2><p>Thử bỏ bớt bộ lọc hoặc thay đổi từ khóa.</p></div> : <>
-        <div className="officer-table-wrap"><table><thead><tr><th>Mã hồ sơ</th><th>Công dân</th><th>Loại thủ tục</th><th>Cảnh báo</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><a href={`/officer/review/${item.id}`}>{item.application_code}</a></td><td>{item.citizen_name ?? '—'}</td><td>{item.application_type_name}</td><td>{item.anomaly_count}</td><td><span className="am-status am-status-info">{applicationStatusLabels[item.status] ?? item.status}</span></td><td><a href={`/officer/review/${item.id}`}>Xem đơn</a></td></tr>)}</tbody></table></div>
-        <div className="am-mobile-list">{items.map(item => <article className="am-mobile-card" key={item.id}><a href={`/officer/review/${item.id}`}><strong>{item.application_code}</strong></a><span>{item.application_type_name}</span><span>{item.citizen_name ?? 'Chưa có tên'}</span><small>{applicationStatusLabels[item.status] ?? item.status} · {item.anomaly_count} cảnh báo</small></article>)}</div>
+        <div className="officer-table-wrap"><table><thead><tr><th>Mã hồ sơ</th><th>Công dân</th><th>Loại thủ tục</th><th>Cảnh báo</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><Link to={`/officer/applications/${item.id}`}>{item.application_code}</Link></td><td>{item.citizen_name ?? '—'}</td><td>{item.application_type_name}</td><td>{item.anomaly_count}</td><td><span className="am-status am-status-info">{applicationStatusLabels[item.status] ?? item.status}</span></td><td><Link to={`/officer/applications/${item.id}`}>Xem đơn</Link></td></tr>)}</tbody></table></div>
+        <div className="am-mobile-list">{items.map(item => <article className="am-mobile-card" key={item.id}><Link to={`/officer/applications/${item.id}`}><strong>{item.application_code}</strong></Link><span>{item.application_type_name}</span><span>{item.citizen_name ?? 'Chưa có tên'}</span><small>{applicationStatusLabels[item.status] ?? item.status} · {item.anomaly_count} cảnh báo</small></article>)}</div>
         <nav className="am-pagination" aria-label="Phân trang"><button disabled={page <= 1} onClick={() => change('page', String(page - 1))}>Trang trước</button><span>Trang {page} · {total} hồ sơ</span><button disabled={page * pageSize >= total} onClick={() => change('page', String(page + 1))}>Trang sau</button></nav>
       </>}
     </section></div>

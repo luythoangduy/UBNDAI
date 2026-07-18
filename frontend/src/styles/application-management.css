@@ -46,6 +46,8 @@
 .officer-topbar h1 { margin: 0; color: var(--am-text); font-family: Inter, "Segoe UI", Arial, sans-serif; font-size: 22px; }
 .officer-topbar p { margin: 3px 0 0; color: var(--am-text-muted); font-size: 12px; }
 .officer-container { width: min(1440px, 100%); margin: 0 auto; padding: 24px clamp(16px, 3vw, 32px) 40px; }
+.am-legacy-embedded { padding-top: 18px; }
+.am-legacy-embedded .review-workspace { overflow: hidden; background: white; border: 1px solid #d8e1e9; border-radius: 12px; box-shadow: 0 4px 16px rgba(21,45,75,.05); }
 .officer-page-card { padding: 20px; background: var(--am-surface); border: 1px solid var(--am-border); border-radius: 14px; box-shadow: 0 4px 16px rgba(21,45,75,.04); }
 .officer-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .officer-kpi-grid.am-six-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }

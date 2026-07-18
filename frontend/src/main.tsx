@@ -600,7 +600,7 @@ function Dashboard({ summary, active, onFilter }: { summary?: DashboardSummary; 
   return <section className="dashboard-cards" aria-label="Tổng quan hồ sơ">{cards.map(card => <button key={card.label} className={`dashboard-card ${card.tone} ${active === card.filter ? 'active' : ''}`} onClick={() => onFilter(active === card.filter && card.filter ? '' : card.filter)}><span className="stat-icon">{card.icon}</span><span><small>{card.label}</small><strong>{card.value ?? '—'}</strong></span><i>→</i></button>)}</section>;
 }
 
-function ReviewWorkspace({ detail, onRefresh, onError }: { detail: CaseDetail; onRefresh: () => Promise<void>; onError: (cause: unknown) => void }) {
+export function ReviewWorkspace({ detail, onRefresh, onError }: { detail: CaseDetail; onRefresh: () => Promise<void>; onError: (cause: unknown) => void }) {
   const [documentId, setDocumentId] = useState(detail.documents[0]?.id ?? ''); const [fields, setFields] = useState<ExtractedField[]>([]); const [previewUrl, setPreviewUrl] = useState(''); const [previewError, setPreviewError] = useState(''); const [busy, setBusy] = useState(''); const [supplement, setSupplement] = useState(''); const [selectedFindings, setSelectedFindings] = useState<string[]>(detail.findings.filter(isActiveFinding).map(item => item.id)); const [reasons, setReasons] = useState<Record<string, string>>({});
   const activeDocument = detail.documents.find(item => item.id === documentId);
   useEffect(() => { setDocumentId(detail.documents[0]?.id ?? ''); setSelectedFindings(detail.findings.filter(isActiveFinding).map(item => item.id)); }, [detail.case.id]);

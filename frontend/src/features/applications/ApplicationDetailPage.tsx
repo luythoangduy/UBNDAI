@@ -5,6 +5,7 @@ import { ApiError, api, apiBlob, idempotency } from '../../api';
 import type { CaseDetail, ExtractedField } from '../../types';
 import type { ApplicationDetail } from '../../application-management-types';
 import { DecisionDialog } from './DecisionDialog';
+import { ReviewWorkspace } from '../../main';
 
 const fieldLabel = (key: string) => key.replace(/_/g, ' ').replace(/^./, (value: string) => value.toUpperCase());
 const displayValue = (value: unknown) => typeof value === 'object' ? JSON.stringify(value) : String(value ?? '—');
@@ -59,6 +60,11 @@ export default function ApplicationDetailPage() {
   if (management.isLoading || legacy.isLoading) return <div className="officer-container am-loading" aria-live="polite">Đang tải không gian xử lý…</div>;
   if (management.error || legacy.error || !management.data || !legacy.data) return <div className="officer-container"><div className="am-error" role="alert">Không thể tải hồ sơ. <Link to="/officer/applications">Quay lại danh sách</Link></div></div>;
   const app = management.data, detail = legacy.data;
+  return <>
+    <header className="officer-topbar"><div><Link to="/officer/applications">Hồ sơ</Link><h1>{app.application_code}</h1><p>{app.application_type_name}</p></div><span className="am-status am-status-warning">{app.status}</span></header>
+    <div className="officer-container am-detail-container am-legacy-embedded"><ReviewWorkspace detail={detail} onRefresh={async () => { await Promise.all([legacy.refetch(), management.refetch()]); }} onError={error => setToast(error instanceof Error ? error.message : 'Không thể tải lại hồ sơ.')} /></div>
+  </>;
+  /*
   const tabs = [['overview', 'Thông tin chung'], ['documents', `Tài liệu (${detail.documents.length})`], ['fields', 'Thông tin trích xuất'], ['anomalies', `Cảnh báo (${app.anomalies.length})`], ['history', 'Lịch sử']];
   return <>
     <header className="officer-topbar"><div><Link to="/officer/applications">Hồ sơ</Link><h1>{app.application_code}</h1><p>{app.application_type_name}</p></div><span className="am-status am-status-warning">{app.status}</span></header>
@@ -72,4 +78,5 @@ export default function ApplicationDetailPage() {
     {toast && <div className="am-toast" role="status">{toast}</div>}
     {decision && <DecisionDialog title={decision === 'CONTINUE_PROCESSING' ? 'Vẫn tiếp tục xử lý hồ sơ' : 'Trả lại hồ sơ cho công dân'} note={note} setNote={setNote} busy={submit.isPending} valid={decision === 'CONTINUE_PROCESSING' ? note.trim().length >= 10 : !!note.trim() && app.anomalies.length > 0} error={submit.error instanceof ApiError && submit.error.status === 409 ? 'Hồ sơ vừa được cập nhật. Dữ liệu mới đã được tải lại.' : submit.error ? 'Không thể lưu quyết định. Vui lòng thử lại.' : undefined} onClose={() => { setDecision(null); setNote(''); }} onConfirm={() => submit.mutate()} />}
   </>;
+  */
 }

@@ -78,4 +78,11 @@ class Settings(BaseSettings):
     upload_max_files: int = 10
     upload_max_bytes: int = 10 * 1024 * 1024
 
+    @property
+    def database_persistence_enabled(self) -> bool:
+        """Use configured persistence automatically when DATABASE_URL is PostgreSQL."""
+        return self.persistence_enabled or self.database_url.startswith(
+            ("postgresql://", "postgresql+psycopg://")
+        )
+
 settings = Settings()

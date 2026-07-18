@@ -1,6 +1,6 @@
 """Public contracts for citizen intake and submission."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -64,3 +64,35 @@ class UploadIntentResponse(BaseModel):
     document_id: str
     upload_url: str
     expires_in: int = 900
+
+
+class ImageFormatCheck(BaseModel):
+    """A non-persistent quality check for a photo submitted before OCR."""
+
+    code: str
+    status: Literal["pass", "warning", "error"]
+    message: str
+
+
+class ImageLayoutFinding(BaseModel):
+    """A visual capture/layout issue, not a legal-validity determination."""
+
+    code: str
+    status: Literal["warning", "error"]
+    message: str
+    bounding_box: list[float] | None = Field(
+        default=None,
+        description="Relative [x, y, width, height] used to mark the image preview.",
+    )
+
+
+class ImageFormatReview(BaseModel):
+    """Client-facing result for document-photo format and readability checks."""
+
+    status: Literal["ready", "needs_attention", "rejected"]
+    media_type: Literal["image/jpeg", "image/png"]
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    file_size_bytes: int = Field(gt=0)
+    checks: list[ImageFormatCheck]
+    layout_findings: list[ImageLayoutFinding] = Field(default_factory=list)

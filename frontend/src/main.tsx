@@ -589,6 +589,7 @@ function CitizenPortal() {
   const [notice, setNotice] = useState(''); const [busy, setBusy] = useState('');
   const [procedures, setProcedures] = useState<ProcedureSummary[]>([]);
   const [procedureCapabilities, setProcedureCapabilities] = useState<Record<string, ProcedureCapabilities>>({});
+  const [directoryStatus, setDirectoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [formSchema, setFormSchema] = useState<ProcedureFormSchema>();
   const [capabilities, setCapabilities] = useState<ProcedureCapabilities>();
 
@@ -625,14 +626,23 @@ function CitizenPortal() {
     return () => window.removeEventListener('citizen-session-expired', expired);
   }, []);
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
-  useEffect(() => {
-    if (!logged) return;
-    Promise.all([refresh(), api<ProcedureSummary[]>('/procedures').then(async items => {
+  const loadDirectory = async () => {
+    setDirectoryStatus('loading');
+    try {
+      const items = await api<ProcedureSummary[]>('/procedures');
       rememberProcedureNames(items); setProcedures(items);
+      setDirectoryStatus('ready');
       const pairs = await Promise.all(items.map(async item => [item.id, await api<ProcedureCapabilities>(`/procedures/${item.id}/capabilities`)] as const));
       setProcedureCapabilities(Object.fromEntries(pairs));
-    })])
-      .catch(cause => setNotice((cause as Error).message));
+    } catch (cause) {
+      setDirectoryStatus('error');
+      setNotice((cause as Error).message);
+    }
+  };
+  useEffect(() => {
+    if (!logged) return;
+    refresh().catch(cause => setNotice((cause as Error).message));
+    void loadDirectory();
   }, [logged]);
   if (!logged) return <Login role="citizen" onSuccess={() => setLogged(true)}/>;
 
@@ -763,7 +773,9 @@ function CitizenPortal() {
                        <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''}{!procedureCapabilities[procedure.id]?.dynamic_form ? ' · Chỉ hỗ trợ chat' : ''}</p>
                      </button>
                    ))}
-                   {!procedures.length && <p>Chưa có thủ tục với biểu mẫu đã công bố.</p>}
+                   {!procedures.length && directoryStatus === 'loading' && <div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div>}
+                   {!procedures.length && directoryStatus === 'error' && <p>Chưa kết nối được máy chủ để tải danh mục thủ tục. <button className="text-button" onClick={() => void loadDirectory()}>Thử lại</button></p>}
+                   {!procedures.length && directoryStatus === 'ready' && <p>Chưa có thủ tục với biểu mẫu đã công bố.</p>}
                  </div>
               </div>
            )}

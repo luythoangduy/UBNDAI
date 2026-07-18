@@ -17,6 +17,8 @@ export const setToken = (value: string, role?: 'citizen' | 'officer') => {
   else localStorage.removeItem(key);
 };
 
+export const clearOfficerSession = () => setToken('', 'officer');
+
 function withHeaders(init: RequestInit) {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -28,7 +30,13 @@ function withHeaders(init: RequestInit) {
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api/v1${path}`, { ...init, headers: withHeaders(init) });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(body.detail ?? body.error ?? 'Yêu cầu thất bại', response.status);
+  if (!response.ok) {
+    if (response.status === 401 && location.pathname.startsWith('/officer')) {
+      clearOfficerSession();
+      window.dispatchEvent(new Event('officer-session-expired'));
+    }
+    throw new ApiError(body.detail ?? body.error ?? 'Yêu cầu thất bại', response.status);
+  }
   return (body.data ?? body) as T;
 }
 

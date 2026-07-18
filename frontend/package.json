@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.2",
     "@tiptap/pm": "^3.28.0",
     "@tiptap/react": "^3.28.0",
     "@tiptap/starter-kit": "^3.28.0",
@@ -17,10 +19,16 @@
     "lucide-react": "^1.25.0",
     "react": "latest",
     "react-dom": "latest",
+    "react-router-dom": "^7.18.1",
+    "recharts": "^3.9.2",
     "typescript": "latest",
     "vite": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "jsdom": "latest",

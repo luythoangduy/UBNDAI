@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 from src.models import TokenClaims
 from src.models.application_management import ApplicationDecisionRequest, project_application_status
 from src.services.auth import issue_token, require_role, verify_credentials
+from src.services.application_management_service import (
+    ApplicationConflict,
+    ApplicationNotFound,
+    application_management_service,
+)
 from src.services.officer_store import store
 from src.services.storage import StorageError, storage
 
@@ -158,8 +163,14 @@ async def get_application(application_id: str, claims: TokenClaims = Depends(req
     summary = _application_summary(case, claims)
     anomalies = [{**item.model_dump(mode="json"), "code": item.type, "severity": item.severity.upper(), "detected_by": item.source} for item in findings]
     events = [item.model_dump(mode="json") for item in store.timeline(application_id, claims.organization_id)]
-    documents = [_masked_document(document) for document in store.documents.values() if document.case_id == application_id]
-    return {"success": True, "data": {**summary, "citizen_id": "***", "documents": documents, "extracted_fields": [], "anomalies": anomalies, "events": events, "form_data": case.form_data, "checklist": case.checklist, "application": {**_masked_case(case), "application_status": summary["application_status"]}, "findings": anomalies, "timeline": events}}
+    case_documents = store.documents_for_case(application_id, claims.organization_id)
+    documents = [_masked_document(document) for document in case_documents]
+    extracted_fields = [
+        field.model_dump(mode="json")
+        for document in case_documents
+        for field in store.fields_for_document(document.id, claims.organization_id)
+    ]
+    return {"success": True, "data": {**summary, "citizen_id": "***", "documents": documents, "extracted_fields": extracted_fields, "anomalies": anomalies, "events": events, "form_data": case.form_data, "checklist": case.checklist, "application": {**_masked_case(case), "application_status": summary["application_status"]}, "findings": anomalies, "timeline": events}}
 
 
 @router.post("/applications/{application_id}/decisions")
@@ -168,21 +179,24 @@ async def decide_application(application_id: str, payload: ApplicationDecisionRe
     if case is None:
         raise HTTPException(status_code=404, detail="Application not found")
     _assert_case_mutation(application_id, claims)
-    key = (application_id, payload.idempotency_key)
-    if key in store.idempotency_results:
-        return {"success": True, "data": store.idempotency_results[key], "idempotent": True}
-    if payload.expected_version != case.version:
-        raise HTTPException(status_code=409, detail="Application version has changed")
-    target = "in_officer_review" if payload.decision == "CONTINUE_PROCESSING" else "needs_citizen_update"
     try:
-        updated = store.transition(application_id, claims.organization_id, claims.user_id, target, payload.note or payload.citizen_message)
-        if updated is None:
-            raise HTTPException(status_code=404, detail="Application not found")
+        updated, idempotent = application_management_service.decide(
+            application_id,
+            claims.organization_id,
+            claims.user_id,
+            decision=payload.decision,
+            note=payload.note,
+            anomaly_ids=payload.anomaly_ids,
+            citizen_message=payload.citizen_message,
+            expected_version=payload.expected_version,
+            idempotency_key=payload.idempotency_key,
+        )
         result = {"application": {**_masked_case(updated), "application_status": project_application_status(updated.status, has_caution=bool(store.findings_for(application_id, claims.organization_id)))}, "decision": payload.decision}
-        store.idempotency_results[key] = result
-        return {"success": True, "data": result}
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"success": True, "data": result, "idempotent": idempotent}
+    except ApplicationNotFound as exc:
+        raise HTTPException(status_code=404, detail="Application not found") from exc
+    except ApplicationConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/auth/login")

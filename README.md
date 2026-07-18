@@ -297,3 +297,15 @@ python -m pytest -q
 python -m ruff check src tests
 cd frontend && npm.cmd test -- --pool=threads --maxWorkers=1 && npm.cmd run build
 ```
+
+### Application-management runtime notes
+
+Set `PERSISTENCE_ENABLED=true` and run `alembic -c alembic.ini upgrade head` before
+using the officer workflow outside an ephemeral demo process. The canonical
+workflow is database-backed only when that setting is enabled; the default
+development mode keeps the legacy in-memory compatibility store.
+
+For local development, Vite proxies `/api` to port `8001` in this checkout so it
+can coexist with an older backend process that may still hold port `8000`.
+Start the current backend with `python -m uvicorn src.main:app --host 127.0.0.1
+--port 8001`, then open `http://127.0.0.1:5173/officer/`.

@@ -139,6 +139,10 @@ class ApplicationRepository:
                 raise RepositoryConflict("idempotency key was already used with another decision")
             return existing
 
+        case = self.get(case_id, organization_id, for_update=True)
+        if case is None:
+            raise RepositoryNotFound(case_id)
+        previous_status = case.status
         case = self.update_status(case_id, organization_id, target_status, expected_version=decision.expected_version)
         selected = set(decision.selected_finding_ids)
         if selected:
@@ -153,7 +157,7 @@ class ApplicationRepository:
                 row.status = finding_status
                 row.updated_at = utcnow()
 
-        decision.previous_status = decision.previous_status or case.status
+        decision.previous_status = decision.previous_status or previous_status
         self.session.add_all([decision, audit, notification, *(finding_decisions or [])])
         if supplement is not None:
             self.session.add(supplement)

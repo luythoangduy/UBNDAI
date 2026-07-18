@@ -20,6 +20,7 @@ from src.models import (
     ValidationFinding,
 )
 from src.config import settings
+from src.services.application_repository import ApplicationRepository, RepositoryNotFound
 from src.services.persistence import (
     ApplicationCaseORM,
     AuditEventORM,
@@ -39,7 +40,7 @@ def now() -> datetime:
 
 
 class OfficerStore:
-    def __init__(self) -> None:
+    def __init__(self, *, database: Database | None = None, seed: bool = True) -> None:
         self._lock = RLock()
         self.cases: dict[str, ApplicationCase] = {}
         self.findings: dict[str, ValidationFinding] = {}
@@ -52,19 +53,64 @@ class OfficerStore:
         self.routing_decisions: dict[str, RoutingDecision] = {}
         self.consents: list[ConsentRecord] = []
         self.idempotency_results: dict[tuple[str, str], dict] = {}
-        self._db = Database(settings.database_url) if settings.persistence_enabled else None
+        self._db = database or (Database(settings.database_url) if settings.persistence_enabled else None)
         if self._db:
             if settings.app_env != "production":
                 self._db.create_schema()
             self._load_persisted_cases()
-        self._seed()
+        if seed:
+            self._seed()
+
+    @staticmethod
+    def _case_model(row: ApplicationCaseORM) -> ApplicationCase:
+        return ApplicationCase(
+            id=row.id,
+            case_code=row.case_code,
+            organization_id=row.organization_id,
+            citizen_id=row.citizen_id,
+            procedure_id=row.procedure_id,
+            procedure_version_id=row.procedure_version_id,
+            status=row.status,
+            source_channel=row.source_channel,
+            assigned_to=row.assigned_to,
+            assigned_at=row.assigned_at,
+            priority=row.priority,
+            submitted_at=row.submitted_at,
+            sla_due_at=row.sla_due_at,
+            current_submission_version=row.current_submission_version,
+            version=row.version,
+            form_data=row.form_data or {},
+            checklist=row.checklist or {},
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    def _finding_model(row: ValidationFindingORM) -> ValidationFinding:
+        return ValidationFinding(
+            id=row.id,
+            case_id=row.case_id,
+            submission_version_id=row.submission_version_id,
+            type=row.type,
+            severity=row.severity,
+            source=row.source,
+            message=row.message,
+            suggestion=row.suggestion,
+            rule_id=row.rule_id,
+            rule_version=row.rule_version,
+            confidence=row.confidence,
+            status=row.status,
+            field_keys=row.field_keys or [],
+            evidence=row.evidence or [],
+            created_at=row.created_at,
+        )
 
     def _load_persisted_cases(self) -> None:
         if not self._db:
             return
         with self._db.session() as session:
             for row in session.query(ApplicationCaseORM).all():
-                self.cases[row.id] = ApplicationCase(id=row.id, case_code=row.case_code, organization_id=row.organization_id, citizen_id=row.citizen_id, procedure_id=row.procedure_id, procedure_version_id=row.procedure_version_id, status=row.status, source_channel=row.source_channel, assigned_to=row.assigned_to, assigned_at=row.assigned_at, priority=row.priority, submitted_at=row.submitted_at, sla_due_at=row.sla_due_at, current_submission_version=row.current_submission_version, version=row.version, form_data=row.form_data or {}, checklist=row.checklist or {}, created_at=row.created_at, updated_at=row.updated_at)
+                self.cases[row.id] = self._case_model(row)
             for row in session.query(SubmissionVersionORM).all():
                 self.submissions[row.id] = CaseSubmissionVersion(id=row.id, case_id=row.case_id, version=row.version, form_data=row.form_data or {}, checklist_snapshot=row.checklist_snapshot or {}, procedure_version_id=row.procedure_version_id, procedure_rule_version=row.procedure_rule_version, created_at=row.created_at, created_by=row.created_by, source=row.source)
             for row in session.query(CaseDocumentORM).all():
@@ -72,7 +118,7 @@ class OfficerStore:
             for row in session.query(ExtractedFieldRecordORM).all():
                 self.extracted_fields[row.id] = ExtractedFieldRecord(id=row.id, document_id=row.document_id, field_key=row.field_key, raw_value=row.raw_value, normalized_value=row.normalized_value, confidence=row.confidence, page=row.page, bounding_box=row.bounding_box, review_status=row.review_status, previous_value=row.previous_value)
             for row in session.query(ValidationFindingORM).all():
-                self.findings[row.id] = ValidationFinding(id=row.id, case_id=row.case_id, submission_version_id=row.submission_version_id, type=row.type, severity=row.severity, source=row.source, message=row.message, suggestion=row.suggestion, rule_id=row.rule_id, rule_version=row.rule_version, confidence=row.confidence, status=row.status, field_keys=row.field_keys or [], evidence=row.evidence or [], created_at=row.created_at)
+                self.findings[row.id] = self._finding_model(row)
             for row in session.query(SupplementRequestORM).all():
                 self.supplements.append(SupplementRequest(id=row.id, case_id=row.case_id, submission_version_id=row.submission_version_id, created_by=row.created_by, public_message=row.public_message, finding_ids=row.finding_ids or [], due_at=row.due_at, status=row.status, created_at=row.created_at))
             for row in session.query(AuditEventORM).all():
@@ -261,6 +307,13 @@ class OfficerStore:
             self._seed()
 
     def list_cases(self, organization_id: str) -> list[ApplicationCase]:
+        if self._db:
+            with self._db.session() as session:
+                rows, _ = ApplicationRepository(session).list(organization_id)
+                cases = [self._case_model(row) for row in rows]
+                with self._lock:
+                    self.cases.update({case.id: case for case in cases})
+                return [deepcopy(case) for case in cases]
         with self._lock:
             return [deepcopy(c) for c in self.cases.values() if c.organization_id == organization_id]
 
@@ -497,6 +550,15 @@ class OfficerStore:
             return deepcopy(result)
 
     def get_case(self, case_id: str, organization_id: str) -> ApplicationCase | None:
+        if self._db:
+            with self._db.session() as session:
+                row = ApplicationRepository(session).get(case_id, organization_id)
+                if row is None:
+                    return None
+                case = self._case_model(row)
+                with self._lock:
+                    self.cases[case.id] = case
+                return deepcopy(case)
         with self._lock:
             case = self.cases.get(case_id)
             return deepcopy(case) if case and case.organization_id == organization_id else None
@@ -562,13 +624,67 @@ class OfficerStore:
         return max((s for s in self.submissions.values() if s.case_id == case_id), key=lambda item: item.version)
 
     def findings_for(self, case_id: str, organization_id: str) -> list[ValidationFinding]:
+        if self._db:
+            with self._db.session() as session:
+                repository = ApplicationRepository(session)
+                try:
+                    rows = repository.findings(case_id, organization_id)
+                except RepositoryNotFound:
+                    return []
+                if not rows:
+                    return []
+                latest_submission = max(
+                    (item for item in self.submissions.values() if item.case_id == case_id),
+                    key=lambda item: item.version,
+                    default=None,
+                )
+                if latest_submission is None:
+                    latest_id = rows[-1].submission_version_id
+                else:
+                    latest_id = latest_submission.id
+                findings = [self._finding_model(row) for row in rows if row.submission_version_id == latest_id]
+                with self._lock:
+                    self.findings.update({finding.id: finding for finding in findings})
+                return [deepcopy(finding) for finding in findings]
         if not self.get_case(case_id, organization_id):
             return []
         current = self.submission_for(case_id).id
         with self._lock:
             return [deepcopy(f) for f in self.findings.values() if f.case_id == case_id and f.submission_version_id == current]
 
+    def documents_for_case(self, case_id: str, organization_id: str) -> list[CaseDocument]:
+        if self.get_case(case_id, organization_id) is None:
+            return []
+        if self._db:
+            with self._db.session() as session:
+                rows = session.query(CaseDocumentORM).filter(CaseDocumentORM.case_id == case_id).order_by(CaseDocumentORM.created_at, CaseDocumentORM.id).all()
+                documents = [CaseDocument(
+                    id=row.id, case_id=row.case_id, submission_version_id=row.submission_version_id or "",
+                    document_type=row.document_type, file_uri=f"private://{row.object_key}",
+                    object_key=row.object_key, original_filename=row.original_filename,
+                    content_type=row.content_type, size_bytes=row.size_bytes, sha256=row.sha256,
+                    ocr_status=row.ocr_status, ocr_engine=row.ocr_engine, ocr_version=row.ocr_version,
+                    uploaded_at=row.uploaded_at or row.created_at,
+                ) for row in rows]
+                with self._lock:
+                    self.documents.update({document.id: document for document in documents})
+                return documents
+        with self._lock:
+            return [deepcopy(document) for document in self.documents.values() if document.case_id == case_id]
+
     def fields_for_document(self, document_id: str, organization_id: str) -> list[ExtractedFieldRecord]:
+        if self._db:
+            with self._db.session() as session:
+                document = session.get(CaseDocumentORM, document_id)
+                if document is None or ApplicationRepository(session).get(document.case_id, organization_id) is None:
+                    raise KeyError("document_not_found")
+                rows = ApplicationRepository(session).fields_for_document(document_id)
+                return [ExtractedFieldRecord(
+                    id=row.id, document_id=row.document_id, field_key=row.field_key,
+                    raw_value=row.raw_value, normalized_value=row.normalized_value,
+                    confidence=row.confidence, page=row.page, bounding_box=row.bounding_box,
+                    review_status=row.review_status, previous_value=row.previous_value,
+                ) for row in rows]
         with self._lock:
             document = self.documents.get(document_id)
             case = self.cases.get(document.case_id) if document else None
@@ -674,6 +790,12 @@ class OfficerStore:
             return deepcopy(updated)
 
     def timeline(self, case_id: str, organization_id: str) -> list[CaseAuditEvent]:
+        if self._db:
+            if self.get_case(case_id, organization_id) is None:
+                return []
+            with self._db.session() as session:
+                rows = session.query(AuditEventORM).filter(AuditEventORM.case_id == case_id).order_by(AuditEventORM.created_at, AuditEventORM.id).all()
+                return [CaseAuditEvent(id=row.id, case_id=row.case_id, actor_id=row.actor_id, organization_id=row.organization_id, event_type=row.event_type, object_type=row.object_type, object_id=row.object_id, metadata=row.metadata_ or {}, created_at=row.created_at) for row in rows]
         if not self.get_case(case_id, organization_id):
             return []
         with self._lock:

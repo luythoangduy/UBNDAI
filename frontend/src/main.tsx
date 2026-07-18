@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethrough, List as ListIcon, Printer, ImageUp } from 'lucide-react';
+import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethrough, List as ListIcon, Printer, ImageUp, Menu, SquarePen, ArrowUp } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
@@ -81,6 +81,7 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
   const [streamedText] = useState('');
   const [streaming, setStreaming] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const followChatRef = useRef(true);
   const requestGenerationRef = useRef(0);
   const requestInFlightRef = useRef(false);
@@ -88,6 +89,14 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
   useEffect(() => {
     if (followChatRef.current) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy]);
+  // Textarea tự giãn theo nội dung tới trần 200px rồi mới cuộn — CSS thuần không
+  // làm được vì phải đọc scrollHeight sau mỗi lần nội dung đổi.
+  useEffect(() => {
+    const element = inputRef.current;
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(element.scrollHeight, 200)}px`;
+  }, [message]);
   useEffect(() => {
     if (activeCaseId && locallyCreatedCaseRef.current === activeCaseId) {
       locallyCreatedCaseRef.current = undefined;
@@ -158,14 +167,8 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
     <div className="chat-dock open">
       <section className="assistant-card docked" aria-label="Trợ lý hồ sơ AI">
         <div className="panel-heading">
-          <div>
-            <span className="eyebrow">TRỢ LÝ HỒ SƠ AI</span>
-            <h2>Bạn cần làm thủ tục gì?</h2>
-          </div>
-          <div className="actions">
-            <button type="button" className="chat-image-review" onClick={onReviewImage}><ImageUp size={15}/>Rà soát ảnh</button>
-            <span className="online"><i/>Đang trực tuyến</span>
-          </div>
+          <h2>Bạn cần làm thủ tục gì?</h2>
+          <span className="online"><i/>Đang trực tuyến</span>
         </div>
           <div className="chat-log" ref={logRef} aria-live="polite" onScroll={event => { const element = event.currentTarget; followChatRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }}>
             {messages.map((item, index) => <article key={item.id ?? index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b></div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{index === latestInteractiveIndex && !!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy || streaming}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{index === latestInteractiveIndex && !!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu phù hợp</b><small>đã đối chiếu nguồn</small></div>{item.response.templates.map((template, templateIndex) => <article key={template.template_id} className={`template-card ${templateIndex === 0 && template.field_count > 0 ? 'recommended' : ''}`}><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{templateIndex === 0 && template.field_count > 0 ? '★ ĐỀ XUẤT · ' : ''}{template.official_source ? 'NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div>{template.field_count > 0 && item.response?.procedure_id ? <button className="use-template" onClick={() => chooseTemplate(item.response, template.template_id)} disabled={busy || streaming}>Dùng mẫu này →</button> : <a href={template.source_url} target="_blank" rel="noreferrer">Mở mẫu ↗</a>}<details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{index === latestInteractiveIndex && !!item.response?.clarifying_questions?.length && <ClarificationPrompt questions={item.response.clarifying_questions} disabled={busy || streaming} onPrepareAnswer={setMessage}/>} {!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
@@ -175,8 +178,11 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
           </div>
           <form className="chat-input" onSubmit={send}>
             {selectedContext && <div className="chat-context-banner"><strong>Đang chọn:</strong> "{selectedContext.length > 40 ? selectedContext.substring(0, 40) + '...' : selectedContext}"</div>}
-            <textarea aria-label="Nội dung cần hỏi" rows={2} maxLength={4000} enterKeyHint="send" value={message} onChange={event => setMessage(event.target.value)} onKeyDown={submitOnEnter} placeholder="Mô tả bất kỳ thủ tục hành chính nào bạn cần hỗ trợ…"/>
-            <button className="primary" disabled={!message.trim() || busy || streaming}>Gửi ↗</button>
+            <div className="composer">
+              <button type="button" className="composer-attach" onClick={onReviewImage} title="Rà soát ảnh giấy tờ" aria-label="Rà soát ảnh giấy tờ"><ImageUp size={17}/></button>
+              <textarea ref={inputRef} aria-label="Nội dung cần hỏi" rows={1} maxLength={4000} enterKeyHint="send" value={message} onChange={event => setMessage(event.target.value)} onKeyDown={submitOnEnter} placeholder="Mô tả thủ tục hành chính bạn cần hỗ trợ…"/>
+              <button className="composer-send" disabled={!message.trim() || busy || streaming} aria-label="Gửi câu hỏi"><ArrowUp size={17}/></button>
+            </div>
           </form>
           <p className="ai-note">Enter để gửi · Shift + Enter để xuống dòng · Bạn luôn duyệt trước khi dùng</p>
         </section>
@@ -436,6 +442,7 @@ function ProcedureForImageDialog({ file, procedures, onSelect, onClose }: { file
 function ChatPortal() {
   const [logged, setLogged] = useState(!!token()); const [cases, setCases] = useState<CaseRecord[]>([]); const [current, setCurrent] = useState<CaseRecord | null>(null);
   const [conversationResetKey, setConversationResetKey] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [file, setFile] = useState<File>(); const [consent, setConsent] = useState(false);
   const [notice, setNotice] = useState(''); const [busy, setBusy] = useState('');
   const [imageReviewOpen, setImageReviewOpen] = useState(false);
@@ -478,6 +485,14 @@ function ChatPortal() {
     window.addEventListener('citizen-session-expired', expired);
     return () => window.removeEventListener('citizen-session-expired', expired);
   }, []);
+
+  // Drawer lịch sử là lớp phủ — Esc phải đóng được để không nhốt người dùng bằng bàn phím.
+  useEffect(() => {
+    if (!historyOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setHistoryOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [historyOpen]);
 
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
   useEffect(() => {
@@ -661,25 +676,31 @@ function ChatPortal() {
   return (
     <Shell role="citizen">
       <main className="citizen-page chat-first-page">
-        <div className="chat-first-title">
-          <div><span className="eyebrow">CỔNG DỊCH VỤ CÔNG · AI COPILOT</span><h1>Chuẩn bị hồ sơ bằng một cuộc trò chuyện</h1><p>Hỏi tự nhiên, chọn mẫu có nguồn, rồi cùng AI hoàn thiện bản nháp.</p></div>
+        <div className="chat-topline">
+          <button type="button" className="history-toggle" aria-expanded={historyOpen} aria-controls="chat-history-drawer" onClick={() => setHistoryOpen(open => !open)}>
+            <Menu size={17}/><span>Lịch sử</span>
+          </button>
+          <button type="button" className="topline-new" onClick={() => { setHistoryOpen(false); startNewConversation(); }}><SquarePen size={15}/><span>Cuộc trò chuyện mới</span></button>
+          <h1>Trợ lý thủ tục hành chính</h1>
           <div className="chat-first-meta"><span><i/>Nguồn chính thức</span><button className="ghost compact" onClick={() => { setToken('', 'citizen'); setLogged(false); }}>Đăng xuất</button></div>
         </div>
         {notice && <div className={`workspace-notice ${notice.includes('Đã') || notice.includes('đã') ? 'success' : ''}`} role="status">{notice}<button aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
         <div className={`chat-first-workspace ${selectedTemplate && panelOpen ? 'with-draft' : ''}`}>
-          <aside className="history-sidebar">
+          {historyOpen && <div className="history-backdrop" onClick={() => setHistoryOpen(false)}/>}
+          <aside id="chat-history-drawer" className={`history-sidebar ${historyOpen ? 'open' : ''}`} aria-hidden={!historyOpen} aria-label="Lịch sử trò chuyện">
             <div className="history-header">
               <span>Lịch sử trò chuyện</span>
-              <button type="button" className="new-conversation" aria-label="Cuộc trò chuyện mới" onClick={startNewConversation}>+ Cuộc trò chuyện mới</button>
+              <button type="button" className="history-close" aria-label="Đóng lịch sử" onClick={() => setHistoryOpen(false)}><X size={16}/></button>
             </div>
             <div className="history-list">
               {cases.length === 0 ? <p className="muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 20 }}>Chưa có lịch sử</p> : cases.map(c => {
                 const title = c.procedure_id && c.procedure_id !== 'pending_guidance' ? procedures.find(p => p.id === c.procedure_id)?.name || c.procedure_id : 'Tư vấn thủ tục mới';
                 return (
-                  <button 
-                    key={c.id} 
-                    className={`history-item ${current?.id === c.id ? 'active' : ''}`} 
-                    onClick={() => selectConversation(c)}
+                  <button
+                    key={c.id}
+                    className={`history-item ${current?.id === c.id ? 'active' : ''}`}
+                    tabIndex={historyOpen ? 0 : -1}
+                    onClick={() => { selectConversation(c); setHistoryOpen(false); }}
                   >
                     {title}
                     <small>{formatDate(c.created_at)}</small>

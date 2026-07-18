@@ -10,6 +10,22 @@ export class ApiError extends Error {
   }
 }
 
+/** FastAPI/Pydantic errors put `detail` as a string, or an array of {msg,...} for 422s. Never let a raw object/array hit .toString(). */
+function extractErrorMessage(body: { detail?: unknown; error?: unknown }): string {
+  const detail = body.detail ?? body.error;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map(item => (typeof item === 'string' ? item : (item as { msg?: string })?.msg))
+      .filter((item): item is string => !!item);
+    if (messages.length) return messages.join('; ');
+  }
+  if (detail && typeof detail === 'object' && typeof (detail as { msg?: string }).msg === 'string') {
+    return (detail as { msg: string }).msg;
+  }
+  return 'Yêu cầu thất bại';
+}
+
 export const token = () => localStorage.getItem(tokenKeyForPath()) ?? '';
 export const setToken = (value: string, role?: 'citizen' | 'officer') => {
   const key = role === 'officer' ? officerTokenKey : role === 'citizen' ? citizenTokenKey : tokenKeyForPath();
@@ -36,7 +52,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       setToken('', role);
       window.dispatchEvent(new Event(`${role}-session-expired`));
     }
-    throw new ApiError(body.detail ?? body.error ?? 'Yêu cầu thất bại', response.status);
+    throw new ApiError(extractErrorMessage(body), response.status, body.detail ?? body.error);
   }
   return (body.data ?? body) as T;
 }
@@ -50,9 +66,7 @@ export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blo
       window.dispatchEvent(new Event(`${role}-session-expired`));
     }
     const body = await response.json().catch(() => ({}));
-    const detail = body.detail;
-    const message = typeof detail === 'string' ? detail : detail?.message ?? 'Không thể mở tài liệu';
-    throw new ApiError(message, response.status, detail);
+    throw new ApiError(extractErrorMessage(body) || 'Không thể mở tài liệu', response.status, body.detail);
   }
   return response.blob();
 }

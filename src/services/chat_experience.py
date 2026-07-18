@@ -104,7 +104,7 @@ async def starter_experience() -> ChatStarterResponse:
             EvidenceStep(
                 id="hybrid-search",
                 label="Tìm thủ tục",
-                detail="Identity index + BM25 + Vector",
+                detail="Đối chiếu tên gọi và nội dung thủ tục trong danh mục",
                 status="ready",
             ),
             EvidenceStep(
@@ -164,7 +164,7 @@ async def build_experience(procedure_id: str | None, query: str) -> ChatExperien
         EvidenceStep(
             id="hybrid-search",
             label="Tìm thủ tục",
-            detail="Đã định danh bằng identity index và truy xuất nội dung hybrid",
+            detail="Đã xác định đúng thủ tục và đối chiếu nội dung liên quan",
             status="ready",
         )
     ]

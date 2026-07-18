@@ -24,6 +24,8 @@
 .management-login h1 { margin: 0; font-size: 24px; }
 .management-login label { display: grid; gap: 7px; font-weight: 650; }
 .management-login input { min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; }
+.management-login .brand-mark { justify-self: start; text-decoration: none; }
+.management-login__hint { display: block; margin-top: 4px; color: var(--am-text-muted); font-weight: 500; font-size: 12px; }
 .management-login__submit { width: 100%; min-height: 44px; justify-content: center; border: 0; font-weight: 750; transition: background .18s ease, transform .18s ease; }
 .management-login__submit:hover:not(:disabled) { background: var(--am-primary-hover); }
 .management-login__submit:active:not(:disabled) { transform: translateY(1px); }
@@ -142,7 +144,8 @@
 .am-status-info { color: #1f5fae; background: var(--am-info-subtle); }
 .am-status-danger { color: #a32626; background: var(--am-danger-subtle); }
 .am-status-neutral { color: #475569; background: #eef2f7; }
-.am-focusable:focus-visible, .officer-app a:focus-visible, .officer-app button:focus-visible, .officer-app input:focus-visible, .officer-app textarea:focus-visible, .officer-app select:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.am-focusable:focus-visible, .officer-app a:focus-visible, .officer-app button:focus-visible, .officer-app input:focus-visible, .officer-app textarea:focus-visible, .officer-app select:focus-visible,
+.management-login a:focus-visible, .management-login button:focus-visible, .management-login input:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
 .am-empty { display: grid; justify-items: center; gap: 8px; padding: 48px 20px; color: var(--am-text-muted); text-align: center; }
 .am-empty svg { color: var(--am-primary); }
 .am-error { padding: 14px 16px; color: #991b1b; background: var(--am-danger-subtle); border: 1px solid #fecaca; border-radius: 10px; }

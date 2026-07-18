@@ -37,10 +37,14 @@ function Login({ role, onSuccess }: { role: PortalRole; onSuccess: () => void })
   const [busy, setBusy] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError('');
+    if (password.length < 8) { setError('Mật khẩu cần tối thiểu 8 ký tự.'); setBusy(false); return; }
     try {
       const result = await api<{ access_token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
       setToken(result.access_token, role); onSuccess();
-    } catch (cause) { setError((cause as Error).message); } finally { setBusy(false); }
+    } catch (cause) {
+      const apiError = cause as ApiError;
+      setError(apiError.status === 401 ? 'Tên đăng nhập hoặc mật khẩu không đúng.' : apiError.message || 'Không thể đăng nhập, vui lòng thử lại.');
+    } finally { setBusy(false); }
   };
   return <Shell role={role}><main className="login-page"><section className="login-story"><span className="eyebrow">DỊCH VỤ CÔNG THÔNG MINH</span><h1>{role === 'citizen' ? 'Chuẩn bị hồ sơ đúng ngay từ lần đầu.' : 'Một không gian làm việc, toàn bộ căn cứ cần thiết.'}</h1><p>{role === 'citizen' ? 'Được hướng dẫn từng bước, kiểm tra giấy tờ và theo dõi hồ sơ minh bạch.' : 'Tiếp nhận, đối chiếu OCR, xử lý cảnh báo và lưu vết mọi quyết định.'}</p><div className="trust-row"><span>✓ Dữ liệu riêng tư</span><span>✓ Có căn cứ</span><span>✓ Có người kiểm tra</span></div></section><form className="login-card" onSubmit={submit}><div className="login-icon">{role === 'citizen' ? 'CN' : 'CB'}</div><span className="eyebrow">{role === 'citizen' ? 'CỔNG CÔNG DÂN' : 'DÀNH CHO CÁN BỘ'}</span><h2>Đăng nhập hệ thống</h2><p className="muted">Sử dụng tài khoản được cấp để tiếp tục.</p><label>Tên đăng nhập<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} /></label><label>Mật khẩu<input autoComplete="current-password" type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Nhập mật khẩu" /></label>{error && <div className="alert error" role="alert">{error}</div>}<button className="primary wide" disabled={busy}>{busy ? 'Đang xác thực…' : 'Đăng nhập'}</button><small className="demo-hint">Tài khoản demo dùng mật khẩu <code>ChangeMe123!</code></small></form></main></Shell>;
 }
@@ -122,7 +126,7 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, onSelec
           </div>
         </div>
           <div className="chat-log" ref={logRef} aria-live="polite" onScroll={event => { const element = event.currentTarget; followChatRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }}>
-            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b>{item.response.cache && <small className={`cache-badge ${item.response.cache.status}`}>{item.response.cache.backend === 'redis' ? 'Redis' : 'Cache'} · {item.response.cache.status === 'hit' ? 'HIT' : 'MISS'}</small>}</div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy || streaming}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu phù hợp</b><small>đã đối chiếu nguồn</small></div>{item.response.templates.map((template, templateIndex) => <article key={template.template_id} className={`template-card ${templateIndex === 0 && template.field_count > 0 ? 'recommended' : ''}`}><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{templateIndex === 0 && template.field_count > 0 ? '★ ĐỀ XUẤT · ' : ''}{template.official_source ? 'NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div>{template.field_count > 0 && item.response?.procedure_id ? <button className="use-template" onClick={() => chooseTemplate(item.response, template.template_id)} disabled={busy || streaming}>Dùng mẫu này →</button> : <a href={template.source_url} target="_blank" rel="noreferrer">Mở mẫu ↗</a>}<details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')} disabled={busy || streaming}>Có</button><button onClick={() => setMessage('Không')} disabled={busy || streaming}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')} disabled={busy || streaming}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
+            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b></div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy || streaming}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu phù hợp</b><small>đã đối chiếu nguồn</small></div>{item.response.templates.map((template, templateIndex) => <article key={template.template_id} className={`template-card ${templateIndex === 0 && template.field_count > 0 ? 'recommended' : ''}`}><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{templateIndex === 0 && template.field_count > 0 ? '★ ĐỀ XUẤT · ' : ''}{template.official_source ? 'NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div>{template.field_count > 0 && item.response?.procedure_id ? <button className="use-template" onClick={() => chooseTemplate(item.response, template.template_id)} disabled={busy || streaming}>Dùng mẫu này →</button> : <a href={template.source_url} target="_blank" rel="noreferrer">Mở mẫu ↗</a>}<details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')} disabled={busy || streaming}>Có</button><button onClick={() => setMessage('Không')} disabled={busy || streaming}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')} disabled={busy || streaming}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
             {busy && <article className="bubble assistant"><span>AI</span><div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div></article>}
             {streamedText && <article className="bubble assistant"><span>AI</span><div><p>{streamedText}<span className="cursor">|</span></p></div></article>}
           </div>
@@ -523,7 +527,7 @@ function ChatPortal() {
             </div>
             <div className="history-list">
               {cases.length === 0 ? <p className="muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 20 }}>Chưa có lịch sử</p> : cases.map(c => {
-                const title = c.procedure_id ? procedures.find(p => p.id === c.procedure_id)?.name || c.procedure_id : 'Tư vấn thủ tục mới';
+                const title = c.procedure_id && c.procedure_id !== 'pending_guidance' ? procedures.find(p => p.id === c.procedure_id)?.name || c.procedure_id : 'Tư vấn thủ tục mới';
                 return (
                   <button 
                     key={c.id} 
@@ -789,13 +793,26 @@ function CitizenPortal() {
               <div className="procedure-selector">
                  <h2>Chọn thủ tục cần soạn</h2>
                  <div className="selector-cards">
-                   {procedures.map(procedure => (
-                     <button key={procedure.id} onClick={() => startCase(procedure)} className="selector-card" disabled={!!busy || !procedureCapabilities[procedure.id]?.dynamic_form}>
-                       <FileText size={32} />
-                       <h3>{procedure.name}</h3>
-                       <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''}{!procedureCapabilities[procedure.id]?.dynamic_form ? ' · Chỉ hỗ trợ chat' : ''}</p>
-                     </button>
-                   ))}
+                   {procedures.map(procedure => {
+                     // Chưa tải xong capabilities (undefined) → coi như hỗ trợ, tránh khoá nút vĩnh viễn nếu request capabilities chậm/lỗi.
+                     const chatOnly = procedureCapabilities[procedure.id]?.dynamic_form === false;
+                     if (chatOnly) {
+                       return (
+                         <a key={procedure.id} href="/chat" className="selector-card selector-card-chat-only">
+                           <FileText size={32} />
+                           <h3>{procedure.name}</h3>
+                           <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''} · Chỉ hỗ trợ qua Trợ lý AI →</p>
+                         </a>
+                       );
+                     }
+                     return (
+                       <button key={procedure.id} onClick={() => startCase(procedure)} className="selector-card" disabled={!!busy}>
+                         <FileText size={32} />
+                         <h3>{procedure.name}</h3>
+                         <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''}</p>
+                       </button>
+                     );
+                   })}
                    {!procedures.length && directoryStatus === 'loading' && <div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div>}
                    {!procedures.length && directoryStatus === 'error' && <p>Chưa kết nối được máy chủ để tải danh mục thủ tục. <button className="text-button" onClick={() => void loadDirectory()}>Thử lại</button></p>}
                    {!procedures.length && directoryStatus === 'ready' && <p>Chưa có thủ tục với biểu mẫu đã công bố.</p>}

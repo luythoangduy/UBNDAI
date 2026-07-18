@@ -15,9 +15,11 @@ from src.services.officer_store import store
 
 async def resolve_case_id(case_id: str | None, citizen_id: str | None) -> str:
     if case_id is None:
+        # Không tạo portal-case projection ở đây: nếu lượt chat lỗi (LLM/hạ tầng),
+        # case rỗng sẽ bị bỏ lại vĩnh viễn trong lịch sử công dân, luôn mang tiêu đề
+        # "pending_guidance". sync_to_portal() sẽ tạo/đồng bộ projection sau khi
+        # lượt chat thành công.
         case = await cases.create_from_identity(citizen_id or "anonymous")
-        if citizen_id:
-            store.ensure_guidance_case(case.id, citizen_id)
         return case.id
 
     try:
@@ -67,6 +69,9 @@ async def sync_to_portal(case_id: str, citizen_id: str | None) -> None:
     if not citizen_id:
         return
     case = await cases.get(case_id)
+    # Idempotent: tạo portal-case projection nếu đây là lượt thành công đầu tiên
+    # (case_id có thể chưa tồn tại vì resolve_case_id không còn tạo trước).
+    store.ensure_guidance_case(case_id, citizen_id, case.procedure_id)
     checklist = {item.requirement_code: item.status for item in case.checklist}
     store.sync_guidance_case(
         case_id=case.id,

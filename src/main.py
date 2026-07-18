@@ -1,9 +1,10 @@
 """FastAPI entrypoint. Owner: Dev C (chỉ C sửa trực tiếp — TEAM_PLAN §4)."""
 
+import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -11,6 +12,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.api.v1 import router as v1_router
 from src.config import settings
 from src.services.persistence import create_async_database
+
+logger = logging.getLogger(__name__)
 
 if settings.app_env == "production" and (
     settings.enable_demo_auth
@@ -31,6 +34,23 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="TTHC Assist", version="0.1.0", lifespan=lifespan)
 app.include_router(v1_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> Response:
+    """Fallback cho lỗi chưa được xử lý ở route/service (LLM lỗi, hạ tầng phụ trợ down…).
+
+    Không có handler này, client nhận response 500 mặc định của Starlette (không
+    đảm bảo khớp Envelope {detail:...} mà frontend api.ts kỳ vọng) và traceback
+    chỉ có trong stdout — khó dò khi chạy trên nền tảng deploy không truy cập
+    được log trực tiếp. Log đầy đủ traceback ở đây, trả về thông điệp tiếng Việt
+    thân thiện thay vì để lộ chi tiết nội bộ cho người dùng cuối.
+    """
+    logger.exception("Lỗi chưa xử lý tại %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Đã có lỗi hệ thống, vui lòng thử lại sau ít phút."},
+    )
 
 
 @app.middleware("http")

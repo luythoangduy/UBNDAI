@@ -160,6 +160,7 @@ async def build_experience(procedure_id: str | None, query: str) -> ChatExperien
 
     templates = _registry_templates(procedure_id)
     remote_templates: list[ChatTemplateResource] = []
+    retry_soon = False
     evidence = [
         EvidenceStep(
             id="hybrid-search",
@@ -189,9 +190,10 @@ async def build_experience(procedure_id: str | None, query: str) -> ChatExperien
                     source_url=source_url,
                 )
             )
-        discovered, fetch_step = await _fetch_official_page(source_url, procedure_id)
+        discovered, fetch_step, fetch_degraded = await _fetch_official_page(source_url, procedure_id)
         remote_templates.extend(discovered)
         evidence.append(fetch_step)
+        retry_soon = retry_soon or fetch_degraded
     templates = _deduplicate_templates([*templates, *remote_templates])
     actions = _actions(procedure_id, source_url, procedure, templates)
     payload = {
@@ -199,15 +201,20 @@ async def build_experience(procedure_id: str | None, query: str) -> ChatExperien
         "templates": [item.model_dump(mode="json") for item in templates],
         "evidence": [item.model_dump(mode="json") for item in evidence],
     }
-    backend = await set_json(
-        key, payload, ttl_seconds=settings.chat_experience_cache_ttl_s
+    # Kết quả suy giảm chỉ được giữ trong vài phút để hệ thống tự hồi phục khi nguồn
+    # sống lại; kết quả đầy đủ vẫn cache dài như cũ.
+    ttl_seconds = (
+        settings.official_source_retry_ttl_s
+        if retry_soon
+        else settings.chat_experience_cache_ttl_s
     )
+    backend = await set_json(key, payload, ttl_seconds=ttl_seconds)
     return ChatExperience(
         procedure_id=procedure_id,
         actions=actions,
         templates=templates,
         evidence=evidence,
-        cache=_cache_info(backend, False),
+        cache=_cache_info(backend, False, ttl_seconds),
     )
 
 
@@ -311,9 +318,16 @@ async def _search_experience(query: str) -> ChatExperience:
 
 async def _fetch_official_page(
     source_url: str, procedure_id: str
-) -> tuple[list[ChatTemplateResource], EvidenceStep]:
+) -> tuple[list[ChatTemplateResource], EvidenceStep, bool]:
+    """Kéo biểu mẫu từ trang thủ tục gốc.
+
+    Trả về ``(resources, evidence_step, retry_soon)``. ``retry_soon`` chỉ True khi
+    thực sự đã gọi mạng nhưng không thu được gì — dùng để rút ngắn TTL cache, phân
+    biệt với trường hợp live fetch bị tắt bằng cấu hình (trạng thái ổn định, cache
+    dài bình thường).
+    """
     if not settings.official_source_live_fetch or not is_official_url(source_url):
-        return [], EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail="Đang dùng snapshot đã kiểm duyệt", status="fallback", source_url=source_url)
+        return [], EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail="Đang dùng snapshot đã kiểm duyệt", status="fallback", source_url=source_url), False
     try:
         async with httpx.AsyncClient(timeout=settings.official_source_timeout_s, follow_redirects=False) as client:
             response = await client.get(source_url, headers={"User-Agent": "TTHC-Assist/0.1 official-source"})
@@ -331,10 +345,17 @@ async def _fetch_official_page(
             resources.append(ChatTemplateResource(template_id=f"remote.{procedure_id}.{digest}", title=title, version="official-live", source_checked_on="live", field_count=0, source_url=url, source_label="Tệp từ nguồn thủ tục chính thức", official_source=True, citations=[citation]))
             if len(resources) == 6:
                 break
-        return resources, EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail=f"Đã kiểm tra trang gốc · {len(resources)} tệp biểu mẫu", status="ready", source_url=source_url)
+        if not resources:
+            # HTTP 200 nhưng không bóc được tệp nào: Cổng DVC nay là SPA render phía
+            # client, HTML trả về chỉ là vỏ rỗng. Không được gắn ✓ "đã kiểm tra" cho
+            # thứ chưa thực sự đọc được — AGENTS.md §5: thiếu căn cứ thì phải cảnh
+            # báo, không suy đoán.
+            logger.info("Official source returned no parsable templates for %s", source_url)
+            return [], EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail="Trang gốc không đọc được biểu mẫu; dùng snapshot đã kiểm duyệt", status="fallback", source_url=source_url), True
+        return resources, EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail=f"Đã kiểm tra trang gốc · {len(resources)} tệp biểu mẫu", status="ready", source_url=source_url), False
     except Exception:
         logger.info("Official source fetch unavailable for %s", source_url, exc_info=True)
-        return [], EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail="Nguồn live chưa phản hồi; dùng snapshot có checksum", status="fallback", source_url=source_url)
+        return [], EvidenceStep(id="official-api", label="Kéo nguồn trực tiếp", detail="Nguồn live chưa phản hồi; dùng snapshot có checksum", status="fallback", source_url=source_url), True
 
 
 def is_official_url(url: str) -> bool:
@@ -375,10 +396,12 @@ def _deduplicate_templates(items: list[ChatTemplateResource]) -> list[ChatTempla
     return result
 
 
-def _cache_info(backend: str, hit: bool) -> ChatCacheInfo:
+def _cache_info(backend: str, hit: bool, ttl_seconds: int | None = None) -> ChatCacheInfo:
     normalized = backend if backend in {"redis", "memory"} else "none"
     return ChatCacheInfo(
         backend=normalized,
         status="hit" if hit else "miss",
-        ttl_seconds=settings.chat_experience_cache_ttl_s,
+        # Phải là TTL đã dùng thật khi ghi, không phải hằng số mặc định — lượt suy
+        # giảm được cache ngắn hơn nên báo 3600 sẽ sai.
+        ttl_seconds=settings.chat_experience_cache_ttl_s if ttl_seconds is None else ttl_seconds,
     )

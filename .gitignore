@@ -5,6 +5,9 @@ __pycache__/
 venv/
 .env
 data/app.db
+# SQLite ghi kèm hai file sidecar ở chế độ WAL — cũng là dữ liệu chạy, không commit.
+data/app.db-shm
+data/app.db-wal
 data/chroma/
 data/bm25_index.json
 data/legal/

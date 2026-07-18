@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://127.0.0.1:6379/0"
     redis_connect_timeout_s: float = 0.25
     chat_experience_cache_ttl_s: int = 3600
+    # Khi kéo nguồn live thất bại, cache kết quả suy giảm bằng TTL ngắn này thay vì
+    # chat_experience_cache_ttl_s — nếu không, một cú 503 thoáng qua của Cổng DVC sẽ
+    # bị "đóng băng" nguyên 1 tiếng dù cổng đã hồi phục.
+    official_source_retry_ttl_s: int = 120
     official_source_live_fetch: bool = True
     official_source_timeout_s: float = 2.5
     dvc_search_url: str = "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc.html"

@@ -21,3 +21,7 @@ frontend/test-results/
 .coverage
 .ruff_cache/
 secrets/
+
+# Claude Code local settings / AI session logs
+.claude/settings.local.json
+**/.ai-log/

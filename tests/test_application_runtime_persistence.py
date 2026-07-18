@@ -63,6 +63,34 @@ def test_persistent_store_reads_database_as_source_of_truth():
     assert runtime_store.findings_for("case", "org")[0].id == "finding"
 
 
+def test_list_cases_returns_every_case_not_just_first_page():
+    # Regression: list_cases() used to call ApplicationRepository.list() with its
+    # default page_size=20, so any org above that size silently lost cases 21+
+    # from the officer queue and undercounted the dashboard summary.
+    database = create_sqlite_database()
+    with database.session() as session:
+        session.add_all(
+            [
+                ApplicationCaseORM(
+                    id=f"case-{i}",
+                    case_code=f"CASE-{i:03d}",
+                    organization_id="org",
+                    citizen_id="citizen",
+                    procedure_id="khai_sinh",
+                    procedure_version_id="v1",
+                    status="awaiting_officer_review",
+                )
+                for i in range(25)
+            ]
+        )
+        session.commit()
+    runtime_store = OfficerStore(database=database, seed=False)
+
+    cases = runtime_store.list_cases("org")
+
+    assert len(cases) == 25
+
+
 def test_assignment_and_resubmit_are_durable_transactions():
     database, runtime_store = _persistent_store(status="needs_citizen_update")
     service = ApplicationManagementService(runtime_store)

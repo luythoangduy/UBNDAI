@@ -38,7 +38,7 @@ class ApplicationFilters:
     submitted_from: datetime | None = None
     submitted_to: datetime | None = None
     page: int = 1
-    page_size: int = 20
+    page_size: int | None = 20
 
 
 class ApplicationRepository:
@@ -70,10 +70,12 @@ class ApplicationRepository:
             conditions.append(ApplicationCaseORM.submitted_at >= filters.submitted_from)
         if filters.submitted_to:
             conditions.append(ApplicationCaseORM.submitted_at <= filters.submitted_to)
-        base = select(ApplicationCaseORM).where(*conditions).order_by(ApplicationCaseORM.created_at.desc())
-        total = self.session.scalar(select(func.count()).select_from(base.subquery())) or 0
-        offset = max(filters.page - 1, 0) * filters.page_size
-        rows = list(self.session.scalars(base.offset(offset).limit(filters.page_size)))
+        total = self.session.scalar(select(func.count()).select_from(ApplicationCaseORM).where(*conditions)) or 0
+        statement = select(ApplicationCaseORM).where(*conditions).order_by(ApplicationCaseORM.created_at.desc())
+        if filters.page_size is not None:
+            offset = max(filters.page - 1, 0) * filters.page_size
+            statement = statement.offset(offset).limit(filters.page_size)
+        rows = list(self.session.scalars(statement))
         return rows, int(total)
 
     def update_status(self, case_id: str, organization_id: str, target_status: str, *, expected_version: int) -> ApplicationCaseORM:

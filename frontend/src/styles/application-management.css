@@ -33,7 +33,24 @@
 
 .officer-app *, .officer-app *::before, .officer-app *::after { box-sizing: border-box; }
 .officer-app-shell { min-height: 100vh; display: flex; }
-.officer-sidebar { width: 232px; flex: 0 0 232px; padding: 20px 14px; background: var(--am-surface); border-right: 1px solid var(--am-border); }
+/* Sidebar ghim cứng theo viewport: điều hướng luôn trong tầm mắt khi bảng hồ sơ
+   dài. Dùng sticky (không phải fixed) để flex vẫn giữ chỗ 232px cho nó — fixed sẽ
+   phải bù margin thủ công cho .officer-main và dễ lệch khi đổi bề rộng. */
+.officer-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  width: 232px;
+  flex: 0 0 232px;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  background: var(--am-surface);
+  border-right: 1px solid var(--am-border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .officer-sidebar-brand { display: flex; gap: 10px; align-items: center; padding: 8px; margin-bottom: 22px; text-decoration: none; }
 .officer-sidebar-brand .brand-mark { width: 34px; height: 34px; }
 .officer-sidebar-brand strong, .officer-sidebar-brand small { display: block; }
@@ -43,7 +60,9 @@
 .officer-nav a { display: flex; gap: 10px; align-items: center; min-height: 40px; padding: 9px 10px; color: var(--am-text-muted); border-radius: 8px; font-size: 13px; font-weight: 650; text-decoration: none; }
 .officer-nav a:hover, .officer-nav a.active { color: var(--am-primary); background: var(--am-primary-subtle); }
 .officer-nav svg { width: 18px; height: 18px; }
-.officer-logout { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; margin-top: 24px; padding: 9px 10px; color: var(--am-text-muted); background: transparent; border: 0; border-radius: 8px; cursor: pointer; }
+/* margin-top:auto đẩy Đăng xuất xuống đáy sidebar đã ghim — tách khỏi nhóm điều
+   hướng để không bị bấm nhầm. */
+.officer-logout { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; margin-top: auto; padding: 9px 10px; color: var(--am-text-muted); background: transparent; border: 0; border-radius: 8px; cursor: pointer; }
 .officer-logout:hover { color: var(--am-danger); background: var(--am-danger-subtle); }
 .officer-logout svg { width: 18px; }
 .officer-main { min-width: 0; flex: 1; }
@@ -164,8 +183,14 @@
 @media (max-width: 640px) {
   .officer-kpi-grid { grid-template-columns: 1fr; }
   .officer-app-shell { display: block; }
-  .officer-sidebar { width: 100%; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--am-border); }
-  .officer-sidebar-brand { margin-bottom: 4px; }
+  /* Mobile: sidebar thành thanh ngang trên cùng — bỏ ghim toàn chiều cao, nhưng
+     vẫn dính đỉnh màn hình để điều hướng theo kịp khi cuộn danh sách hồ sơ. */
+  /* Gộp brand + điều hướng + đăng xuất về một hàng: xếp chồng 3 hàng ngốn 157px
+     trên viewport 620px. Nhóm nav tự trượt ngang khi hẹp. */
+  .officer-sidebar { position: sticky; top: 0; z-index: 20; flex-direction: row; align-items: center; gap: 8px; width: 100%; height: auto; padding: 7px 12px; border-right: 0; border-bottom: 1px solid var(--am-border); overflow: visible; }
+  .officer-sidebar-brand { flex: 0 0 auto; margin-bottom: 0; padding: 0; }
+  .officer-nav { flex: 1 1 auto; min-width: 0; gap: 2px; }
+  .officer-logout { flex: 0 0 auto; width: auto; margin-top: 0; padding: 9px; }
   .officer-nav { display: flex; overflow-x: auto; }
   .officer-nav a { flex: 0 0 auto; }
   .officer-nav a span { display: inline; }

@@ -1,0 +1,103 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv pip install *)",
+      "Bash(pip install *)",
+      "Bash(uv run *)",
+      "Bash(uvicorn src.main:app *)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(ruff check *)",
+      "Bash(ruff format *)",
+      "Bash(alembic *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m *)",
+      "Bash(git push *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx *)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/log_hook.py --tool=claude",
+            "shell": "bash"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/hooks/guard_edit.py",
+            "shell": "bash",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/hooks/guard_bash.py",
+            "shell": "bash",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/hooks/format_on_save.py",
+            "shell": "bash",
+            "timeout": 30000
+          }
+        ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/log_hook.py --tool=claude",
+            "shell": "bash"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/hooks/session_summary.py",
+            "shell": "bash",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/_pyrun.sh scripts/log_hook.py --tool=claude",
+            "shell": "bash"
+          }
+        ]
+      }
+    ]
+  }
+}

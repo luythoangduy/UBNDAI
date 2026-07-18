@@ -22,6 +22,12 @@ def test_procedure_catalog_files_are_valid():
         assert proc.requirements, f"{f.name}: thủ tục phải có requirements"
 
 
+def test_catalog_keeps_planned_core_procedures():
+    assert {"khai_sinh", "ket_hon", "tam_tru", "can_cuoc"} <= set(
+        catalog.load_catalog()
+    )
+
+
 def test_ai_checker_cannot_emit_error():
     with pytest.raises(ValidationError):
         ValidationIssue(

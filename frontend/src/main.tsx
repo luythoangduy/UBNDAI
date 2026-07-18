@@ -1,10 +1,11 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethrough, List as ListIcon, Printer } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
-import type { CaseDetail, CaseDocument, CaseRecord, ChatAction, ChatExperience, ChatResponse, ChatStarterResponse, DashboardSummary, ExtractedField, Finding, PortalRole, PreprocessResult, PreprocessStep, ProcedureCapabilities, ProcedureFormSchema, ProcedureSummary } from './types';
+import type { CaseDetail, CaseDocument, CaseRecord, ChatAction, ChatExperience, ChatResponse, ChatStarterResponse, DashboardSummary, DraftRevision, DraftTemplateInfo, ExtractedField, Finding, GeneratedDraft, PortalRole, PreprocessResult, PreprocessStep, ProcedureCapabilities, ProcedureFormSchema, ProcedureSummary } from './types';
+import { diffDraftBlocks, type DiffBlock } from './draft-diff';
 import { buildCaseQuery, formatBytes, formatDate, humanizeStatus } from './utils';
 import './styles.css';
 
@@ -37,12 +38,16 @@ function Login({ role, onSuccess }: { role: PortalRole; onSuccess: () => void })
 }
 
 type ChatMessage = { role: 'user' | 'assistant'; text: string; response?: ChatExperience & Partial<ChatResponse> };
-function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, selectedContext }: { activeCaseId?: string; onChecklist?: (caseId: string) => void; onStartProcedure?: (procedureId: string) => void; selectedContext?: string }) {
-  const [isOpen, setIsOpen] = useState(false);
+function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, onSelectTemplate, selectedContext }: { activeCaseId?: string; onChecklist?: (caseId: string) => void; onStartProcedure?: (procedureId: string) => void; onSelectTemplate?: (procedureId: string, templateId: string) => void; selectedContext?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', text: 'Đang kết nối kho thủ tục và nguồn chính thức…' }]);
   const [message, setMessage] = useState(''); const [caseId, setCaseId] = useState<string | undefined>(activeCaseId); const [busy, setBusy] = useState(false);
   const [streamedText, setStreamedText] = useState('');
-  useEffect(() => { if (activeCaseId) setCaseId(activeCaseId); }, [activeCaseId]);
+  const logRef = useRef<HTMLDivElement>(null);
+  const followChatRef = useRef(true);
+  useEffect(() => { setCaseId(activeCaseId); }, [activeCaseId]);
+  useEffect(() => {
+    if (followChatRef.current) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: streamedText ? 'auto' : 'smooth' });
+  }, [messages, busy, streamedText]);
   useEffect(() => {
     api<ChatStarterResponse>('/chat/starter')
       .then(response => setMessages([{ role: 'assistant', text: response.reply, response }]))
@@ -50,6 +55,7 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, selecte
   }, []);
   const submitMessage = async (rawValue: string) => {
     const value = rawValue.trim(); if (!value || busy) return;
+    followChatRef.current = true;
     setMessages(current => [...current, { role: 'user', text: value }]); setMessage(''); setBusy(true); setStreamedText('');
     try {
       const payloadMessage = selectedContext ? `${value}\n\n[Ngữ cảnh đang chọn]: "${selectedContext}"` : value;
@@ -61,7 +67,8 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, selecte
       const fullText = response.reply;
       const interval = setInterval(() => {
         if (currentText.length < fullText.length) {
-          currentText = fullText.slice(0, currentText.length + 3);
+          const step = Math.max(4, Math.ceil(fullText.length / 80));
+          currentText = fullText.slice(0, currentText.length + step);
           setStreamedText(currentText);
         } else {
           clearInterval(interval);
@@ -69,48 +76,48 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, selecte
           setMessages(current => [...current, { role: 'assistant', text: fullText, response }]);
           if (response.kind === 'checklist' && onChecklist && response.case_id) onChecklist(response.case_id);
         }
-      }, 10);
+      }, 16);
     } catch (cause) { setBusy(false); setMessages(current => [...current, { role: 'assistant', text: `Chưa thể kết nối trợ lý: ${(cause as Error).message}` }]); }
   };
   const send = (event: FormEvent) => { event.preventDefault(); void submitMessage(message); };
+  const submitOnEnter = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (event.currentTarget.value.trim() && !busy && !streamedText) event.currentTarget.form?.requestSubmit();
+  };
   const runAction = (action: ChatAction) => {
     if (action.kind === 'send_message') void submitMessage(action.value);
     else if (action.kind === 'start_form') onStartProcedure?.(action.value);
     else window.open(action.value, '_blank', 'noopener,noreferrer');
   };
   const iconFor = (icon: ChatAction['icon']) => ({ search: '⌕', checklist: '✓', clock: '◷', template: '▤', form: '✦', source: '↗' }[icon]);
+  const chooseTemplate = (response: ChatMessage['response'], templateId: string) => {
+    if (response?.procedure_id) onSelectTemplate?.(response.procedure_id, templateId);
+  };
   return (
-    <div className={`chat-widget-container ${isOpen ? 'open' : ''}`}>
-      {!isOpen && (
-        <button className="fab-button" onClick={() => setIsOpen(true)}>
-          <MessageCircle />
-        </button>
-      )}
-      {isOpen && (
-        <section className="assistant-card floating">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">TRỢ LÝ AI</span>
-              <h2>Hỏi đáp thủ tục</h2>
-            </div>
-            <div className="actions">
-              <span className="online"><i/></span>
-              <button className="close-btn" onClick={() => setIsOpen(false)}><X size={16} /></button>
-            </div>
+    <div className="chat-dock open">
+      <section className="assistant-card docked" aria-label="Trợ lý hồ sơ AI">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">TRỢ LÝ HỒ SƠ AI</span>
+            <h2>Bạn cần làm thủ tục gì?</h2>
           </div>
-          <div className="chat-log" aria-live="polite">
-            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b>{item.response.cache && <small className={`cache-badge ${item.response.cache.status}`}>{item.response.cache.backend === 'redis' ? 'Redis' : 'Cache'} · {item.response.cache.status === 'hit' ? 'HIT' : 'MISS'}</small>}</div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu tìm thấy</b><small>có nguồn ban hành</small></div>{item.response.templates.map(template => <article key={template.template_id} className="template-card"><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{template.official_source ? '✓ NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div><a href={template.source_url} target="_blank" rel="noreferrer">Xem mẫu ↗</a><details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')}>Có</button><button onClick={() => setMessage('Không')}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
+          <div className="actions">
+            <span className="online"><i/>Đang trực tuyến</span>
+          </div>
+        </div>
+          <div className="chat-log" ref={logRef} aria-live="polite" onScroll={event => { const element = event.currentTarget; followChatRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }}>
+            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b>{item.response.cache && <small className={`cache-badge ${item.response.cache.status}`}>{item.response.cache.backend === 'redis' ? 'Redis' : 'Cache'} · {item.response.cache.status === 'hit' ? 'HIT' : 'MISS'}</small>}</div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu phù hợp</b><small>đã đối chiếu nguồn</small></div>{item.response.templates.map((template, templateIndex) => <article key={template.template_id} className={`template-card ${templateIndex === 0 && template.field_count > 0 ? 'recommended' : ''}`}><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{templateIndex === 0 && template.field_count > 0 ? '★ ĐỀ XUẤT · ' : ''}{template.official_source ? 'NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div>{template.field_count > 0 && item.response?.procedure_id ? <button className="use-template" onClick={() => chooseTemplate(item.response, template.template_id)}>Dùng mẫu này →</button> : <a href={template.source_url} target="_blank" rel="noreferrer">Mở mẫu ↗</a>}<details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')}>Có</button><button onClick={() => setMessage('Không')}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
             {busy && <article className="bubble assistant"><span>AI</span><div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div></article>}
             {streamedText && <article className="bubble assistant"><span>AI</span><div><p>{streamedText}<span className="cursor">|</span></p></div></article>}
           </div>
           <form className="chat-input" onSubmit={send}>
             {selectedContext && <div className="chat-context-banner"><strong>Đang chọn:</strong> "{selectedContext.length > 40 ? selectedContext.substring(0, 40) + '...' : selectedContext}"</div>}
-            <textarea aria-label="Nội dung cần hỏi" rows={2} maxLength={4000} value={message} onChange={event => setMessage(event.target.value)} placeholder="Mô tả việc hành chính bạn cần thực hiện…"/>
-            <button className="primary" disabled={!message.trim() || busy || !!streamedText}>Gửi</button>
+            <textarea aria-label="Nội dung cần hỏi" rows={2} maxLength={4000} enterKeyHint="send" value={message} onChange={event => setMessage(event.target.value)} onKeyDown={submitOnEnter} placeholder="Mô tả bất kỳ thủ tục hành chính nào bạn cần hỗ trợ…"/>
+            <button className="primary" disabled={!message.trim() || busy || !!streamedText}>Gửi ↗</button>
           </form>
-          <p className="ai-note">AI có thể chưa đầy đủ. Đối chiếu nội dung với nguồn thủ tục.</p>
+          <p className="ai-note">Enter để gửi · Shift + Enter để xuống dòng · Bạn luôn duyệt trước khi dùng</p>
         </section>
-      )}
     </div>
   );
 }
@@ -148,6 +155,18 @@ function buildDynamicFormHtml(schema: ProcedureFormSchema, values: Record<string
 <h1>${escapeHtml(schema.title.toUpperCase())}</h1>
 ${rows}
 <p><em>Bản nháp điện tử được dựng từ schema đã kiểm duyệt. Cơ quan có thẩm quyền quyết định việc tiếp nhận.</em></p>`;
+}
+
+function renderGeneratedDraftHtml(text: string): string {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  return lines.map((line, index) => {
+    const escaped = escapeHtml(line).replace(
+      /\[CHƯA CÓ: ([^\]]+)\]/g,
+      '<strong>⚠ CẦN BỔ SUNG: $1</strong>',
+    );
+    if (index === 0 || (line === line.toUpperCase() && line.length < 100)) return `<h2>${escaped}</h2>`;
+    return `<p>${escaped}</p>`;
+  }).join('\n');
 }
 
 type OcrPhase = 'idle' | 'upload' | 'prep' | 'recognize' | 'compose' | 'ready';
@@ -300,11 +319,15 @@ function CitizenPortal() {
   const [file, setFile] = useState<File>(); const [consent, setConsent] = useState(false);
   const [notice, setNotice] = useState(''); const [busy, setBusy] = useState('');
   const [procedures, setProcedures] = useState<ProcedureSummary[]>([]);
-  const [procedureCapabilities, setProcedureCapabilities] = useState<Record<string, ProcedureCapabilities>>({});
   const [formSchema, setFormSchema] = useState<ProcedureFormSchema>();
   const [capabilities, setCapabilities] = useState<ProcedureCapabilities>();
-  
-  const [started, setStarted] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<DraftTemplateInfo>();
+  const [generatedDraft, setGeneratedDraft] = useState<GeneratedDraft>();
+  const [draftStage, setDraftStage] = useState<'collect' | 'generating' | 'ready'>('collect');
+  const [panelOpen, setPanelOpen] = useState(() => localStorage.getItem('ubndai.draft.panel') !== 'closed');
+  const [revisionInstruction, setRevisionInstruction] = useState('');
+  const [proposedRevision, setProposedRevision] = useState<DraftRevision>();
+  const [diffBlocks, setDiffBlocks] = useState<DiffBlock[]>([]);
   const [docContent, setDocContent] = useState('');
   const [selectedText, setSelectedText] = useState('');
   const [extractedFields, setExtractedFields] = useState<ExtractedField[]>();
@@ -316,48 +339,84 @@ function CitizenPortal() {
   const requiredFields = formSchema?.fields.filter(field => field.required) ?? [];
   const readiness = requiredFields.length ? Math.round(requiredFields.filter(field => draftValues[field.key]?.trim()).length / requiredFields.length * 100) : 0;
   const reviewCount = extractedFields?.filter(item => item.confidence < 0.85).length ?? 0;
-  const updateDraftValue = (key: string, value: string) => setDraftValues(current => {
-    const next = { ...current, [key]: value };
-    if (formSchema) setDocContent(buildDynamicFormHtml(formSchema, next));
-    return next;
-  });
+  const missingFields = Array.from(new Set([
+    ...requiredFields.filter(field => !draftValues[field.key]?.trim()).map(field => field.key),
+    ...(generatedDraft?.missing_required_fields ?? []).filter(key => !draftValues[key]?.trim()),
+  ]));
+  const updateDraftValue = (key: string, value: string) => setDraftValues(values => ({ ...values, [key]: value }));
+  const setDraftPanelOpen = (open: boolean) => { setPanelOpen(open); localStorage.setItem('ubndai.draft.panel', open ? 'open' : 'closed'); };
 
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
   useEffect(() => {
     if (!logged) return;
-    Promise.all([refresh(), api<ProcedureSummary[]>('/procedures').then(async items => {
-      rememberProcedureNames(items); setProcedures(items);
-      const pairs = await Promise.all(items.map(async item => [item.id, await api<ProcedureCapabilities>(`/procedures/${item.id}/capabilities`)] as const));
-      setProcedureCapabilities(Object.fromEntries(pairs));
-    })])
+    Promise.all([refresh(), api<ProcedureSummary[]>('/procedures').then(items => { rememberProcedureNames(items); setProcedures(items); })])
       .catch(cause => setNotice((cause as Error).message));
   }, [logged]);
   if (!logged) return <Login role="citizen" onSuccess={() => setLogged(true)}/>;
   
   const run = async (name: string, work: () => Promise<void>) => { setBusy(name); setNotice(''); try { await work(); } catch (cause) { setNotice((cause as Error).message); } finally { setBusy(''); } };
   
-  // Một luồng duy nhất: mở tờ khai mẫu để tự điền, OCR là bước "AI điền hộ" tùy chọn.
-  const startCase = (procedure: ProcedureSummary) => {
+  const startDraftFromTemplate = (procedureId: string, templateId?: string) => {
     run('create', async () => {
-      const [schema, caps] = await Promise.all([
-        api<ProcedureFormSchema>(`/procedures/${procedure.id}/form-schema`),
-        api<ProcedureCapabilities>(`/procedures/${procedure.id}/capabilities`),
+      const procedure = procedures.find(item => item.id === procedureId);
+      if (!procedure) throw new Error('Chưa tải được thông tin thủ tục. Vui lòng thử lại.');
+      const [templates, caps] = await Promise.all([
+        api<DraftTemplateInfo[]>(`/drafts/templates/${procedureId}`),
+        api<ProcedureCapabilities>(`/procedures/${procedureId}/capabilities`),
       ]);
-      setStarted(true);
-      setFormSchema(schema);
-      setCapabilities(caps);
-      setDocContent(buildDynamicFormHtml(schema, {}));
+      const template = templates.find(item => item.id === templateId) ?? templates[0];
+      if (!template) throw new Error('Mẫu này chỉ có trên nguồn ngoài và chưa hỗ trợ sinh tự động.');
+      const schema: ProcedureFormSchema = {
+        procedure_id: procedureId,
+        template_id: template.id,
+        title: template.output_name,
+        fields: template.fields.map(field => ({
+          key: field.key,
+          label: field.label,
+          type: field.input_type === 'year' ? 'number' : field.input_type,
+          required: field.required,
+          ocr_sources: [],
+        })),
+      };
+      setSelectedTemplate(template);
+      setFormSchema(schema); setCapabilities(caps); setPanelOpen(true); setDraftStage('collect');
+      localStorage.setItem('ubndai.draft.panel', 'open');
+      setDocContent(''); setGeneratedDraft(undefined); setProposedRevision(undefined); setDiffBlocks([]); setRevisionInstruction('');
       setExtractedFields(undefined);
       setPreviewUrl(undefined);
       setOcrPhase('idle');
       setPrepSteps([]);
       setPrepIndex(0);
       setDraftValues({});
-      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) });
+      const item = current?.procedure_id === procedure.id ? current : await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) });
       setCurrent(item);
-      setNotice('Đã khởi tạo tờ khai. Điền trực tiếp hoặc tải giấy tờ để AI điền tự động.');
+      setNotice(`Đã chọn “${template.output_name}”. Hãy bổ sung thông tin hoặc sinh nháp ngay với chỗ trống được đánh dấu.`);
       await refresh();
     });
+  };
+
+  const generateDraft = () => selectedTemplate && run('generate', async () => {
+    setDraftStage('generating'); setProposedRevision(undefined); setDiffBlocks([]); setPanelOpen(true);
+    try {
+      const [draft] = await Promise.all([
+        api<GeneratedDraft>('/drafts/generate', { method: 'POST', body: JSON.stringify({ procedure_id: selectedTemplate.procedure_id, template_id: selectedTemplate.id, values: draftValues, allow_incomplete: true }) }),
+        sleep(650),
+      ]);
+      setGeneratedDraft(draft); setDocContent(renderGeneratedDraftHtml(draft.rendered_text)); setDraftStage('ready');
+      setNotice(draft.ready_for_review ? 'Bản nháp đã sẵn sàng để rà soát.' : `Đã sinh bản nháp với ${draft.missing_required_fields.length} chỗ cần bổ sung.`);
+    } catch (cause) { setDraftStage('collect'); throw cause; }
+  });
+
+  const reviseDraft = () => run('revise', async () => {
+    if (!docContent || !revisionInstruction.trim()) return;
+    const revision = await api<DraftRevision>('/drafts/revise', { method: 'POST', body: JSON.stringify({ html: docContent, instruction: revisionInstruction, selected_text: selectedText || undefined }) });
+    setProposedRevision(revision); setDiffBlocks(diffDraftBlocks(docContent, revision.revised_html));
+  });
+
+  const applyRevision = () => {
+    if (!proposedRevision) return;
+    setDocContent(proposedRevision.revised_html); setProposedRevision(undefined); setDiffBlocks([]); setRevisionInstruction(''); setSelectedText('');
+    setNotice('Đã áp dụng thay đổi AI sau khi bạn duyệt diff.');
   };
 
   const upload = () => current && file && run('upload', async () => {
@@ -388,7 +447,12 @@ function CitizenPortal() {
     if (!formSchema) throw new Error('Chưa tải được schema biểu mẫu');
     const merged = { ...mapExtractedToDraftValues(completeResp.fields, formSchema), ...draftValues };
     setDraftValues(merged);
-    setDocContent(buildDynamicFormHtml(formSchema, merged));
+    if (selectedTemplate) {
+      const draft = await api<GeneratedDraft>('/drafts/generate', { method: 'POST', body: JSON.stringify({ procedure_id: selectedTemplate.procedure_id, template_id: selectedTemplate.id, values: merged, allow_incomplete: true }) });
+      setGeneratedDraft(draft); setDocContent(renderGeneratedDraftHtml(draft.rendered_text)); setDraftStage('ready');
+    } else {
+      setDocContent(buildDynamicFormHtml(formSchema, merged));
+    }
     await sleep(1400); // giữ màn bounding box đủ lâu để thấy các vùng nhận dạng trước khi chuyển sang DOCX
     setOcrPhase('ready');
     setNotice(`AI đã nhận dạng ${completeResp.fields.length} trường và điền vào tờ khai.`);
@@ -416,155 +480,65 @@ function CitizenPortal() {
     setNotice('Hồ sơ đã được chuyển tới cán bộ tiếp nhận.'); 
     await refresh(); 
   });
-  const refreshCurrent = async (id: string) => { const detail = await api<{case: CaseRecord}>(`/citizen/cases/${id}`); setCurrent(detail.case); await refresh(); };
-  const handleChecklist = async (caseId: string) => { await refreshCurrent(caseId); setStarted(true); setNotice('Đã nhận danh sách giấy tờ. Vui lòng chuẩn bị và tải lên.'); };
-  const startProcedureFromChat = (procedureId: string) => {
-    const procedure = procedures.find(item => item.id === procedureId);
-    if (!procedure) { setNotice('Thủ tục này mới hỗ trợ hỏi đáp, chưa có biểu mẫu được duyệt.'); return; }
-    startCase(procedure);
-  };
+  const refreshCurrent = async (id: string) => { const detail = await api<{case: CaseRecord}>(`/citizen/cases/${id}`); setCurrent(detail.case); await refresh(); return detail.case; };
+  const handleChecklist = async (caseId: string) => { await refreshCurrent(caseId); setNotice('Đã tạo checklist theo trường hợp của bạn. Khi sẵn sàng, chọn mẫu ngay trong cuộc trò chuyện.'); };
+  const startProcedureFromChat = (procedureId: string) => startDraftFromTemplate(procedureId);
+  const source: TemplateSource | undefined = selectedTemplate ? {
+    label: `${selectedTemplate.output_name} · bản ${selectedTemplate.version}`,
+    links: selectedTemplate.legal_sources.map(item => ({ title: item.document_number, url: item.source_url })),
+  } : undefined;
+  const changeCount = diffBlocks.filter(block => block.type !== 'same').length;
 
   return (
     <Shell role="citizen">
-      <main className="citizen-page document-centric">
-        <div className="page-title">
-          <div>
-            <span className="eyebrow">CỔNG DỊCH VỤ CÔNG</span>
-            <h1>Xin chào, công dân</h1>
-            <p>Khởi tạo thủ tục qua biểu mẫu điện tử hoặc tải lên tài liệu có sẵn.</p>
-          </div>
-          <button className="ghost compact" onClick={() => { setToken('', 'citizen'); setLogged(false); }}>Đăng xuất</button>
+      <main className="citizen-page chat-first-page">
+        <div className="chat-first-title">
+          <div><span className="eyebrow">CỔNG DỊCH VỤ CÔNG · AI COPILOT</span><h1>Chuẩn bị hồ sơ bằng một cuộc trò chuyện</h1><p>Hỏi tự nhiên, chọn mẫu có nguồn, rồi cùng AI hoàn thiện bản nháp.</p></div>
+          <div className="chat-first-meta"><span><i/>Nguồn chính thức</span><button className="ghost compact" onClick={() => { setToken('', 'citizen'); setLogged(false); }}>Đăng xuất</button></div>
         </div>
-        
-        <div className="document-workspace">
-           {!started && !current && (
-              <div className="procedure-selector">
-                 <h2>Chọn thủ tục cần soạn</h2>
-                 <div className="selector-cards">
-                   {procedures.map(procedure => (
-                     <button key={procedure.id} onClick={() => startCase(procedure)} className="selector-card" disabled={!procedureCapabilities[procedure.id]?.dynamic_form}>
-                       <FileText size={32} />
-                       <h3>{procedure.name}</h3>
-                       <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''}{!procedureCapabilities[procedure.id]?.dynamic_form ? ' · Chỉ hỗ trợ chat' : ''}</p>
-                     </button>
-                   ))}
-                   {!procedures.length && <p>Chưa có thủ tục với biểu mẫu đã công bố.</p>}
-                 </div>
-              </div>
-           )}
+        {notice && <div className={`workspace-notice ${notice.includes('Đã') || notice.includes('đã') ? 'success' : ''}`} role="status">{notice}<button aria-label="Đóng thông báo" onClick={() => setNotice('')}>×</button></div>}
+        <div className={`chat-first-workspace ${selectedTemplate && panelOpen ? 'with-draft' : ''}`}>
+          <CitizenAssistant activeCaseId={current?.id} onChecklist={handleChecklist} onStartProcedure={startProcedureFromChat} onSelectTemplate={startDraftFromTemplate} selectedContext={selectedText}/>
 
-           {(started || current) && (
-              <div className="editor-container">
-                 <div className="editor-main">
-                    {ocrPhase !== 'idle' && ocrPhase !== 'ready' ? (
-                      <div className="ocr-studio">
-                        <OcrPipelinePane phase={ocrPhase} prepSteps={prepSteps} prepIndex={prepIndex} previewUrl={previewUrl} fields={extractedFields}/>
-                        <ScanStage
-                          phase={ocrPhase}
-                          image={ocrPhase === 'prep' ? (prepSteps[Math.min(prepIndex, prepSteps.length - 1)]?.image ?? previewUrl) : (prepSteps[prepSteps.length - 1]?.image ?? previewUrl)}
-                          fields={extractedFields}
-                        />
-                      </div>
-                    ) : (
-                      <WordWorkspace
-                        content={docContent}
-                        fileName={`${formSchema?.procedure_id ?? 'to-khai'}.docx`}
-                        onSelectionChange={setSelectedText}
-                        onContentChange={setDocContent}
-                        onDownload={downloadDocx}
-                        downloading={busy === 'docx'}
-                        statusHint={`${formSchema?.fields.filter(field => draftValues[field.key]).length ?? 0} trường đã điền · ${formSchema?.fields.filter(field => !draftValues[field.key]).length ?? 0} trường còn trống`}
-                      />
-                    )}
-                 </div>
-                 
-                 <div className="document-sidebar">
-                   {!current ? (
-                     <div className="sidebar-block">
-                       <h3>Đang khởi tạo...</h3>
-                       <div className="skeleton-loader"><div className="skeleton-line"></div></div>
-                     </div>
-                   ) : (
-                     <div className="sidebar-block">
-                        <div className="current-case">
-                         <span>Hồ sơ đang làm</span>
-                         <strong>{current.case_code || 'Chưa cấp mã'}</strong>
-                         <Status value={current.status}/>
-                        </div>
+          {selectedTemplate && !panelOpen && <button className="draft-launcher" onClick={() => setDraftPanelOpen(true)}><FileText size={18}/><span><b>Mở lại bản nháp</b><small>{readiness}% dữ liệu · {missingFields.length} chỗ thiếu</small></span><span>←</span></button>}
 
-                        <div className="readiness-card">
-                          <div><span>Mức sẵn sàng</span><strong>{readiness}%</strong></div>
-                          <div className="readiness-track"><i style={{ width: `${readiness}%` }}/></div>
-                          <small>{requiredFields.filter(field => draftValues[field.key]?.trim()).length}/{requiredFields.length} trường bắt buộc · {reviewCount} trường cần xác minh</small>
-                        </div>
+          {selectedTemplate && panelOpen && <aside className="draft-drawer" aria-label="Không gian sinh văn bản">
+            <header className="draft-drawer-header">
+              <div><span className="draft-status"><i/>BẢN NHÁP ĐANG LÀM</span><h2>{selectedTemplate.output_name}</h2><p>Mẫu {selectedTemplate.version} · kiểm tra {formatDate(selectedTemplate.source_checked_on)}</p></div>
+              <button className="close-btn" aria-label="Đóng bản nháp" onClick={() => setDraftPanelOpen(false)}><X size={18}/></button>
+            </header>
+            <div className="draft-source-strip"><span>⚖ Đã đối chiếu {selectedTemplate.legal_sources.length} căn cứ</span>{selectedTemplate.legal_sources.slice(0, 2).map(item => <a key={item.source_url} href={item.source_url} target="_blank" rel="noreferrer">{item.document_number} ↗</a>)}</div>
 
-                        <details className="structured-fields" open={!!extractedFields?.length}>
-                          <summary>Dữ liệu dùng để nộp</summary>
-                          {formSchema?.fields.map(field => (
-                            <label key={field.key}>{field.label}{field.required ? ' *' : ''}<input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)} placeholder="Chưa có dữ liệu"/></label>
-                          ))}
-                        </details>
-                       
-                       {current.checklist && Object.keys(current.checklist).length > 0 && (
-                         <div className="checklist-display">
-                           <h3>Danh sách giấy tờ cần thiết</h3>
-                           <ul className="checklist-items">
-                             {Object.entries(current.checklist).map(([key, status]) => (
-                               <li key={key} className={`checklist-item ${status}`}>
-                                 <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
-                                 <div className="check-text">
-                                   <strong>{humanizeStatus(key)}</strong>
-                                   <small>{humanizeStatus(String(status))}</small>
-                                 </div>
-                               </li>
-                             ))}
-                           </ul>
-                         </div>
-                       )}
-                       
-                       {ocrPhase === 'ready' && prepSteps.length > 0 && (
-                         <div className="sidebar-doc">
-                           <h3>Giấy tờ đã xử lý</h3>
-                           <div className="stage-image">
-                             <img src={prepSteps[prepSteps.length - 1].image} alt="Tài liệu đã tiền xử lý"/>
-                             {extractedFields?.map(item => item.bounding_box && (
-                               <div key={item.id ?? item.field_key} className="bbox-overlay labeled" style={{ left: `${item.bounding_box[0] * 100}%`, top: `${item.bounding_box[1] * 100}%`, width: `${item.bounding_box[2] * 100}%`, height: `${item.bounding_box[3] * 100}%` }}>
-                                 <label>{humanizeStatus(item.field_key)} · {Math.round(item.confidence * 100)}%</label>
-                               </div>
-                             ))}
-                           </div>
-                           <small className="muted">Đã khoanh vùng {extractedFields?.filter(item => item.bounding_box).length ?? 0} trường tại vị trí văn bản gốc</small>
-                         </div>
-                       )}
+            {draftStage === 'generating' ? <div className="draft-generating"><div className="generation-orbit"><FileText size={28}/><i/></div><span className="eyebrow">AI ĐANG SOẠN VĂN BẢN</span><h3>Đang ghép dữ liệu vào mẫu đã kiểm duyệt</h3><ol><li className="done">✓ Đọc cấu trúc biểu mẫu</li><li className="done">✓ Kiểm tra nguồn và phiên bản</li><li className="current">Ghép {Object.values(draftValues).filter(Boolean).length} trường dữ liệu…</li><li>Tạo bản nháp để rà soát</li></ol></div> : <div className={`draft-drawer-body ${draftStage === 'ready' ? 'has-editor' : ''}`}>
+              <section className="draft-field-rail">
+                <div className="field-progress"><div><span>Thông tin cần có</span><strong>{readiness}%</strong></div><div className="readiness-track"><i style={{ width: `${readiness}%` }}/></div><small>{requiredFields.filter(field => draftValues[field.key]?.trim()).length}/{requiredFields.length} bắt buộc đã có{reviewCount ? ` · ${reviewCount} cần xác minh` : ''}</small></div>
+                <div className="field-list">
+                  {selectedTemplate.fields.map(field => {
+                    const missing = field.required && !draftValues[field.key]?.trim();
+                    return <label key={field.key} className={missing ? 'missing' : draftValues[field.key] ? 'filled' : ''}><span><b>{field.label}{field.required ? ' *' : ''}</b><small>{missing ? '⚠ Còn thiếu' : draftValues[field.key] ? '✓ Đã có' : 'Không bắt buộc'}</small></span>{field.allowed_values.length ? <select value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)}><option value="">Chọn giá trị</option>{field.allowed_values.map(value => <option key={value}>{value}</option>)}</select> : <input type={field.input_type === 'date' ? 'date' : field.input_type === 'year' ? 'number' : 'text'} value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)} placeholder={missing ? 'Cần bổ sung' : 'Nhập nếu có'}/>}</label>;
+                  })}
+                </div>
+                {capabilities?.ocr_autofill && <div className="field-ocr"><label><input type="file" accept="image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/><span>✦ {file ? file.name : 'AI điền từ giấy tờ'}</span></label><button onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang nhận dạng…' : 'Điền tự động'}</button></div>}
+                <button className="primary wide generate-draft" onClick={generateDraft} disabled={!!busy}>{busy === 'generate' ? 'Đang sinh…' : generatedDraft ? 'Cập nhật bản nháp' : missingFields.length ? `Sinh nháp · giữ ${missingFields.length} chỗ trống` : 'Sinh bản nháp hoàn chỉnh'} <span>→</span></button>
+                {missingFields.length > 0 && <p className="force-note">Các chỗ thiếu sẽ được đánh dấu để bạn không bỏ sót.</p>}
+              </section>
 
-                       {capabilities?.ocr_autofill && <div className="upload-block">
-                         <h3 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--navy)' }}>AI điền tự động từ giấy tờ</h3>
-                         <label className="dropzone">
-                           <input type="file" accept="image/jpeg,image/png" onChange={event => setFile(event.target.files?.[0])}/>
-                           <b>{file ? file.name : 'Chọn bản chụp giấy tờ'}</b>
-                           <span>JPG hoặc PNG · tối đa 10 MB</span>
-                         </label>
-                         <button className="secondary wide" onClick={upload} disabled={!file || !!busy}>{busy === 'upload' ? 'Đang xử lý OCR…' : 'Tải lên & điền tự động'}</button>
-                       </div>}
-                       
-                       <div className="submit-block">
-                         <label className="check-row">
-                           <input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/>
-                           <span>Tôi đồng ý để cơ quan tiếp nhận và xử lý dữ liệu.</span>
-                         </label>
-                         <button className="primary wide" onClick={submit} disabled={!!busy || !consent || readiness < 60}>{busy === 'submit' ? 'Đang gửi…' : readiness < 60 ? 'Cần điền thêm dữ liệu' : 'Nộp hồ sơ tiền kiểm'}</button>
-                       </div>
-                       <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setFormSchema(undefined); setCapabilities(undefined); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setDocContent(''); }}>Tạo hồ sơ khác</button>
-                     </div>
-                   )}
-                   
-                   {notice && <div className={`alert ${notice.includes('Đã') || notice.includes('đã') ? 'success' : 'error'}`} role="status">{notice}</div>}
-                 </div>
-              </div>
-           )}
+              {draftStage === 'ready' && <section className="draft-editor-area">
+                {proposedRevision ? <div className="revision-review">
+                  <div className="revision-heading"><div><span className="eyebrow">DUYỆT THAY ĐỔI AI</span><h3>{proposedRevision.summary}</h3></div><span className="review-badge">{changeCount} thay đổi · chờ duyệt</span></div>
+                  <div className="diff-legend"><span className="removed">− Nội dung cũ</span><span className="added">+ Nội dung mới</span><span>Phần không đổi được thu gọn</span></div>
+                  <div className="diff-view">{diffBlocks.map((block, index) => <div key={`${block.type}-${index}`} className={`diff-block ${block.type}`}>{block.type !== 'same' && <b>{block.type === 'added' ? '+' : '−'}</b>}<div dangerouslySetInnerHTML={{ __html: block.html }}/></div>)}</div>
+                  <div className="revision-actions"><button className="ghost" onClick={() => { setProposedRevision(undefined); setDiffBlocks([]); }}>Bỏ đề xuất</button><button className="primary" onClick={applyRevision}><Check size={15}/> Áp dụng thay đổi đã duyệt</button></div>
+                </div> : <>
+                  <WordWorkspace content={docContent} fileName={`${formSchema?.procedure_id ?? 'van-ban'}.docx`} source={source} onSelectionChange={setSelectedText} onContentChange={setDocContent} onDownload={downloadDocx} downloading={busy === 'docx'} statusHint={`${missingFields.length} chỗ cần bổ sung`}/>
+                  <div className="ai-revise-bar"><div><span>✦</span><input aria-label="Yêu cầu AI sửa bản nháp" value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && revisionInstruction.trim()) reviseDraft(); }} placeholder={selectedText ? `Sửa đoạn đã chọn: “${selectedText.slice(0, 42)}…”` : 'Yêu cầu AI sửa: rút gọn, trang trọng hơn…'}/><button onClick={reviseDraft} disabled={!revisionInstruction.trim() || busy === 'revise'}>{busy === 'revise' ? 'Đang sửa…' : 'Tạo đề xuất'}</button></div><small>AI không tự áp dụng. Bạn sẽ thấy diff và duyệt trước.</small></div>
+                </>}
+              </section>}
+            </div>}
+
+            {draftStage === 'ready' && <footer className="draft-submit-footer"><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/> Tôi đồng ý xử lý dữ liệu để tiền kiểm hồ sơ.</label><button className="primary" onClick={submit} disabled={!!busy || !consent || missingFields.length > 0}>{missingFields.length ? `Còn ${missingFields.length} trường bắt buộc` : 'Nộp hồ sơ tiền kiểm'}</button></footer>}
+          </aside>}
         </div>
-        
-        <CitizenAssistant activeCaseId={current?.id} onChecklist={handleChecklist} onStartProcedure={startProcedureFromChat} selectedContext={selectedText} />
       </main>
     </Shell>
   );

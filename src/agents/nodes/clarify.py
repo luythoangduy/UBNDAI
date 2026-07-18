@@ -46,8 +46,8 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             }
         return {
             "reply": (
-                "Bạn mô tả giúp mình nhu cầu cụ thể (ví dụ: đăng ký khai sinh cho con, "
-                "làm lại CCCD...) để mình xác định đúng thủ tục nhé."
+                "Bạn mô tả giúp mình nhu cầu hành chính cụ thể và điều bạn muốn biết "
+                "để mình tìm đúng thủ tục và nguồn nhé."
             ),
             "reply_kind": "clarify",
             "pending_questions": ["Bạn đang cần làm thủ tục hành chính nào?"],

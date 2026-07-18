@@ -180,3 +180,47 @@ export type ProcedureFormSchema = {
   title: string;
   fields: ProcedureFormField[];
 };
+
+export type DraftFieldSpec = {
+  key: string;
+  label: string;
+  input_type: 'text' | 'date' | 'year';
+  required: boolean;
+  allowed_values: string[];
+  description?: string | null;
+};
+
+export type DraftTemplateInfo = {
+  id: string;
+  procedure_id: string;
+  output_name: string;
+  version: string;
+  source_checked_on: string;
+  fields: DraftFieldSpec[];
+  disclaimer: string;
+  legal_sources: Array<{
+    document_number: string;
+    title: string;
+    issuing_authority: string;
+    role: string;
+    source_url: string;
+  }>;
+};
+
+export type GeneratedDraft = {
+  id: string;
+  procedure_id: string;
+  template_id: string;
+  output_name: string;
+  rendered_text: string;
+  missing_required_fields: string[];
+  ready_for_review: boolean;
+  warnings: string[];
+};
+
+export type DraftRevision = {
+  revised_html: string;
+  summary: string;
+  model_used: string;
+  warnings: string[];
+};

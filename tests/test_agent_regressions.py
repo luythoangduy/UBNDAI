@@ -70,6 +70,7 @@ async def test_weak_single_retrieval_result_is_not_auto_selected(monkeypatch):
     monkeypatch.setattr(identify, "retrieve_procedure_identity", lambda query: [weak])
     result = await identify.run({"rewritten_query": "mơ hồ"})
     assert "selected_procedure_id" not in result
+    assert result["route"] == "answer"
 
 
 @pytest.mark.asyncio
@@ -80,23 +81,31 @@ async def test_chunk_without_procedure_id_does_not_crash_identify(monkeypatch):
         lambda query: [RetrievedChunk(content="x", metadata={}, score=1.0)],
     )
     result = await identify.run({"rewritten_query": "x"})
-    assert result["reply_kind"] == "fallback"
+    assert result["route"] == "answer"
 
 
 @pytest.mark.parametrize(
-    "query",
+    ("query", "expected_procedure_id"),
     [
-        "đăng ký kết hôn",
-        "làm căn cước công dân",
-        "xin giấy phép xây dựng",
-        "thủ tục đất đai",
+        ("đăng ký kết hôn", "ket_hon"),
+        ("làm căn cước công dân", "can_cuoc"),
+        ("đăng ký kết hôn có yếu tố nước ngoài", None),
+        ("cấp đổi thẻ căn cước", None),
+        ("xin giấy phép xây dựng", None),
+        ("thủ tục đất đai", None),
     ],
 )
 @pytest.mark.asyncio
-async def test_unrelated_query_does_not_select_birth_registration(query):
+async def test_unrelated_query_does_not_select_birth_registration(
+    query, expected_procedure_id
+):
     result = await identify.run({"rewritten_query": query})
-    assert result.get("selected_procedure_id") is None
-    assert result["reply_kind"] == "fallback"
+    assert result.get("selected_procedure_id") == expected_procedure_id
+    assert result.get("selected_procedure_id") != "khai_sinh"
+    if expected_procedure_id is None:
+        assert result["route"] == "answer"
+    else:
+        assert result["reply_kind"] != "fallback"
 
 
 @pytest.mark.asyncio
@@ -107,7 +116,7 @@ async def test_student_query_does_not_select_birth_registration():
     ):
         result = await identify.run({"rewritten_query": query})
         assert result.get("selected_procedure_id") is None
-        assert result["reply_kind"] == "fallback"
+        assert result["route"] == "answer"
 
 
 @pytest.mark.asyncio
@@ -220,8 +229,8 @@ async def test_invalid_llm_citation_index_falls_back(monkeypatch):
 async def test_concurrent_messages_do_not_overwrite_case_answers():
     first = await run_guidance(ChatRequest(message="đăng ký khai sinh cho con"))
     await asyncio.gather(
-        run_guidance(ChatRequest(case_id=first.case_id, message="đã kết hôn")),
-        run_guidance(ChatRequest(case_id=first.case_id, message="bé sinh ở bệnh viện")),
+        run_guidance(ChatRequest(case_id=first.case_id, message="có")),
+        run_guidance(ChatRequest(case_id=first.case_id, message="có")),
     )
     case = await cases.get(first.case_id)
     assert case.answers["ket_hon"] is True

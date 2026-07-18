@@ -23,15 +23,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     query = state.get("rewritten_query") or ""
     chunks = retrieve_procedure_identity(query)
     if not chunks:
-        return {
-            "reply": NO_SOURCE_WARNING,
-            "reply_kind": "fallback",
-            "citations": [],
-            "retrieved_chunks": [],
-            "pending_action": None,
-            "pending_procedure_ids": [],
-            "pending_question_keys": [],
-        }
+        return _continue_with_open_retrieval(query)
 
     scores: dict[str, float] = {}
     for rank, chunk in enumerate(chunks, start=1):
@@ -42,15 +34,7 @@ async def run(state: GuidanceState) -> dict[str, Any]:
             )
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     if not ranked:
-        return {
-            "reply": NO_SOURCE_WARNING,
-            "reply_kind": "fallback",
-            "citations": [],
-            "retrieved_chunks": [],
-            "pending_action": None,
-            "pending_procedure_ids": [],
-            "pending_question_keys": [],
-        }
+        return _continue_with_open_retrieval(query)
     candidates = [
         {"procedure_id": procedure_id, "score": round(score, 6)}
         for procedure_id, score in ranked
@@ -66,17 +50,12 @@ async def run(state: GuidanceState) -> dict[str, Any]:
     ]
 
     if not is_relevant:
-        return {
-            "identify_confidence": round(confidence, 4),
-            "candidate_procedures": candidates,
-            "reply": NO_SOURCE_WARNING,
-            "reply_kind": "fallback",
-            "citations": [],
-            "retrieved_chunks": retrieved,
-            "pending_action": None,
-            "pending_procedure_ids": [],
-            "pending_question_keys": [],
-        }
+        return _continue_with_open_retrieval(
+            query,
+            identify_confidence=round(confidence, 4),
+            candidates=candidates,
+            retrieved=retrieved,
+        )
 
     is_distinct = len(ranked) == 1 or margin >= settings.identify_min_margin
     if (
@@ -174,3 +153,28 @@ def _procedure_intro(procedure: Any) -> str:
     if procedure.legal_basis:
         lines.append(f"- Căn cứ pháp lý: {'; '.join(procedure.legal_basis)}")
     return "\n".join(lines)
+
+
+def _continue_with_open_retrieval(
+    query: str,
+    *,
+    identify_confidence: float = 0.0,
+    candidates: list[dict[str, Any]] | None = None,
+    retrieved: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Không có workflow catalog vẫn tiếp tục hỏi đáp trên corpus mở.
+
+    Catalog chỉ quyết định khả năng checklist/form đã kiểm duyệt, không phải
+    allow-list giới hạn các thủ tục mà chatbot được phép tra cứu.
+    """
+    return {
+        "route": "answer",
+        "rewritten_query": query,
+        "identify_confidence": identify_confidence,
+        "candidate_procedures": candidates or [],
+        "citations": [],
+        "retrieved_chunks": retrieved or [],
+        "pending_action": None,
+        "pending_procedure_ids": [],
+        "pending_question_keys": [],
+    }

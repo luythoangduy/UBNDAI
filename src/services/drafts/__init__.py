@@ -13,6 +13,7 @@ from src.services.drafts.registry import (
     list_templates,
 )
 from src.services.drafts.renderer import DraftDataError, generate
+from src.services.drafts.reviser import revise
 
 __all__ = [
     "DOCX_MEDIA_TYPE",
@@ -25,4 +26,5 @@ __all__ = [
     "generate_docx",
     "get_template",
     "list_templates",
+    "revise",
 ]

@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException, Response
 from src.models import (
     DraftGenerateRequest,
     DraftHtmlExportRequest,
+    DraftRevision,
+    DraftReviseRequest,
     DraftTemplateInfo,
     GeneratedDraft,
 )
@@ -37,6 +39,14 @@ async def generate_draft(payload: DraftGenerateRequest) -> GeneratedDraft:
             status_code=422,
             detail={"message": str(exc), "fields": exc.fields},
         ) from exc
+
+
+@router.post("/revise", response_model=DraftRevision)
+async def revise_draft(payload: DraftReviseRequest) -> DraftRevision:
+    try:
+        return await draft_service.revise(payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post(

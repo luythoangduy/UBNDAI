@@ -1,0 +1,75 @@
+{
+  "id": "ket_hon",
+  "national_code": "1.000894",
+  "name": "Đăng ký kết hôn (không có yếu tố nước ngoài)",
+  "aliases": [
+    "đăng ký kết hôn",
+    "làm giấy đăng ký kết hôn",
+    "làm giấy kết hôn"
+  ],
+  "example_queries": [
+    "tôi muốn đăng ký kết hôn",
+    "hai chúng tôi muốn làm giấy kết hôn",
+    "hồ sơ kết hôn cần những gì"
+  ],
+  "negative_keywords": [
+    "đăng ký lại kết hôn",
+    "kết hôn có yếu tố nước ngoài",
+    "khai sinh",
+    "đăng ký tạm trú",
+    "cấp thẻ căn cước"
+  ],
+  "required_token_groups": [
+    ["kết", "hôn"]
+  ],
+  "agency": "UBND cấp xã",
+  "legal_basis": [
+    "Luật Hộ tịch 2014",
+    "Nghị định 123/2015/NĐ-CP",
+    "Nghị định 87/2020/NĐ-CP",
+    "Thông tư 04/2024/TT-BTP",
+    "Nghị định 07/2025/NĐ-CP",
+    "Nghị định 120/2025/NĐ-CP",
+    "Thông tư 08/2025/TT-BTP"
+  ],
+  "processing_days": 1,
+  "fee_vnd": 0,
+  "clarifying_questions": [
+    {
+      "key": "khai_thac_duoc_cu_tru",
+      "text": "Cơ quan đăng ký có khai thác được thông tin cư trú của hai bên từ cơ sở dữ liệu quốc gia không?",
+      "answer_type": "boolean"
+    }
+  ],
+  "requirements": [
+    {
+      "code": "to_khai_dang_ky_ket_hon",
+      "name": "Tờ khai đăng ký kết hôn theo mẫu, có đủ thông tin của hai bên nam, nữ",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": [],
+      "notes": "Hai bên có thể khai chung một tờ khai khi nộp trực tiếp; hồ sơ trực tuyến dùng mẫu hộ tịch điện tử tương tác."
+    },
+    {
+      "code": "giay_to_tuy_than_hai_ben",
+      "name": "Giấy tờ tùy thân còn giá trị của hai bên để đối chiếu khi làm thủ tục trực tiếp",
+      "condition": null,
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["cccd", "ho_chieu"],
+      "notes": "Nếu dữ liệu đã có trong cơ sở dữ liệu thì người dân cung cấp thông tin định danh để cơ quan tra cứu; không mặc định yêu cầu nộp bản sao."
+    },
+    {
+      "code": "giay_to_chung_minh_cu_tru",
+      "name": "Giấy tờ chứng minh thông tin cư trú",
+      "condition": "answers.khai_thac_duoc_cu_tru == false",
+      "condition_label": "Chỉ xuất trình khi cơ quan không khai thác được thông tin cư trú từ cơ sở dữ liệu",
+      "original_required": true,
+      "copies": 0,
+      "accepted_doc_types": ["giay_to_cu_tru"]
+    }
+  ],
+  "form_templates": [],
+  "source_url": "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=1325"
+}

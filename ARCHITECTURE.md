@@ -52,12 +52,16 @@ State: `GuidanceState` (`src/agents/state.py`) — typed, explicit.
 ```
 ingest → planner (1 LLM call structured: intent + rewrite + route)
   ├─ clarify        # thiếu thông tin → sinh câu hỏi làm rõ, chờ lượt sau
-  ├─ identify       # retrieval hybrid trên catalog TTHC → chọn thủ tục + độ tin cậy
+  ├─ identify       # ưu tiên workflow/raw source; không khớp thì handoff sang open legal RAG
   ├─ checklist      # áp điều kiện (answers) vào DocumentRequirement → checklist cá nhân hoá
   └─ answer         # trả lời hỏi đáp chung, kèm citation về thủ tục/căn cứ pháp lý
 ```
 
 Bài học mang từ C2 sang: planner LLM-first với rule-based fallback; cần few-shot cho routing câu hỏi follow-up; decompose query trước khi RRF.
+
+Catalog không phải allow-list hỗ trợ. Nó chỉ chứa workflow đã duyệt để bật checklist,
+form/OCR và validation. Câu hỏi về thủ tục chưa có catalog vẫn đi qua corpus VBPL và
+tìm nguồn Chính phủ; thiếu nguồn thì trả cảnh báo grounding thay vì đoán.
 
 ## 5. Bản đồ tái sử dụng từ C2-App-108
 

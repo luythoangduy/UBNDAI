@@ -169,6 +169,21 @@ class DraftGenerateRequest(BaseModel):
     )
 
 
+class DraftReviseRequest(BaseModel):
+    """Yêu cầu AI sửa một bản nháp HTML nhưng giữ nguyên dữ kiện đã có."""
+
+    html: str = Field(min_length=1, max_length=500_000)
+    instruction: str = Field(min_length=2, max_length=2_000)
+    selected_text: str | None = Field(default=None, max_length=20_000)
+
+
+class DraftRevision(BaseModel):
+    revised_html: str
+    summary: str
+    model_used: str
+    warnings: list[str] = Field(default_factory=list)
+
+
 class GeneratedDraft(BaseModel):
     id: str
     procedure_id: str

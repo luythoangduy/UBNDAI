@@ -42,7 +42,12 @@ def build_graph() -> Any:
             "fallback": "answer",
         },
     )
-    for node in ("clarify", "identify", "checklist", "answer"):
+    graph.add_conditional_edges(
+        "identify",
+        lambda state: "answer" if state.get("route") == "answer" else "end",
+        {"answer": "answer", "end": END},
+    )
+    for node in ("clarify", "checklist", "answer"):
         graph.add_edge(node, END)
     return graph.compile()
 

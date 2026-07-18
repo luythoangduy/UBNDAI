@@ -67,14 +67,12 @@ def extract_answers(
 
 def _extract_for_key(text: str, question: ClarifyingQuestion) -> Any | None:
     if question.answer_type == "integer":
-        patterns = (
-            r"\b(?:sinh\s+duoc|duoc|da\s+sinh)\s+(\d{1,4})\s+ngay\b",
-            r"\b(\d{1,4})\s+ngay\s+roi\b",
-            r"\bbe\s+(\d{1,4})\s+ngay\s+tuoi\b",
-            r"\bmoi\s+sinh\s+(\d{1,4})\s+ngay\b",
-        )
-        match = next((match for pattern in patterns if (match := re.search(pattern, text))), None)
-        match = match or re.fullmatch(r"\s*(\d{1,4})\s*(?:ngay)?\s*", text)
+        # Parser fallback chỉ lấy một số nguyên không mơ hồ; diễn giải ngữ nghĩa
+        # theo từng thủ tục thuộc planner LLM, không hard-code key nghiệp vụ.
+        matches = re.findall(r"(?<!\d)-?\d+(?!\d)", text)
+        match = re.fullmatch(r"\s*(-?\d+)\s*(?:\w+)?\s*", text)
+        if not match and len(matches) == 1:
+            match = re.search(r"(?<!\d)(-?\d+)(?!\d)", text)
         if not match:
             return None
         value = int(match.group(1))
@@ -95,21 +93,16 @@ def _extract_for_key(text: str, question: ClarifyingQuestion) -> Any | None:
     if question.answer_type != "boolean":
         return None
 
-    if question.key == "ket_hon":
-        if re.search(r"\b(chua|khong)\s+(?:dang ky\s+)?ket hon\b", text):
-            return False
-        if re.search(r"\b(?:da|co)\s+(?:dang ky\s+)?ket hon\b", text):
-            return True
-    elif question.key == "sinh_tai_co_so_y_te":
-        if re.search(r"\b(?:tai nha|o nha|ngoai co so y te)\b", text):
-            return False
-        if re.search(r"\b(?:benh vien|co so y te|tram y te|nha ho sinh)\b", text):
-            return True
     return None
 
 
 def _standalone_boolean(text: str) -> bool | None:
-    tokens = text.strip().split()
+    normalized = text.strip()
+    for prefix in ("thuc ra", "sua lai", "dinh chinh", "cau tra loi la"):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):].lstrip(" :,-")
+            break
+    tokens = normalized.split()
     if len(tokens) > 2:
         return None
     if any(token in _NO for token in tokens):

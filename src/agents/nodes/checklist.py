@@ -83,9 +83,6 @@ async def run(state: GuidanceState) -> dict[str, Any]:
         )
         pending_questions = [question.text for question in unanswered]
 
-    for warning in checklist_service.guidance_warnings(procedure, answers):
-        lines.append(f"Lưu ý: {warning}")
-
     citations = citations_from_chunks(chunks_from_procedure(procedure))
     return {
         "checklist": [item.model_dump() for item in items],

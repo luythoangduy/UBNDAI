@@ -17,6 +17,15 @@ def _post(payload: dict) -> dict:
     return response.json()
 
 
+def _citizen_headers(username: str = "citizen.demo") -> dict[str, str]:
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": username, "password": "ChangeMe123!"},
+    )
+    assert login.status_code == 200
+    return {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
+
+
 def test_full_guidance_flow_with_citations():
     # Lượt 1: nhận diện thủ tục → giới thiệu + câu hỏi làm rõ, có citation
     first = _post({"message": "tôi muốn đăng ký khai sinh cho con mới sinh"})
@@ -147,6 +156,78 @@ def test_authenticated_chat_case_is_available_in_citizen_portal():
     case = portal.json()["data"]["case"]
     assert case["procedure_id"] == "khai_sinh"
     assert case["source_channel"] == "ai_guidance"
+
+
+def test_authenticated_chat_history_restores_structured_messages():
+    headers = _citizen_headers()
+    chat = client.post(
+        "/api/v1/chat",
+        json={"message": "tôi muốn đăng ký khai sinh cho con"},
+        headers=headers,
+    )
+    assert chat.status_code == 200
+
+    history = client.get(
+        f"/api/v1/chat/{chat.json()['case_id']}/messages",
+        headers=headers,
+    )
+
+    assert history.status_code == 200
+    data = history.json()
+    assert data["case_id"] == chat.json()["case_id"]
+    assert data["procedure_id"] == "khai_sinh"
+    assert [message["role"] for message in data["messages"]] == [
+        "user",
+        "assistant",
+    ]
+    assert all(message["id"] > 0 and message["created_at"] for message in data["messages"])
+    assert data["messages"][0]["response"] is None
+    assert data["messages"][1]["response"] == chat.json()
+
+
+def test_chat_history_requires_citizen_authentication():
+    response = client.get("/api/v1/chat/unknown/messages")
+    assert response.status_code == 401
+
+
+def test_chat_history_and_resume_hide_another_citizens_case():
+    owner_headers = _citizen_headers("citizen.demo")
+    other_headers = _citizen_headers("citizen.other")
+    chat = client.post(
+        "/api/v1/chat",
+        json={"message": "tôi muốn đăng ký khai sinh cho con"},
+        headers=owner_headers,
+    )
+    case_id = chat.json()["case_id"]
+
+    history = client.get(
+        f"/api/v1/chat/{case_id}/messages",
+        headers=other_headers,
+    )
+    resumed = client.post(
+        "/api/v1/chat",
+        json={"case_id": case_id, "message": "cần giấy tờ gì?"},
+        headers=other_headers,
+    )
+
+    assert history.status_code == 404
+    assert resumed.status_code == 404
+
+
+def test_anonymous_request_cannot_resume_authenticated_case():
+    headers = _citizen_headers()
+    chat = client.post(
+        "/api/v1/chat",
+        json={"message": "tôi muốn đăng ký khai sinh cho con"},
+        headers=headers,
+    )
+
+    resumed = client.post(
+        "/api/v1/chat",
+        json={"case_id": chat.json()["case_id"], "message": "cần giấy tờ gì?"},
+    )
+
+    assert resumed.status_code == 404
 
 
 def test_clarification_answer_is_extracted_and_persisted():

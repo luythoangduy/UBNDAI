@@ -3,9 +3,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.agents.graph import run_guidance
-from src.models import ChatRequest, ChatResponse, ChatStarterResponse, TokenClaims
+from src.models import (
+    ChatHistoryResponse,
+    ChatRequest,
+    ChatResponse,
+    ChatStarterResponse,
+    TokenClaims,
+)
 from src.services.chat_experience import starter_experience
-from src.services.auth import optional_current_claims
+from src.services import cases as case_service
+from src.services.auth import optional_current_claims, require_role
 from src.services.cases import CaseNotFoundError, ConcurrentCaseUpdateError
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -14,6 +21,18 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.get("/starter", response_model=ChatStarterResponse)
 async def starter() -> ChatStarterResponse:
     return await starter_experience()
+
+
+@router.get("/{case_id}/messages", response_model=ChatHistoryResponse)
+async def chat_messages(
+    case_id: str,
+    claims: TokenClaims = Depends(require_role("citizen")),
+) -> ChatHistoryResponse:
+    """Return the signed-in citizen's transcript for reload/resume."""
+    try:
+        return await case_service.get_chat_history(case_id, claims.user_id)
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Case not found") from exc
 
 
 @router.post("", response_model=ChatResponse)

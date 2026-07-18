@@ -17,6 +17,8 @@ frontend/dist/
 frontend/*.tsbuildinfo
 frontend/playwright-report/
 frontend/test-results/
+.pytest-run-temp/
+.runtime-temp/
 .pytest_cache/
 .coverage
 .ruff_cache/

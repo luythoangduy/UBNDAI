@@ -70,6 +70,25 @@
       "accepted_doc_types": ["giay_to_cu_tru"]
     }
   ],
-  "form_templates": [],
+  "form_templates": [
+    {
+      "id": "TT-04-2024-BTP-KET-HON",
+      "name": "Tờ khai đăng ký kết hôn",
+      "fields": [
+        {"key": "ho_ten_nam", "label": "Họ, chữ đệm, tên bên nam", "type": "text", "required": true},
+        {"key": "ngay_sinh_nam", "label": "Ngày, tháng, năm sinh bên nam", "type": "date", "required": true},
+        {"key": "dan_toc_nam", "label": "Dân tộc bên nam", "type": "text", "required": false},
+        {"key": "quoc_tich_nam", "label": "Quốc tịch bên nam", "type": "text", "required": true},
+        {"key": "noi_cu_tru_nam", "label": "Nơi cư trú bên nam", "type": "text", "required": true},
+        {"key": "so_dinh_danh_nam", "label": "Số định danh cá nhân/CCCD/hộ chiếu bên nam", "type": "text", "required": true},
+        {"key": "ho_ten_nu", "label": "Họ, chữ đệm, tên bên nữ", "type": "text", "required": true},
+        {"key": "ngay_sinh_nu", "label": "Ngày, tháng, năm sinh bên nữ", "type": "date", "required": true},
+        {"key": "dan_toc_nu", "label": "Dân tộc bên nữ", "type": "text", "required": false},
+        {"key": "quoc_tich_nu", "label": "Quốc tịch bên nữ", "type": "text", "required": true},
+        {"key": "noi_cu_tru_nu", "label": "Nơi cư trú bên nữ", "type": "text", "required": true},
+        {"key": "so_dinh_danh_nu", "label": "Số định danh cá nhân/CCCD/hộ chiếu bên nữ", "type": "text", "required": true}
+      ]
+    }
+  ],
   "source_url": "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=1325"
 }

@@ -1,0 +1,24 @@
+# Luật kiểm tra hồ sơ Cấp thẻ căn cước lần đầu (từ đủ 14 tuổi, Mẫu DC02). Owner: Dev B.
+# severity=error chỉ tồn tại ở file rule (AI checker không được sinh error).
+# Các phiếu CC01/DC01/DC02 chưa có doc_type OCR riêng — rule chỉ kiểm tra form + answers.
+
+procedure: can_cuoc
+rules:
+  - id: CC-R1
+    description: Phải khai họ tên và ngày sinh của người đề nghị
+    check: filled(form.ho_ten) and filled(form.ngay_sinh)
+    severity: error
+    message: "Thiếu họ tên hoặc ngày sinh của người đề nghị cấp thẻ căn cước."
+
+  - id: CC-R2
+    description: Phải khai nơi cư trú để xác định nơi thu nhận hồ sơ
+    check: filled(form.noi_cu_tru)
+    severity: error
+    message: "Chưa khai nơi cư trú — cần thông tin này để xác định cơ quan thu nhận và đối chiếu dữ liệu dân cư."
+
+  - id: CC-R3
+    description: Đăng ký trực tuyến cần số định danh cá nhân để đối chiếu dữ liệu dân cư
+    when: answers.nop_truc_tuyen == true
+    check: filled(form.so_dinh_danh)
+    severity: warning
+    message: "Bạn chọn đăng ký trực tuyến nhưng chưa khai số định danh cá nhân — hệ thống cần số này để đối chiếu Cơ sở dữ liệu quốc gia về dân cư."

@@ -1,0 +1,24 @@
+# Luật kiểm tra hồ sơ Đăng ký kết hôn (không có yếu tố nước ngoài). Owner: Dev B.
+# severity=error chỉ tồn tại ở file rule (AI checker không được sinh error).
+# Giấy tờ tùy thân chấp nhận doc_type 'cccd' (OCR nhận diện được) — các giấy tờ
+# khác của thủ tục này chưa có doc_type OCR riêng nên chỉ kiểm tra form.
+
+procedure: ket_hon
+rules:
+  - id: KH-R1
+    description: Tờ khai phải có họ tên đầy đủ của cả hai bên nam, nữ
+    check: filled(form.ho_ten_nam) and filled(form.ho_ten_nu)
+    severity: error
+    message: "Tờ khai đăng ký kết hôn phải ghi đầy đủ họ, chữ đệm, tên của cả hai bên nam, nữ."
+
+  - id: KH-R2
+    description: Phải khai số định danh/giấy tờ tùy thân của cả hai bên
+    check: filled(form.so_dinh_danh_nam) and filled(form.so_dinh_danh_nu)
+    severity: error
+    message: "Thiếu số định danh cá nhân/CCCD/hộ chiếu của một trong hai bên — cơ quan đăng ký cần thông tin này để đối chiếu dữ liệu hộ tịch."
+
+  - id: KH-R3
+    description: Nơi cư trú của hai bên cần được khai để xác định thẩm quyền đăng ký
+    check: filled(form.noi_cu_tru_nam) and filled(form.noi_cu_tru_nu)
+    severity: warning
+    message: "Chưa khai đủ nơi cư trú của hai bên. Ghi theo nơi thường trú; nếu không có thì ghi nơi tạm trú hoặc nơi ở hiện tại."

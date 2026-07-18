@@ -84,6 +84,20 @@
       "accepted_doc_types": ["giay_to_phap_ly"]
     }
   ],
-  "form_templates": [],
+  "form_templates": [
+    {
+      "id": "DC02-TT-17-2024-BCA-CAN-CUOC",
+      "name": "Phiếu đề nghị giải quyết thủ tục về căn cước",
+      "fields": [
+        {"key": "ho_ten", "label": "Họ, chữ đệm và tên", "type": "text", "required": true},
+        {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true},
+        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true},
+        {"key": "so_dinh_danh", "label": "Số định danh cá nhân (nếu đã có)", "type": "text", "required": false},
+        {"key": "noi_cu_tru", "label": "Nơi cư trú", "type": "text", "required": true},
+        {"key": "noi_dung_de_nghi", "label": "Nội dung đề nghị (vd: cấp thẻ căn cước lần đầu)", "type": "text", "required": true},
+        {"key": "ho_ten_nguoi_dai_dien", "label": "Họ tên người đại diện thực hiện thủ tục (nếu có)", "type": "text", "required": false}
+      ]
+    }
+  ],
   "source_url": "https://dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=642&open_popup=1"
 }

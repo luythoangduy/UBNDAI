@@ -72,6 +72,23 @@
       "accepted_doc_types": ["van_ban_dong_y_nguoi_giam_ho"]
     }
   ],
-  "form_templates": [],
+  "form_templates": [
+    {
+      "id": "CT01-TT-53-2025-BCA-TAM-TRU",
+      "name": "Tờ khai thay đổi thông tin cư trú (đăng ký tạm trú)",
+      "fields": [
+        {"key": "ho_ten", "label": "Họ, chữ đệm và tên", "type": "text", "required": true, "ocr_sources": ["cccd.ho_ten"]},
+        {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true, "ocr_sources": ["cccd.ngay_sinh"]},
+        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "ocr_sources": ["cccd.gioi_tinh"]},
+        {"key": "so_dinh_danh", "label": "Số định danh cá nhân", "type": "text", "required": true, "ocr_sources": ["cccd.so_cccd"]},
+        {"key": "so_dien_thoai", "label": "Số điện thoại liên hệ", "type": "text", "required": false},
+        {"key": "dia_chi_tam_tru", "label": "Địa chỉ đề nghị đăng ký tạm trú", "type": "text", "required": true},
+        {"key": "thoi_han_tam_tru", "label": "Thời hạn tạm trú đề nghị", "type": "text", "required": true},
+        {"key": "ho_ten_chu_ho", "label": "Họ tên chủ hộ (nếu đăng ký vào hộ đã có)", "type": "text", "required": false},
+        {"key": "quan_he_voi_chu_ho", "label": "Quan hệ với chủ hộ", "type": "text", "required": false},
+        {"key": "y_kien_nguoi_dai_dien", "label": "Ý kiến cha, mẹ hoặc người giám hộ (với người chưa thành niên)", "type": "text", "required": false}
+      ]
+    }
+  ],
   "source_url": "https://thutuc.dichvucong.gov.vn/p/home/dvc-tthc-thu-tuc-hanh-chinh-chi-tiet.html?ma_thu_tuc=5974"
 }

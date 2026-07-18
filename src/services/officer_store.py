@@ -9,10 +9,14 @@ from uuid import uuid4
 
 from src.models import (
     ApplicationCase,
+    Case,
     CaseAuditEvent,
     CaseDocument,
     CaseSubmissionVersion,
+    ChecklistItem,
     ConsentRecord,
+    ExtractedDocument,
+    ExtractedField,
     ExtractedFieldRecord,
     OfficerDecision,
     RoutingDecision,
@@ -36,6 +40,7 @@ from src.services.persistence import (
     ValidationFindingORM,
 )
 from src.services.storage import storage
+from src.services.validation import rule_engine
 
 
 def now() -> datetime:
@@ -329,11 +334,7 @@ class OfficerStore:
         timestamp = now()
         case_id = str(uuid4())
         procedure = catalog.get_procedure(procedure_id)
-        checklist = (
-            {item.requirement_code: item.status for item in build_checklist(procedure, {})}
-            if procedure is not None
-            else {}
-        )
+        checklist = self._rebuild_checklist(procedure, {}, {}) if procedure is not None else {}
         case = ApplicationCase(
             id=case_id,
             case_code=f"UBNDAI-{timestamp.year}-{case_id[:8].upper()}",
@@ -442,17 +443,45 @@ class OfficerStore:
             if case.version != expected_version:
                 raise ValueError("version_conflict")
             merged_form_data = {**case.form_data, **(form_data or {})}
+            merged_answers = case.form_data.get("_answers", {})
+            if not isinstance(merged_answers, dict):
+                merged_answers = {}
             if answers is not None:
-                existing_answers = case.form_data.get("_answers", {})
-                merged_form_data["_answers"] = {
-                    **(existing_answers if isinstance(existing_answers, dict) else {}),
-                    **answers,
+                merged_answers = {**merged_answers, **answers}
+                merged_form_data["_answers"] = merged_answers
+            procedure = catalog.get_procedure(case.procedure_id)
+            checklist = (
+                self._rebuild_checklist(procedure, merged_answers, case.checklist)
+                if procedure is not None and answers is not None
+                else case.checklist
+            )
+            updated = case.model_copy(
+                update={
+                    "form_data": merged_form_data,
+                    "checklist": checklist,
+                    "version": case.version + 1,
+                    "updated_at": now(),
                 }
-            updated = case.model_copy(update={"form_data": merged_form_data, "version": case.version + 1, "updated_at": now()})
+            )
             self.cases[case_id] = updated
             self._audit(updated, citizen_id, "case_updated", "application_case", case_id)
             self._save_case(updated)
             return deepcopy(updated)
+
+    @staticmethod
+    def _rebuild_checklist(procedure, answers: dict, existing: dict[str, str]) -> dict[str, str]:
+        """Apply clarification answers while preserving uploaded/verified evidence."""
+        rebuilt: dict[str, str] = {}
+        evidence_statuses = {"uploaded", "verified", "uncertain"}
+        for item in build_checklist(procedure, answers):
+            previous = existing.get(item.requirement_code)
+            if item.status == "not_applicable":
+                rebuilt[item.requirement_code] = "not_applicable"
+            elif previous in evidence_statuses:
+                rebuilt[item.requirement_code] = previous
+            else:
+                rebuilt[item.requirement_code] = item.status
+        return rebuilt
 
     def create_document(self, case_id: str, citizen_id: str, filename: str, content_type: str, size_bytes: int) -> CaseDocument:
         case = self.get_citizen_case(case_id, citizen_id)
@@ -565,7 +594,7 @@ class OfficerStore:
             organization_id = "org-demo"
             submission_version = case.current_submission_version
             submission_id = str(uuid4())
-            submission = CaseSubmissionVersion(id=submission_id, case_id=case_id, version=submission_version, form_data=deepcopy(case.form_data), checklist_snapshot={document.document_type: "uploaded" for document in documents}, procedure_version_id=case.procedure_version_id, procedure_rule_version="ruleset-v1", created_at=now(), created_by=citizen_id)
+            submission = CaseSubmissionVersion(id=submission_id, case_id=case_id, version=submission_version, form_data=deepcopy(case.form_data), checklist_snapshot=deepcopy(case.checklist), procedure_version_id=case.procedure_version_id, procedure_rule_version="ruleset-v1", created_at=now(), created_by=citizen_id)
             self.submissions[submission.id] = submission
             for document in documents:
                 self.documents[document.id] = document.model_copy(update={"submission_version_id": submission_id})
@@ -577,6 +606,7 @@ class OfficerStore:
                 self._save_document(self.documents[document.id])
             self.consents.append(ConsentRecord(case_id=case_id, citizen_id=citizen_id, consent_version=consent_version, accepted=True))
             self.routing_decisions[case_id] = RoutingDecision(procedure_id=case.procedure_id, locality_code=locality_code, organization_id=organization_id, matched_rule="procedure+locality:default")
+            self._refresh_validation_findings(updated, submission)
             self._audit(updated, citizen_id, "case_submitted", "case_submission_version", submission_id)
             result = {"id": case_id, "case_code": updated.case_code, "status": updated.status, "submission_version": submission_version, "organization_id": organization_id, "version": updated.version}
             self.idempotency_results[cache_key] = result
@@ -759,45 +789,134 @@ class OfficerStore:
             )
             return deepcopy(updated)
 
-    def rerun_validation(self, case_id: str, organization_id: str, officer_id: str) -> list[ValidationFinding]:
-        """Refresh deterministic field-review findings for the local P0 store.
+    def _rule_engine_inputs(
+        self, case: ApplicationCase, submission: CaseSubmissionVersion
+    ) -> tuple[Case, list[ExtractedDocument]]:
+        raw_answers = submission.form_data.get("_answers", {})
+        answers = raw_answers if isinstance(raw_answers, dict) else {}
+        allowed_statuses = {"missing", "uploaded", "verified", "uncertain", "not_applicable"}
+        validation_case = Case(
+            id=case.id,
+            citizen_id=case.citizen_id,
+            procedure_id=case.procedure_id,
+            answers=answers,
+            checklist=[
+                ChecklistItem(
+                    requirement_code=code,
+                    status=status if status in allowed_statuses else "missing",
+                )
+                for code, status in submission.checklist_snapshot.items()
+            ],
+            form_data=submission.form_data,
+            status="collecting",
+            version=case.version,
+            created_at=case.created_at,
+            updated_at=case.updated_at,
+        )
+        validation_documents: list[ExtractedDocument] = []
+        for document in self.documents.values():
+            if document.case_id != case.id:
+                continue
+            records = [
+                field
+                for field in self.extracted_fields.values()
+                if field.document_id == document.id
+            ]
+            validation_documents.append(
+                ExtractedDocument(
+                    id=document.id,
+                    case_id=case.id,
+                    file_id=document.object_key or document.id,
+                    doc_type=document.document_type,
+                    doc_type_confidence=0.0 if document.document_type == "unknown" else 1.0,
+                    fields=[
+                        ExtractedField(
+                            key=field.field_key,
+                            value=field.normalized_value or field.raw_value,
+                            confidence=field.confidence,
+                            bbox=field.bounding_box,
+                            edited_by_user=field.review_status == "edited",
+                        )
+                        for field in records
+                    ],
+                    needs_human_review=(
+                        document.ocr_status == "manual_review_required"
+                        or any(field.review_status == "needs_human_review" for field in records)
+                    ),
+                    ocr_engine=document.ocr_engine or "unknown",
+                    created_at=document.uploaded_at,
+                )
+            )
+        return validation_case, validation_documents
 
-        Full rule execution remains in ``services.validation``. This method only
-        maintains the version-scoped OCR review finding required by the officer
-        workspace and never manufactures a rule-engine error.
-        """
+    def _refresh_validation_findings(
+        self, case: ApplicationCase, submission: CaseSubmissionVersion
+    ) -> None:
+        generated_types = {"validation_rule", "ocr_human_review"}
+        for finding_id, finding in list(self.findings.items()):
+            if (
+                finding.case_id == case.id
+                and finding.submission_version_id == submission.id
+                and finding.type in generated_types
+                and finding.status == "open"
+            ):
+                self.findings[finding_id] = finding.model_copy(update={"status": "superseded"})
+                self._save_finding(self.findings[finding_id])
+
+        rules_path = rule_engine.RULES_DIR / f"{case.procedure_id}.yaml"
+        if rules_path.is_file():
+            validation_case, validation_documents = self._rule_engine_inputs(case, submission)
+            report = rule_engine.run(validation_case, validation_documents)
+            for issue in report.issues:
+                finding = ValidationFinding(
+                    id=str(uuid4()),
+                    case_id=case.id,
+                    submission_version_id=submission.id,
+                    type="validation_rule",
+                    severity=issue.severity,
+                    source="rule",
+                    message=issue.message,
+                    suggestion=issue.suggestion,
+                    rule_id=issue.rule_id,
+                    rule_version=submission.procedure_rule_version,
+                    field_keys=issue.field_keys,
+                    created_at=now(),
+                )
+                self.findings[finding.id] = finding
+                self._save_finding(finding)
+
+        document_ids = {item.id for item in self.documents.values() if item.case_id == case.id}
+        needs_review = [
+            field
+            for field in self.extracted_fields.values()
+            if field.document_id in document_ids and field.review_status == "needs_human_review"
+        ]
+        if needs_review:
+            finding = ValidationFinding(
+                id=str(uuid4()),
+                case_id=case.id,
+                submission_version_id=submission.id,
+                type="ocr_human_review",
+                severity="warning",
+                source="rule",
+                message=f"Có {len(needs_review)} trường OCR cần cán bộ xác minh.",
+                suggestion="Đối chiếu tài liệu gốc và xác nhận hoặc chỉnh sửa các trường có độ tin cậy thấp.",
+                rule_id="ocr.confidence_threshold",
+                rule_version="local-v1",
+                field_keys=[field.field_key for field in needs_review],
+                created_at=now(),
+            )
+            self.findings[finding.id] = finding
+            self._save_finding(finding)
+
+    def rerun_validation(self, case_id: str, organization_id: str, officer_id: str) -> list[ValidationFinding]:
+        """Run catalog rules and refresh version-scoped OCR review findings."""
         with self._lock:
             case = self.cases.get(case_id)
             if case is None or case.organization_id != organization_id:
                 raise KeyError("case_not_found")
             submission = self.submission_for(case_id)
-            document_ids = {item.id for item in self.documents.values() if item.case_id == case_id}
-            needs_review = [
-                field
-                for field in self.extracted_fields.values()
-                if field.document_id in document_ids and field.review_status == "needs_human_review"
-            ]
-            for finding_id, finding in list(self.findings.items()):
-                if finding.case_id == case_id and finding.type == "ocr_human_review" and finding.status == "open":
-                    self.findings[finding_id] = finding.model_copy(update={"status": "superseded"})
-                    self._save_finding(self.findings[finding_id])
-            if needs_review:
-                finding = ValidationFinding(
-                    id=str(uuid4()),
-                    case_id=case_id,
-                    submission_version_id=submission.id,
-                    type="ocr_human_review",
-                    severity="warning",
-                    source="rule",
-                    message=f"Có {len(needs_review)} trường OCR cần cán bộ xác minh.",
-                    suggestion="Đối chiếu tài liệu gốc và xác nhận hoặc chỉnh sửa các trường có độ tin cậy thấp.",
-                    rule_id="ocr.confidence_threshold",
-                    rule_version="local-v1",
-                    field_keys=[field.field_key for field in needs_review],
-                    created_at=now(),
-                )
-                self.findings[finding.id] = finding
-                self._save_finding(finding)
+            self._refresh_validation_findings(case, submission)
             self._audit(case, officer_id, "validation_rerun", "case_submission_version", submission.id)
             return self.findings_for(case_id, organization_id)
 

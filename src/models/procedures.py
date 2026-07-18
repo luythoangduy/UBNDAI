@@ -76,10 +76,24 @@ class FormField(BaseModel):
     label: str
     type: FieldType = "text"
     required: bool = True
+    options: list[str] = Field(
+        default_factory=list,
+        description="Các giá trị hợp lệ khi type='select'",
+    )
     ocr_sources: list[str] = Field(
         default_factory=list,
         description="Đường dẫn trường OCR điền được trường này, vd ['cccd_me.ho_ten']",
     )
+
+    @model_validator(mode="after")
+    def validate_options(self) -> "FormField":
+        if self.type == "select" and not self.options:
+            raise ValueError("Trường select bắt buộc phải có options")
+        if self.type != "select" and self.options:
+            raise ValueError("options chỉ áp dụng cho trường select")
+        if len(self.options) != len(set(self.options)):
+            raise ValueError("FormField.options không được trùng lặp")
+        return self
 
 
 class FormTemplate(BaseModel):
@@ -181,3 +195,4 @@ class ProcedureFormSchema(BaseModel):
     template_id: str
     title: str
     fields: list[FormField]
+    clarifying_questions: list[ClarifyingQuestion] = Field(default_factory=list)

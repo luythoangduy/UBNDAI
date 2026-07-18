@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCaseQuery, formatBytes, humanizeStatus } from './utils';
+import { buildCaseQuery, clarificationAnswerEntries, formatBytes, formatSubmissionValue, humanizeStatus, visibleSubmissionEntries } from './utils';
 
 describe('portal presentation helpers', () => {
   it('uses Vietnamese workflow labels and a readable fallback', () => {
@@ -19,5 +19,12 @@ describe('portal presentation helpers', () => {
     expect(query.get('status')).toBe('in_officer_review');
     expect(query.get('sort')).toBe('newest');
     expect(query.get('page')).toBe('2');
+  });
+
+  it('keeps internal draft metadata out of officer-facing rows', () => {
+    const submission = { ho_ten: 'Nguyễn Văn A', _draft_html: '<p>long draft</p>', _readiness_score: 80, _answers: { ket_hon: false } };
+    expect(visibleSubmissionEntries(submission)).toEqual([['ho_ten', 'Nguyễn Văn A']]);
+    expect(clarificationAnswerEntries(submission)).toEqual([['ket_hon', false]]);
+    expect(formatSubmissionValue(false)).toBe('Không');
   });
 });

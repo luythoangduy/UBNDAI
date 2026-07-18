@@ -44,6 +44,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blob> {
   const response = await fetch(`/api/v1${path}`, { ...init, headers: withHeaders(init) });
   if (!response.ok) {
+    if (response.status === 401) {
+      const role = location.pathname.startsWith('/officer') ? 'officer' : 'citizen';
+      setToken('', role);
+      window.dispatchEvent(new Event(`${role}-session-expired`));
+    }
     const body = await response.json().catch(() => ({}));
     const detail = body.detail;
     const message = typeof detail === 'string' ? detail : detail?.message ?? 'Không thể mở tài liệu';

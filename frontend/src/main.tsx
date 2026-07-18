@@ -6,7 +6,10 @@ import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
 import type { CaseDetail, CaseDocument, CaseRecord, ChatAction, ChatExperience, ChatResponse, ChatStarterResponse, DashboardSummary, DraftRevision, DraftTemplateInfo, ExtractedField, Finding, GeneratedDraft, PortalRole, PreprocessResult, PreprocessStep, ProcedureCapabilities, ProcedureFormSchema, ProcedureSummary } from './types';
 import { diffDraftBlocks, type DiffBlock } from './draft-diff';
-import { buildCaseQuery, formatBytes, formatDate, humanizeStatus } from './utils';
+import { buildCaseQuery, clarificationAnswerEntries, formatBytes, formatDate, formatSubmissionValue, humanizeStatus, visibleSubmissionEntries } from './utils';
+import { draftValuesFromCase, isMissingAnswer, validateClarifyingAnswers, type ClarifyingAnswers } from './citizen-form';
+import { SignatureField } from './components/SignatureField';
+import { composeSignedDocumentHtml } from './signature';
 import './styles.css';
 import './styles/application-management.css';
 import { ApplicationManagementRouter } from './app/AppRouter';
@@ -47,8 +50,11 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, onSelec
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', text: 'Đang kết nối kho thủ tục và nguồn chính thức…' }]);
   const [message, setMessage] = useState(''); const [caseId, setCaseId] = useState<string | undefined>(activeCaseId); const [busy, setBusy] = useState(false);
   const [streamedText, setStreamedText] = useState('');
+  const [streaming, setStreaming] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const followChatRef = useRef(true);
+  const streamTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => { if (streamTimerRef.current) window.clearInterval(streamTimerRef.current); }, []);
   useEffect(() => { setCaseId(activeCaseId); }, [activeCaseId]);
   useEffect(() => {
     if (followChatRef.current) logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: streamedText ? 'auto' : 'smooth' });
@@ -59,7 +65,7 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, onSelec
       .catch(() => setMessages([{ role: 'assistant', text: 'Xin chào! Bạn cần thực hiện thủ tục gì? Hãy mô tả bằng lời của bạn.' }]));
   }, []);
   const submitMessage = async (rawValue: string) => {
-    const value = rawValue.trim(); if (!value || busy) return;
+    const value = rawValue.trim(); if (!value || busy || streaming) return;
     followChatRef.current = true;
     setMessages(current => [...current, { role: 'user', text: value }]); setMessage(''); setBusy(true); setStreamedText('');
     try {
@@ -67,30 +73,34 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, onSelec
       const response = await api<ChatResponse>('/chat', { method: 'POST', body: JSON.stringify({ message: payloadMessage, ...(caseId ? { case_id: caseId } : {}) }) });
       setCaseId(response.case_id ?? caseId); 
       setBusy(false);
+      setStreaming(true);
       
       let currentText = '';
       const fullText = response.reply;
-      const interval = setInterval(() => {
+      streamTimerRef.current = window.setInterval(() => {
         if (currentText.length < fullText.length) {
           const step = Math.max(4, Math.ceil(fullText.length / 80));
           currentText = fullText.slice(0, currentText.length + step);
           setStreamedText(currentText);
         } else {
-          clearInterval(interval);
+          if (streamTimerRef.current) window.clearInterval(streamTimerRef.current);
+          streamTimerRef.current = undefined;
           setStreamedText('');
+          setStreaming(false);
           setMessages(current => [...current, { role: 'assistant', text: fullText, response }]);
           if (response.kind === 'checklist' && onChecklist && response.case_id) onChecklist(response.case_id);
         }
       }, 16);
-    } catch (cause) { setBusy(false); setMessages(current => [...current, { role: 'assistant', text: `Chưa thể kết nối trợ lý: ${(cause as Error).message}` }]); }
+    } catch (cause) { setBusy(false); setStreaming(false); setMessages(current => [...current, { role: 'assistant', text: `Chưa thể kết nối trợ lý: ${(cause as Error).message}` }]); }
   };
   const send = (event: FormEvent) => { event.preventDefault(); void submitMessage(message); };
   const submitOnEnter = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (event.currentTarget.value.trim() && !busy && !streamedText) event.currentTarget.form?.requestSubmit();
+    if (event.currentTarget.value.trim() && !busy && !streaming) event.currentTarget.form?.requestSubmit();
   };
   const runAction = (action: ChatAction) => {
+    if (busy || streaming) return;
     if (action.kind === 'send_message') void submitMessage(action.value);
     else if (action.kind === 'start_form') onStartProcedure?.(action.value);
     else window.open(action.value, '_blank', 'noopener,noreferrer');
@@ -112,14 +122,14 @@ function CitizenAssistant({ activeCaseId, onChecklist, onStartProcedure, onSelec
           </div>
         </div>
           <div className="chat-log" ref={logRef} aria-live="polite" onScroll={event => { const element = event.currentTarget; followChatRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }}>
-            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b>{item.response.cache && <small className={`cache-badge ${item.response.cache.status}`}>{item.response.cache.backend === 'redis' ? 'Redis' : 'Cache'} · {item.response.cache.status === 'hit' ? 'HIT' : 'MISS'}</small>}</div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu phù hợp</b><small>đã đối chiếu nguồn</small></div>{item.response.templates.map((template, templateIndex) => <article key={template.template_id} className={`template-card ${templateIndex === 0 && template.field_count > 0 ? 'recommended' : ''}`}><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{templateIndex === 0 && template.field_count > 0 ? '★ ĐỀ XUẤT · ' : ''}{template.official_source ? 'NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div>{template.field_count > 0 && item.response?.procedure_id ? <button className="use-template" onClick={() => chooseTemplate(item.response, template.template_id)}>Dùng mẫu này →</button> : <a href={template.source_url} target="_blank" rel="noreferrer">Mở mẫu ↗</a>}<details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')}>Có</button><button onClick={() => setMessage('Không')}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
+            {messages.map((item, index) => <article key={index} className={`bubble ${item.role}`}><span>{item.role === 'assistant' ? 'AI' : 'Bạn'}</span><div><p>{item.text}</p>{!!item.response?.evidence?.length && <div className="source-trace"><div className="trace-heading"><b>Đã kiểm chứng nguồn</b>{item.response.cache && <small className={`cache-badge ${item.response.cache.status}`}>{item.response.cache.backend === 'redis' ? 'Redis' : 'Cache'} · {item.response.cache.status === 'hit' ? 'HIT' : 'MISS'}</small>}</div>{item.response.evidence.map(step => <a key={`${step.id}-${step.detail}`} className={`trace-step ${step.status}`} href={step.source_url || undefined} target={step.source_url ? '_blank' : undefined} rel="noreferrer"><i>{step.status === 'ready' || step.status === 'cache_hit' ? '✓' : '!'}</i><span><b>{step.label}</b><small>{step.detail}</small></span></a>)}</div>}{!!item.response?.actions?.length && <div className="chat-actions">{item.response.actions.map(action => <button key={action.id} className={action.primary ? 'featured' : ''} onClick={() => runAction(action)} disabled={busy || streaming}><i>{iconFor(action.icon)}</i><span><b>{action.label}</b><small>{action.description}</small></span></button>)}</div>}{!!item.response?.templates?.length && <div className="template-results"><div className="template-heading"><b>Biểu mẫu phù hợp</b><small>đã đối chiếu nguồn</small></div>{item.response.templates.map((template, templateIndex) => <article key={template.template_id} className={`template-card ${templateIndex === 0 && template.field_count > 0 ? 'recommended' : ''}`}><div><span className={template.official_source ? 'official-mark' : 'source-mark'}>{templateIndex === 0 && template.field_count > 0 ? '★ ĐỀ XUẤT · ' : ''}{template.official_source ? 'NGUỒN CHÍNH PHỦ' : 'NGUỒN THAM KHẢO'}</span><h4>{template.title}</h4><p>{template.field_count ? `${template.field_count} trường · ` : ''}{template.source_label}</p></div>{template.field_count > 0 && item.response?.procedure_id ? <button className="use-template" onClick={() => chooseTemplate(item.response, template.template_id)} disabled={busy || streaming}>Dùng mẫu này →</button> : <a href={template.source_url} target="_blank" rel="noreferrer">Mở mẫu ↗</a>}<details><summary>{template.citations.length} căn cứ nguồn</summary>{template.citations.map(source => <a key={`${source.document_number}-${source.source_url}`} href={source.source_url} target="_blank" rel="noreferrer"><b>{source.document_number}</b><span>{source.issuing_authority} · {source.role}</span></a>)}</details></article>)}</div>}{!!item.response?.clarifying_questions?.length && <div className="clarifying-block">{item.response.clarifying_questions.map((question, questionIndex) => <p key={questionIndex} className="clarifying-question">{questionIndex + 1}. {question}</p>)}<div className="answer-chips"><button onClick={() => setMessage('Có')} disabled={busy || streaming}>Có</button><button onClick={() => setMessage('Không')} disabled={busy || streaming}>Không</button><button onClick={() => setMessage('Tôi chưa rõ')} disabled={busy || streaming}>Chưa rõ</button></div></div>}{!!item.response?.citations?.length && <details><summary>{item.response.citations.length} nguồn tham khảo</summary>{item.response.citations.map(citation => <p key={citation.index} className="citation">[{citation.index}] {citation.section ?? citation.excerpt ?? 'Nguồn thủ tục'}{citation.source_url && <> · <a href={citation.source_url} target="_blank" rel="noreferrer">Xem nguồn chính thức ↗</a></>}</p>)}</details>}</div></article>)}
             {busy && <article className="bubble assistant"><span>AI</span><div className="skeleton-loader"><div className="skeleton-line"></div><div className="skeleton-line short"></div></div></article>}
             {streamedText && <article className="bubble assistant"><span>AI</span><div><p>{streamedText}<span className="cursor">|</span></p></div></article>}
           </div>
           <form className="chat-input" onSubmit={send}>
             {selectedContext && <div className="chat-context-banner"><strong>Đang chọn:</strong> "{selectedContext.length > 40 ? selectedContext.substring(0, 40) + '...' : selectedContext}"</div>}
             <textarea aria-label="Nội dung cần hỏi" rows={2} maxLength={4000} enterKeyHint="send" value={message} onChange={event => setMessage(event.target.value)} onKeyDown={submitOnEnter} placeholder="Mô tả bất kỳ thủ tục hành chính nào bạn cần hỗ trợ…"/>
-            <button className="primary" disabled={!message.trim() || busy || !!streamedText}>Gửi ↗</button>
+            <button className="primary" disabled={!message.trim() || busy || streaming}>Gửi ↗</button>
           </form>
           <p className="ai-note">Enter để gửi · Shift + Enter để xuống dòng · Bạn luôn duyệt trước khi dùng</p>
         </section>
@@ -260,7 +270,7 @@ function ScanStage({ phase, image, fields }: { phase: OcrPhase; image?: string; 
   );
 }
 
-function WordWorkspace({ content, fileName, onSelectionChange, onContentChange, onDownload, downloading, statusHint, source }: { content: string; fileName: string; onSelectionChange?: (text: string) => void; onContentChange?: (html: string) => void; onDownload?: (html: string) => void; downloading?: boolean; statusHint?: string; source?: TemplateSource }) {
+function WordWorkspace({ content, fileName, signature, onSignatureChange, signerName, onSignerNameChange, onSelectionChange, onContentChange, onDownload, downloading, statusHint, source }: { content: string; fileName: string; signature: string; onSignatureChange: (value: string) => void; signerName: string; onSignerNameChange: (value: string) => void; onSelectionChange?: (text: string) => void; onContentChange?: (html: string) => void; onDownload?: (html: string) => void; downloading?: boolean; statusHint?: string; source?: TemplateSource }) {
   const [zoom, setZoom] = useState(100);
   const editor = useEditor({
     extensions: [StarterKit],
@@ -282,7 +292,7 @@ function WordWorkspace({ content, fileName, onSelectionChange, onContentChange, 
       <div className="word-titlebar">
         <span className="word-logo">W</span>
         <div className="word-file"><b>{fileName}</b><small>Tự động lưu khi nộp · Bản nháp</small></div>
-        {onDownload && <button className="word-download" onClick={() => onDownload(editor?.getHTML() ?? content)} disabled={downloading}><Download size={14}/>{downloading ? 'Đang tạo DOCX…' : 'Tải xuống DOCX'}</button>}
+        {onDownload && <button className="word-download" onClick={() => onDownload(composeSignedDocumentHtml(editor?.getHTML() ?? content, signature, signerName))} disabled={downloading}><Download size={14}/>{downloading ? 'Đang tạo DOCX…' : 'Tải xuống DOCX'}</button>}
       </div>
       <div className="word-ribbon">{['Tệp', 'Trang đầu', 'Chèn', 'Bố cục', 'Tham chiếu', 'Xem lại', 'Xem'].map(tab => <span key={tab} className={tab === 'Trang đầu' ? 'active' : ''}>{tab}</span>)}</div>
       <div className="word-toolbar">
@@ -307,6 +317,7 @@ function WordWorkspace({ content, fileName, onSelectionChange, onContentChange, 
         <div className="word-page" style={{ transform: `scale(${zoom / 100})` }}>
           <div className="word-watermark">DỰ THẢO — KHÔNG CÓ GIÁ TRỊ PHÁP LÝ</div>
           <EditorContent editor={editor}/>
+          <SignatureField value={signature} onChange={onSignatureChange} signerName={signerName} onSignerNameChange={onSignerNameChange}/>
         </div>
       </div>
       <div className="word-statusbar">
@@ -334,6 +345,8 @@ function ChatPortal() {
   const [proposedRevision, setProposedRevision] = useState<DraftRevision>();
   const [diffBlocks, setDiffBlocks] = useState<DiffBlock[]>([]);
   const [docContent, setDocContent] = useState('');
+  const [signature, setSignature] = useState('');
+  const [signerName, setSignerName] = useState('');
   const [selectedText, setSelectedText] = useState('');
   const [extractedFields, setExtractedFields] = useState<ExtractedField[]>();
   const [previewUrl, setPreviewUrl] = useState<string>();
@@ -351,6 +364,12 @@ function ChatPortal() {
   const updateDraftValue = (key: string, value: string) => setDraftValues(values => ({ ...values, [key]: value }));
   const setDraftPanelOpen = (open: boolean) => { setPanelOpen(open); localStorage.setItem('ubndai.draft.panel', open ? 'open' : 'closed'); };
 
+  useEffect(() => {
+    const expired = () => { setLogged(false); setNotice('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'); };
+    window.addEventListener('citizen-session-expired', expired);
+    return () => window.removeEventListener('citizen-session-expired', expired);
+  }, []);
+
   const refresh = async () => setCases(await api<CaseRecord[]>('/citizen/cases'));
   useEffect(() => {
     if (!logged) return;
@@ -365,30 +384,33 @@ function ChatPortal() {
     run('create', async () => {
       const procedure = procedures.find(item => item.id === procedureId);
       const imported = sourceUrl ? await api<DraftTemplateInfo>('/drafts/templates/import', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, source_url: sourceUrl, title: sourceTitle ?? 'Biểu mẫu từ nguồn chính thức' }) }) : undefined;
-      const templates = imported ? [imported] : await api<DraftTemplateInfo[]>(`/drafts/templates/${procedureId}`);
-      const caps = await api<ProcedureCapabilities>(`/procedures/${procedureId}/capabilities`);
+      const [templates, caps, schema] = await Promise.all([
+        imported ? Promise.resolve([imported]) : api<DraftTemplateInfo[]>(`/drafts/templates/${procedureId}`),
+        api<ProcedureCapabilities>(`/procedures/${procedureId}/capabilities`),
+        api<ProcedureFormSchema>(`/procedures/${procedureId}/form-schema`),
+      ]);
       const template = imported ?? templates.find(item => item.id === templateId) ?? templates[0];
       if (!template) throw new Error('Mẫu này chỉ có trên nguồn ngoài và chưa hỗ trợ sinh tự động.');
 
       const item = current?.procedure_id === procedureId ? current : await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, locality_code: procedure?.locality_code ?? 'national' }) });
+      const currentValues = draftValuesFromCase(template.fields, item.form_data);
       setCurrent(item);
-      const currentValues = item?.form_data || {};
-
-      const blankBlob = await apiBlob('/drafts/generate.docx', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, template_id: template.id, values: {}, allow_incomplete: true }) });
-      let url = URL.createObjectURL(blankBlob);
-      let anchor = document.createElement('a');
-      anchor.href = url; anchor.download = `Mau-Trang-${template.output_name || 'to-khai'}.docx`; anchor.click();
-      URL.revokeObjectURL(url);
-      
-      const filledBlob = await apiBlob('/drafts/generate.docx', { method: 'POST', body: JSON.stringify({ procedure_id: procedureId, template_id: template.id, values: currentValues, allow_incomplete: true }) });
-      url = URL.createObjectURL(filledBlob);
-      anchor = document.createElement('a');
-      anchor.href = url; anchor.download = `Mau-Da-Dien-${template.output_name || 'to-khai'}.docx`; anchor.click();
-      URL.revokeObjectURL(url);
-
-      setNotice('Đã tải xuống 2 bản mẫu DOCX (mẫu trắng và mẫu đã điền).');
+      setSelectedTemplate(template);
+      setFormSchema(schema);
+      setCapabilities(caps);
+      setDraftValues(currentValues);
+      setGeneratedDraft(undefined);
+      setDraftStage('collect');
+      setDocContent('');
+      setSignature('');
+      setSignerName('');
+      setProposedRevision(undefined);
+      setDiffBlocks([]);
+      setRevisionInstruction('');
+      setSelectedText('');
+      setDraftPanelOpen(true);
+      setNotice('Đã mở biểu mẫu. Bạn có thể bổ sung dữ liệu rồi sinh bản nháp để rà soát.');
       await refresh();
-
     });
   };
 
@@ -471,7 +493,7 @@ function ChatPortal() {
   const submit = () => current && run('submit', async () => { 
     if (!consent) throw new Error('Vui lòng xác nhận đồng ý xử lý dữ liệu trước khi nộp.'); 
     const latest = await api<{ case: CaseRecord }>(`/citizen/cases/${current.id}`); 
-    const updated = await api<CaseRecord>(`/citizen/cases/${current.id}`, { method: 'PATCH', body: JSON.stringify({ expected_version: latest.case.version, form_data: { ...draftValues, _draft_html: docContent, _readiness_score: readiness } }) });
+    const updated = await api<CaseRecord>(`/citizen/cases/${current.id}`, { method: 'PATCH', body: JSON.stringify({ expected_version: latest.case.version, form_data: { ...draftValues, _signer_name: signerName.trim(), _draft_html: composeSignedDocumentHtml(docContent, signature, signerName), _readiness_score: readiness } }) });
     const item = await api<CaseRecord>(`/citizen/cases/${current.id}/submit`, { method: 'POST', headers: { 'Idempotency-Key': idempotency() }, body: JSON.stringify({ expected_version: updated.version, consent_version: 'privacy-v1', consent_accepted: true }) });
     setCurrent(item); 
     setNotice('Hồ sơ đã được chuyển tới cán bộ tiếp nhận.'); 
@@ -547,7 +569,7 @@ function ChatPortal() {
                   <div className="diff-view">{diffBlocks.map((block, index) => <div key={`${block.type}-${index}`} className={`diff-block ${block.type}`}>{block.type !== 'same' && <b>{block.type === 'added' ? '+' : '−'}</b>}<div dangerouslySetInnerHTML={{ __html: block.html }}/></div>)}</div>
                   <div className="revision-actions"><button className="ghost" onClick={() => { setProposedRevision(undefined); setDiffBlocks([]); }}>Bỏ đề xuất</button><button className="primary" onClick={applyRevision}><Check size={15}/> Áp dụng thay đổi đã duyệt</button></div>
                 </div> : <>
-                  <WordWorkspace content={docContent} fileName={`${formSchema?.procedure_id ?? 'van-ban'}.docx`} source={source} onSelectionChange={setSelectedText} onContentChange={setDocContent} onDownload={downloadDocx} downloading={busy === 'docx'} statusHint={`${missingFields.length} chỗ cần bổ sung`}/>
+                  <WordWorkspace content={docContent} fileName={`${formSchema?.procedure_id ?? 'van-ban'}.docx`} signature={signature} onSignatureChange={setSignature} signerName={signerName} onSignerNameChange={setSignerName} source={source} onSelectionChange={setSelectedText} onContentChange={setDocContent} onDownload={downloadDocx} downloading={busy === 'docx'} statusHint={`${missingFields.length} chỗ cần bổ sung`}/>
                   <div className="ai-revise-bar"><div><span>✦</span><input aria-label="Yêu cầu AI sửa bản nháp" value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && revisionInstruction.trim()) reviseDraft(); }} placeholder={selectedText ? `Sửa đoạn đã chọn: “${selectedText.slice(0, 42)}…”` : 'Yêu cầu AI sửa: rút gọn, trang trọng hơn…'}/><button onClick={reviseDraft} disabled={!revisionInstruction.trim() || busy === 'revise'}>{busy === 'revise' ? 'Đang sửa…' : 'Tạo đề xuất'}</button></div><small>AI không tự áp dụng. Bạn sẽ thấy diff và duyệt trước.</small></div>
                 </>}
               </section>}
@@ -572,6 +594,8 @@ function CitizenPortal() {
 
   const [started, setStarted] = useState(false);
   const [docContent, setDocContent] = useState('');
+  const [signature, setSignature] = useState('');
+  const [signerName, setSignerName] = useState('');
   const [selectedText, setSelectedText] = useState('');
   const [extractedFields, setExtractedFields] = useState<ExtractedField[]>();
   const [previewUrl, setPreviewUrl] = useState<string>();
@@ -579,9 +603,16 @@ function CitizenPortal() {
   const [prepSteps, setPrepSteps] = useState<PreprocessStep[]>([]);
   const [prepIndex, setPrepIndex] = useState(0);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<ClarifyingAnswers>({});
+  const [answersDirty, setAnswersDirty] = useState(false);
   const requiredFields = formSchema?.fields.filter(field => field.required) ?? [];
+  const clarifyingQuestions = formSchema?.clarifying_questions ?? [];
+  const answerErrors = useMemo(() => validateClarifyingAnswers(clarifyingQuestions, answers), [clarifyingQuestions, answers]);
+  const unansweredQuestions = clarifyingQuestions.filter(question => isMissingAnswer(answers[question.key]));
+  const hasAnswerErrors = Object.keys(answerErrors).length > 0;
   const readiness = requiredFields.length ? Math.round(requiredFields.filter(field => draftValues[field.key]?.trim()).length / requiredFields.length * 100) : 0;
   const reviewCount = extractedFields?.filter(item => item.confidence < 0.85).length ?? 0;
+  const checklistItems = Object.entries(current?.checklist ?? {}).filter(([, status]) => status !== 'not_applicable');
   const updateDraftValue = (key: string, value: string) => setDraftValues(current => {
     const next = { ...current, [key]: value };
     if (formSchema) setDocContent(buildDynamicFormHtml(formSchema, next));
@@ -610,26 +641,45 @@ function CitizenPortal() {
   // Một luồng duy nhất: mở tờ khai mẫu để tự điền, OCR là bước "AI điền hộ" tùy chọn.
   const startCase = (procedure: ProcedureSummary) => {
     run('create', async () => {
-      const [schema, caps] = await Promise.all([
+      const [schema, caps, item] = await Promise.all([
         api<ProcedureFormSchema>(`/procedures/${procedure.id}/form-schema`),
         api<ProcedureCapabilities>(`/procedures/${procedure.id}/capabilities`),
+        api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) }),
       ]);
       setStarted(true);
       setFormSchema(schema);
       setCapabilities(caps);
       setDocContent(buildDynamicFormHtml(schema, {}));
+      setSignature('');
+      setSignerName('');
       setExtractedFields(undefined);
       setPreviewUrl(undefined);
       setOcrPhase('idle');
       setPrepSteps([]);
       setPrepIndex(0);
       setDraftValues({});
-      const item = await api<CaseRecord>('/citizen/cases', { method: 'POST', body: JSON.stringify({ procedure_id: procedure.id, locality_code: procedure.locality_code }) });
+      setAnswers({});
+      setAnswersDirty(schema.clarifying_questions.length > 0);
       setCurrent(item);
       setNotice('Đã khởi tạo tờ khai. Điền trực tiếp hoặc tải giấy tờ để AI điền tự động.');
       await refresh();
     });
   };
+  const updateAnswer = (key: string, value: string | number | boolean) => {
+    setAnswers(currentAnswers => ({ ...currentAnswers, [key]: value }));
+    setAnswersDirty(true);
+  };
+  const saveAnswers = () => current && run('answers', async () => {
+    if (hasAnswerErrors) throw new Error('Vui lòng kiểm tra lại phần thông tin xác định trường hợp.');
+    const latest = await api<{ case: CaseRecord }>(`/citizen/cases/${current.id}`);
+    const updated = await api<CaseRecord>(`/citizen/cases/${current.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ expected_version: latest.case.version, answers }),
+    });
+    setCurrent(updated);
+    setAnswersDirty(false);
+    setNotice('Đã cập nhật danh sách giấy tờ theo trường hợp của bạn.');
+  });
 
   const upload = () => current && file && run('upload', async () => {
     setOcrPhase('upload'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined);
@@ -680,8 +730,9 @@ function CitizenPortal() {
 
   const submit = () => current && run('submit', async () => {
     if (!consent) throw new Error('Vui lòng xác nhận đồng ý xử lý dữ liệu trước khi nộp.');
+    if (hasAnswerErrors || answersDirty) throw new Error('Vui lòng hoàn tất và áp dụng phần thông tin xác định trường hợp.');
     const latest = await api<{ case: CaseRecord }>(`/citizen/cases/${current.id}`);
-    const updated = await api<CaseRecord>(`/citizen/cases/${current.id}`, { method: 'PATCH', body: JSON.stringify({ expected_version: latest.case.version, form_data: { ...draftValues, _draft_html: docContent, _readiness_score: readiness } }) });
+    const updated = await api<CaseRecord>(`/citizen/cases/${current.id}`, { method: 'PATCH', body: JSON.stringify({ expected_version: latest.case.version, answers, form_data: { ...draftValues, _signer_name: signerName.trim(), _draft_html: composeSignedDocumentHtml(docContent, signature, signerName), _readiness_score: readiness } }) });
     const item = await api<CaseRecord>(`/citizen/cases/${current.id}/submit`, { method: 'POST', headers: { 'Idempotency-Key': idempotency() }, body: JSON.stringify({ expected_version: updated.version, consent_version: 'privacy-v1', consent_accepted: true }) });
     setCurrent(item);
     setNotice('Hồ sơ đã được chuyển tới cán bộ tiếp nhận.');
@@ -706,7 +757,7 @@ function CitizenPortal() {
                  <h2>Chọn thủ tục cần soạn</h2>
                  <div className="selector-cards">
                    {procedures.map(procedure => (
-                     <button key={procedure.id} onClick={() => startCase(procedure)} className="selector-card" disabled={!procedureCapabilities[procedure.id]?.dynamic_form}>
+                     <button key={procedure.id} onClick={() => startCase(procedure)} className="selector-card" disabled={!!busy || !procedureCapabilities[procedure.id]?.dynamic_form}>
                        <FileText size={32} />
                        <h3>{procedure.name}</h3>
                        <p>{procedure.agency}{procedure.national_code ? ` · Mã ${procedure.national_code}` : ''}{!procedureCapabilities[procedure.id]?.dynamic_form ? ' · Chỉ hỗ trợ chat' : ''}</p>
@@ -733,6 +784,10 @@ function CitizenPortal() {
                       <WordWorkspace
                         content={docContent}
                         fileName={`${formSchema?.procedure_id ?? 'to-khai'}.docx`}
+                        signature={signature}
+                        onSignatureChange={setSignature}
+                        signerName={signerName}
+                        onSignerNameChange={setSignerName}
                         onSelectionChange={setSelectedText}
                         onContentChange={setDocContent}
                         onDownload={downloadDocx}
@@ -765,15 +820,30 @@ function CitizenPortal() {
                         <details className="structured-fields" open={!!extractedFields?.length}>
                           <summary>Dữ liệu dùng để nộp</summary>
                           {formSchema?.fields.map(field => (
-                            <label key={field.key}>{field.label}{field.required ? ' *' : ''}<input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)} placeholder="Chưa có dữ liệu"/></label>
+                            <label key={field.key} className={field.type === 'checkbox' ? 'checkbox-field' : ''}>{field.label}{field.required ? ' *' : ''}{field.type === 'select' ? <select value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)}><option value="">Chọn giá trị</option>{(field.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}</select> : field.type === 'checkbox' ? <input type="checkbox" checked={draftValues[field.key] === 'true'} onChange={event => updateDraftValue(field.key, String(event.target.checked))}/> : <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} value={draftValues[field.key] ?? ''} onChange={event => updateDraftValue(field.key, event.target.value)} placeholder="Chưa có dữ liệu"/>}</label>
                           ))}
                         </details>
 
-                       {Object.keys(current.checklist ?? {}).length > 0 && (
+                        {!!formSchema?.clarifying_questions.length && (
+                          <div className="clarifying-fields">
+                            <h3>Thông tin xác định trường hợp</h3>
+                            <p>Trả lời để hệ thống chỉ yêu cầu đúng giấy tờ áp dụng.</p>
+                            <div className="clarifying-progress" aria-live="polite">{unansweredQuestions.length ? `Còn ${unansweredQuestions.length} câu cần trả lời` : hasAnswerErrors ? 'Có câu trả lời chưa hợp lệ' : answersDirty ? 'Sẵn sàng áp dụng vào hồ sơ' : 'Đã áp dụng vào hồ sơ'}</div>
+                            {formSchema.clarifying_questions.map(question => {
+                              const value = answers[question.key];
+                              const renderedValue = value === undefined ? '' : String(value);
+                              const error = answerErrors[question.key];
+                              return <label key={question.key}><span>{question.text}</span>{question.answer_type === 'boolean' ? <select aria-invalid={!!error} value={renderedValue} onChange={event => updateAnswer(question.key, event.target.value === '' ? '' : event.target.value === 'true')}><option value="">Chọn câu trả lời</option><option value="true">Có</option><option value="false">Không</option></select> : question.answer_type === 'choice' ? <select aria-invalid={!!error} value={renderedValue} onChange={event => updateAnswer(question.key, event.target.value)}><option value="">Chọn câu trả lời</option>{(question.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}</select> : <input aria-invalid={!!error} type={question.answer_type === 'integer' ? 'number' : 'text'} step={question.answer_type === 'integer' ? 1 : undefined} min={question.minimum ?? undefined} max={question.maximum ?? undefined} value={renderedValue} onChange={event => updateAnswer(question.key, question.answer_type === 'integer' && event.target.value !== '' ? Number(event.target.value) : event.target.value)} placeholder="Nhập câu trả lời"/>}{error && !isMissingAnswer(value) && <small className="field-error">{error}</small>}</label>;
+                            })}
+                            <button className="secondary wide" onClick={saveAnswers} disabled={hasAnswerErrors || !answersDirty || !!busy}>{busy === 'answers' ? 'Đang cập nhật…' : answersDirty ? 'Áp dụng cho hồ sơ' : 'Đã áp dụng'}</button>
+                          </div>
+                        )}
+
+                       {checklistItems.length > 0 && (
                          <div className="checklist-display">
-                           <h3>Danh sách giấy tờ cần thiết</h3>
+                           <h3>Danh sách giấy tờ cần thiết <small>Đã cá nhân hóa</small></h3>
                            <ul className="checklist-items">
-                             {Object.entries(current.checklist ?? {}).map(([key, status]) => (
+                             {checklistItems.map(([key, status]) => (
                                <li key={key} className={`checklist-item ${status}`}>
                                  <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
                                  <div className="check-text">
@@ -816,9 +886,9 @@ function CitizenPortal() {
                            <input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/>
                            <span>Tôi đồng ý để cơ quan tiếp nhận và xử lý dữ liệu.</span>
                          </label>
-                         <button className="primary wide" onClick={submit} disabled={!!busy || !consent || readiness < 60}>{busy === 'submit' ? 'Đang gửi…' : readiness < 60 ? 'Cần điền thêm dữ liệu' : 'Nộp hồ sơ tiền kiểm'}</button>
-                       </div>
-                       <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setFormSchema(undefined); setCapabilities(undefined); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setDocContent(''); }}>Tạo hồ sơ khác</button>
+                          <button className="primary wide" onClick={submit} disabled={!!busy || !consent || readiness < 60 || hasAnswerErrors || answersDirty}>{busy === 'submit' ? 'Đang gửi…' : hasAnswerErrors || answersDirty ? 'Cần xác định trường hợp' : readiness < 60 ? 'Cần điền thêm dữ liệu' : 'Nộp hồ sơ tiền kiểm'}</button>
+                        </div>
+                        <button className="text-button" onClick={() => { setCurrent(null); setStarted(false); setFormSchema(undefined); setCapabilities(undefined); setOcrPhase('idle'); setPrepSteps([]); setPrepIndex(0); setExtractedFields(undefined); setPreviewUrl(undefined); setFile(undefined); setDraftValues({}); setAnswers({}); setAnswersDirty(false); setDocContent(''); setSignature(''); setSignerName(''); }}>Tạo hồ sơ khác</button>
                      </div>
                    )}
 
@@ -839,6 +909,7 @@ function Empty({ title, text }: { title: string; text: string }) { return <div c
 function OfficerPortal() {
   const [logged, setLogged] = useState(!!token()); const [cases, setCases] = useState<CaseRecord[]>([]); const [summary, setSummary] = useState<DashboardSummary>(); const [selected, setSelected] = useState<CaseDetail>();
   const [search, setSearch] = useState(''); const [filter, setFilter] = useState(''); const [sort, setSort] = useState('priority_desc'); const [loading, setLoading] = useState(true); const [detailLoading, setDetailLoading] = useState(false); const [notice, setNotice] = useState('');
+  useEffect(() => { const expired = () => setLogged(false); window.addEventListener('officer-session-expired', expired); return () => window.removeEventListener('officer-session-expired', expired); }, []);
   const loadQueue = async () => { setLoading(true); try { const [queue, dashboard, catalogItems] = await Promise.all([api<CaseRecord[]>(`/officer/cases?${buildCaseQuery(search, filter, sort)}`), api<DashboardSummary>('/officer/dashboard/summary'), api<ProcedureSummary[]>('/procedures')]); rememberProcedureNames(catalogItems); setCases(queue); setSummary(dashboard); } catch (cause) { handleError(cause); } finally { setLoading(false); } };
   const handleError = (cause: unknown) => { const error = cause as Error; if (error instanceof ApiError && error.status === 401) { setToken('', 'officer'); setLogged(false); } setNotice(error.message); };
   useEffect(() => { if (!logged) return; const timer = window.setTimeout(loadQueue, 250); return () => window.clearTimeout(timer); }, [logged, search, filter, sort]);
@@ -887,8 +958,9 @@ function EvidencePanel({ documents, activeId, onSelect, active, previewUrl, prev
 function DataPanel({ submission, fields, editable, onSaved, onError }: { submission: Record<string, unknown>; fields: ExtractedField[]; editable: boolean; onSaved: () => Promise<void>; onError: (cause: unknown) => void }) {
   const [editing, setEditing] = useState<string>(); const [value, setValue] = useState(''); const [busy, setBusy] = useState(false);
   const save = async (field: ExtractedField) => { setBusy(true); try { await api(`/officer/extracted-fields/${field.id}`, { method: 'PATCH', body: JSON.stringify({ normalized_value: value, reason: 'Cán bộ đối chiếu tài liệu gốc' }) }); setEditing(undefined); await onSaved(); } catch (cause) { onError(cause); } finally { setBusy(false); } };
-  const rows = Object.entries(submission);
-  return <section className="review-panel data-panel"><div className="column-heading"><span>DỮ LIỆU CÓ CẤU TRÚC</span><b>{rows.length + fields.length}</b></div><div className="data-section"><h3>Thông tin người khai</h3>{rows.length ? rows.map(([key, item]) => <div className="data-row" key={key}><span>{humanizeStatus(key)}</span><strong>{String(item || '—')}</strong><small className="verified">✓ Đã khai</small></div>) : <p className="empty">Không có dữ liệu biểu mẫu.</p>}</div><div className="data-section"><div className="section-title"><h3>Kết quả OCR</h3>{fields.some(item => item.review_status === 'needs_human_review') && <span className="needs-review">Cần xác minh</span>}</div>{fields.length ? fields.map(field => <div className={`ocr-row ${field.review_status === 'needs_human_review' ? 'low-confidence' : ''}`} key={field.id}><div><span>{humanizeStatus(field.field_key)}</span><small>Độ tin cậy {Math.round(field.confidence * 100)}%</small></div>{editing === field.id ? <div className="edit-field"><input value={value} onChange={event => setValue(event.target.value)} autoFocus/><button onClick={() => save(field)} disabled={busy}>Lưu</button><button className="text-button" onClick={() => setEditing(undefined)}>Hủy</button></div> : <div className="field-value"><strong>{field.normalized_value || field.raw_value || '—'}</strong>{editable && <button aria-label={`Sửa ${field.field_key}`} onClick={() => { setEditing(field.id); setValue(field.normalized_value || field.raw_value); }}>✎</button>}</div>}</div>) : <p className="empty">Chọn tài liệu có dữ liệu OCR để xem.</p>}</div></section>;
+  const rows = visibleSubmissionEntries(submission);
+  const answerRows = clarificationAnswerEntries(submission);
+  return <section className="review-panel data-panel"><div className="column-heading"><span>DỮ LIỆU CÓ CẤU TRÚC</span><b>{rows.length + answerRows.length + fields.length}</b></div><div className="data-section"><h3>Thông tin người khai</h3>{rows.length ? rows.map(([key, item]) => <div className="data-row" key={key}><span>{humanizeStatus(key)}</span><strong>{formatSubmissionValue(item)}</strong><small className="verified">✓ Đã khai</small></div>) : <p className="empty">Không có dữ liệu biểu mẫu.</p>}</div>{answerRows.length > 0 && <div className="data-section"><h3>Thông tin xác định trường hợp</h3>{answerRows.map(([key, item]) => <div className="data-row" key={key}><span>{humanizeStatus(key)}</span><strong>{formatSubmissionValue(item)}</strong><small className="verified">✓ Đã áp dụng</small></div>)}</div>}<div className="data-section"><div className="section-title"><h3>Kết quả OCR</h3>{fields.some(item => item.review_status === 'needs_human_review') && <span className="needs-review">Cần xác minh</span>}</div>{fields.length ? fields.map(field => <div className={`ocr-row ${field.review_status === 'needs_human_review' ? 'low-confidence' : ''}`} key={field.id}><div><span>{humanizeStatus(field.field_key)}</span><small>Độ tin cậy {Math.round(field.confidence * 100)}%</small></div>{editing === field.id ? <div className="edit-field"><input value={value} onChange={event => setValue(event.target.value)} autoFocus/><button onClick={() => save(field)} disabled={busy}>Lưu</button><button className="text-button" onClick={() => setEditing(undefined)}>Hủy</button></div> : <div className="field-value"><strong>{field.normalized_value || field.raw_value || '—'}</strong>{editable && <button aria-label={`Sửa ${field.field_key}`} onClick={() => { setEditing(field.id); setValue(field.normalized_value || field.raw_value); }}>✎</button>}</div>}</div>) : <p className="empty">Chọn tài liệu có dữ liệu OCR để xem.</p>}</div></section>;
 }
 
 function FindingsPanel({ findings, busy, reasons, setReasons, onDecide }: { findings: Finding[]; busy: string; reasons: Record<string, string>; setReasons: React.Dispatch<React.SetStateAction<Record<string, string>>>; onDecide: (finding: Finding, decision: 'accept' | 'dismiss' | 'escalate') => void }) {

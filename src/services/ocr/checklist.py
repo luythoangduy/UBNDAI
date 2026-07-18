@@ -54,7 +54,7 @@ def apply_document_to_checklist_map(
     return {
         code: (
             new_status
-            if code in satisfied and status != "verified"
+            if code in satisfied and status not in {"verified", "not_applicable"}
             else status
         )
         for code, status in checklist.items()

@@ -265,6 +265,34 @@ def test_export_docx_from_editor_html():
             assert r_fonts.get(qn("w:ascii")) == "Times New Roman"
 
 
+def test_export_docx_embeds_canvas_signature_image():
+    """A browser canvas data URI must become an actual inline image in DOCX."""
+    client = _draft_api_client()
+    # Valid 1x1 PNG; the UI sends the same data:image/png;base64 shape at 720x280.
+    signature = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+        "/x8AAusB9Wl2nGQAAAAASUVORK5CYII="
+    )
+    html = (
+        "<p>Nội dung tờ khai</p>"
+        '<p style="text-align: right"><strong>NGƯỜI KÝ</strong></p>'
+        f'<p style="text-align: right"><img src="data:image/png;base64,{signature}" '
+        'alt="Chữ ký người khai"/></p>'
+        '<p style="text-align: right"><strong>NGUYỄN VĂN AN</strong></p>'
+    )
+
+    response = client.post(
+        "/api/v1/drafts/export.docx",
+        json={"html": html, "filename": "to-khai-da-ky.docx"},
+    )
+
+    assert response.status_code == 200, response.text
+    document = Document(BytesIO(response.content))
+    assert len(document.inline_shapes) == 1
+    assert any("NGƯỜI KÝ" in paragraph.text for paragraph in document.paragraphs)
+    assert any("NGUYỄN VĂN AN" in paragraph.text for paragraph in document.paragraphs)
+
+
 def test_export_docx_rejects_bad_filename():
     client = _draft_api_client()
     response = client.post(

@@ -108,7 +108,7 @@
         {"key": "ho_ten_con", "label": "Họ, chữ đệm, tên của trẻ", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.ho_ten_con"]},
         {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true, "ocr_sources": ["giay_chung_sinh.ngay_sinh"]},
         {"key": "noi_sinh", "label": "Nơi sinh", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.noi_sinh"]},
-        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "ocr_sources": ["giay_chung_sinh.gioi_tinh"]},
+        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "options": ["Nam", "Nữ"], "ocr_sources": ["giay_chung_sinh.gioi_tinh"]},
         {"key": "ho_ten_me", "label": "Họ tên mẹ", "type": "text", "required": true, "ocr_sources": ["cccd.ho_ten", "giay_chung_sinh.ho_ten_me"]},
         {"key": "so_cccd_me", "label": "Số CCCD của mẹ", "type": "text", "required": true, "ocr_sources": ["cccd.so_cccd"]},
         {"key": "ho_ten_cha", "label": "Họ tên cha", "type": "text", "required": false, "ocr_sources": ["cccd.ho_ten", "giay_dang_ky_ket_hon.ho_ten_chong"]}

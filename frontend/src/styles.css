@@ -505,6 +505,7 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   gap: 12px;
 }
 .checklist-item .check-icon {
+  flex-shrink: 0;
   width: 20px;
   height: 20px;
   display: flex;
@@ -512,9 +513,14 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   justify-content: center;
   border-radius: 50%;
   font-size: 12px;
+  font-weight: 700;
 }
 .checklist-item.missing .check-icon {
-  background: var(--red);
+  border: 2px dashed #b7c6d3;
+  background: transparent;
+}
+.checklist-item.uncertain .check-icon {
+  background: var(--gold);
   color: white;
 }
 .checklist-item.uploaded .check-icon, .checklist-item.verified .check-icon {

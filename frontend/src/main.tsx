@@ -915,7 +915,7 @@ function CitizenPortal() {
                                return (
                                  <li key={key} className={`checklist-item ${status}`}>
                                    <button className={`checklist-item-button ${selected ? 'selected' : ''}`} onClick={() => setActiveRequirement(isForm ? null : key)} title={isForm ? 'Mở tờ khai trong trình soạn thảo' : 'Xem và tải lên giấy tờ này'}>
-                                     <span className="check-icon">{status === 'uploaded' || status === 'verified' ? '✓' : '○'}</span>
+                                     <span className="check-icon">{status === 'uploaded' || status === 'verified' ? <Check size={12}/> : status === 'uncertain' ? '!' : null}</span>
                                      <div className="check-text">
                                        <strong>{requirement?.name ?? humanizeStatus(key)}</strong>
                                        <small>{humanizeStatus(String(status))}{isForm ? ' · soạn trực tiếp' : ''}</small>

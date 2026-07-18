@@ -726,6 +726,17 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   overflow-x: clip;
 }
 
+/* Khoá toàn bộ shell theo chiều cao viewport chỉ trên trang chat: workspace giãn
+   lấp phần còn lại bằng flexbox thay vì đoán số (calc(100dvh - 218px) sai lệch
+   ngay khi tiêu đề/thông báo đổi chiều cao) — tránh việc cả trang bị đẩy tràn
+   qua footer khi đoạn chat dài ra; .chat-log bên trong vẫn cuộn nội bộ như cũ. */
+.app-shell:has(.chat-first-page) { height: 100dvh; overflow: hidden; }
+.app-shell:has(.chat-first-page) .chat-first-page { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.app-shell:has(.chat-first-page) .chat-first-title { flex: 0 0 auto; }
+.app-shell:has(.chat-first-page) .workspace-notice { flex: 0 0 auto; }
+.app-shell:has(.chat-first-page) .chat-first-workspace { flex: 1 1 auto; height: auto; min-height: 0; }
+.app-shell:has(.chat-first-page) footer { flex: 0 0 auto; }
+
 .chat-first-title {
   display: flex;
   align-items: flex-end;
@@ -793,6 +804,7 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   position: relative;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 18px;
   width: 100%;
   min-width: 0;

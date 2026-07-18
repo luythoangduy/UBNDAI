@@ -11,7 +11,7 @@ from datetime import datetime, UTC
 from typing import Any
 from collections.abc import Iterator
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, event, select
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, create_engine, event, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -33,6 +33,32 @@ class Base(DeclarativeBase):
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class GuidanceCaseORM(Base):
+    """Durable LangGraph guidance state shared by SQLite and PostgreSQL."""
+
+    __tablename__ = "cases"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class GuidanceMessageORM(Base):
+    """Ordered chat transcript with optional structured assistant payload."""
+
+    __tablename__ = "case_messages"
+    __table_args__ = (Index("ix_case_messages_case_id_id", "case_id", "id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    response_json: Mapped[str | None] = mapped_column(Text)
 
 
 class ApplicationCaseORM(TimestampMixin, Base):

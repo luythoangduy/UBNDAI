@@ -1,19 +1,25 @@
-"""Case persistence SQLite: I/O ngoài event loop, transaction và optimistic lock."""
+"""Durable guidance-case persistence with optimistic locking."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 import threading
 import uuid
-from contextlib import asynccontextmanager, closing
+from contextlib import asynccontextmanager
 from datetime import datetime, UTC
-from pathlib import Path
 from collections.abc import AsyncIterator
+
+from sqlalchemy import select, update as sql_update
 
 from src.config import settings
 from src.models import Case, CaseCreate, CaseUpdate, ChatHistoryMessage, ChatHistoryResponse
+from src.services.persistence import (
+    Base,
+    Database,
+    GuidanceCaseORM,
+    GuidanceMessageORM,
+)
 
 
 class CaseNotFoundError(LookupError):
@@ -27,7 +33,7 @@ class ConcurrentCaseUpdateError(RuntimeError):
 _LOCKS: dict[str, asyncio.Lock] = {}
 _LOCK_USERS: dict[str, int] = {}
 _LOCKS_GUARD = threading.Lock()
-_INITIALIZED_DATABASES: set[str] = set()
+_DATABASES: dict[str, Database] = {}
 _SCHEMA_GUARD = threading.Lock()
 
 
@@ -167,37 +173,48 @@ async def get_chat_history(case_id: str, citizen_id: str) -> ChatHistoryResponse
 
 
 def _insert_sync(case: Case) -> None:
-    with closing(_connect()) as connection, connection:
-        connection.execute(
-            "INSERT INTO cases (id, version, data) VALUES (?, ?, ?)",
-            (case.id, case.version, case.model_dump_json()),
+    database = _database()
+    with database.session() as session:
+        session.add(
+            GuidanceCaseORM(
+                id=case.id,
+                version=case.version,
+                data=case.model_dump_json(),
+            )
         )
+        session.commit()
 
 
 def _get_sync(case_id: str) -> Case:
-    with closing(_connect()) as connection:
-        row = connection.execute(
-            "SELECT data FROM cases WHERE id = ?", (case_id,)
-        ).fetchone()
+    database = _database()
+    with database.session() as session:
+        row = session.get(GuidanceCaseORM, case_id)
     if row is None:
         raise CaseNotFoundError(case_id)
-    return Case.model_validate_json(row[0])
+    return Case.model_validate_json(row.data)
 
 
 def _list_all_sync() -> list[Case]:
-    with closing(_connect()) as connection:
-        rows = connection.execute("SELECT data FROM cases").fetchall()
-    return [Case.model_validate_json(row[0]) for row in rows]
+    database = _database()
+    with database.session() as session:
+        rows = session.scalars(select(GuidanceCaseORM)).all()
+    return [Case.model_validate_json(row.data) for row in rows]
 
 
 def _update_sync(case: Case, expected_version: int) -> None:
-    with closing(_connect()) as connection, connection:
-        cursor = connection.execute(
-            "UPDATE cases SET version = ?, data = ? WHERE id = ? AND version = ?",
-            (case.version, case.model_dump_json(), case.id, expected_version),
+    database = _database()
+    with database.session() as session:
+        result = session.execute(
+            sql_update(GuidanceCaseORM)
+            .where(
+                GuidanceCaseORM.id == case.id,
+                GuidanceCaseORM.version == expected_version,
+            )
+            .values(version=case.version, data=case.model_dump_json())
         )
-        if cursor.rowcount != 1:
+        if result.rowcount != 1:
             raise ConcurrentCaseUpdateError(case.id)
+        session.commit()
 
 
 def _commit_turn_sync(
@@ -207,137 +224,97 @@ def _commit_turn_sync(
     assistant_message: str,
     assistant_response: dict | None,
 ) -> int:
-    with closing(_connect()) as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            cursor = connection.execute(
-                "UPDATE cases SET version = ?, data = ? WHERE id = ? AND version = ?",
-                (case.version, case.model_dump_json(), case.id, expected_version),
+    database = _database()
+    with database.session() as session:
+        result = session.execute(
+            sql_update(GuidanceCaseORM)
+            .where(
+                GuidanceCaseORM.id == case.id,
+                GuidanceCaseORM.version == expected_version,
             )
-            if cursor.rowcount != 1:
-                raise ConcurrentCaseUpdateError(case.id)
-            now = datetime.now(UTC).isoformat()
-            connection.execute(
-                "INSERT INTO case_messages "
-                "(case_id, role, content, created_at, response_json) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (case.id, "user", user_message, now, None),
+            .values(version=case.version, data=case.model_dump_json())
+        )
+        if result.rowcount != 1:
+            raise ConcurrentCaseUpdateError(case.id)
+        now = datetime.now(UTC)
+        session.add(
+            GuidanceMessageORM(
+                case_id=case.id,
+                role="user",
+                content=user_message,
+                created_at=now,
             )
-            assistant_cursor = connection.execute(
-                "INSERT INTO case_messages "
-                "(case_id, role, content, created_at, response_json) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (
-                    case.id,
-                    "assistant",
-                    assistant_message,
-                    now,
-                    json.dumps(assistant_response, ensure_ascii=False)
-                    if assistant_response is not None
-                    else None,
-                ),
-            )
-            connection.commit()
-            return int(assistant_cursor.lastrowid)
-        except Exception:
-            connection.rollback()
-            raise
+        )
+        assistant_row = GuidanceMessageORM(
+            case_id=case.id,
+            role="assistant",
+            content=assistant_message,
+            created_at=now,
+            response_json=(
+                json.dumps(assistant_response, ensure_ascii=False)
+                if assistant_response is not None
+                else None
+            ),
+        )
+        session.add(assistant_row)
+        session.flush()
+        assistant_message_id = assistant_row.id
+        session.commit()
+        return int(assistant_message_id)
 
 
 def _append_message_sync(case_id: str, role: str, content: str) -> None:
-    with closing(_connect()) as connection, connection:
-        connection.execute(
-            "INSERT INTO case_messages (case_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-            (case_id, role, content, datetime.now(UTC).isoformat()),
+    database = _database()
+    with database.session() as session:
+        session.add(
+            GuidanceMessageORM(
+                case_id=case_id,
+                role=role,
+                content=content,
+                created_at=datetime.now(UTC),
+            )
         )
+        session.commit()
 
 
 def _get_messages_sync(case_id: str, limit: int) -> list[dict]:
-    with closing(_connect()) as connection:
-        rows = connection.execute(
-            "SELECT id, role, content, created_at, response_json "
-            "FROM case_messages WHERE case_id = ? "
-            "ORDER BY id DESC LIMIT ?",
-            (case_id, limit),
-        ).fetchall()
+    database = _database()
+    with database.session() as session:
+        rows = session.scalars(
+            select(GuidanceMessageORM)
+            .where(GuidanceMessageORM.case_id == case_id)
+            .order_by(GuidanceMessageORM.id.desc())
+            .limit(limit)
+        ).all()
     return [
         {
-            "id": message_id,
-            "role": role,
-            "content": content,
-            "created_at": created_at,
-            "response": json.loads(response_json) if response_json else None,
+            "id": row.id,
+            "role": row.role,
+            "content": row.content,
+            "created_at": row.created_at,
+            "response": json.loads(row.response_json) if row.response_json else None,
         }
-        for message_id, role, content, created_at, response_json in reversed(rows)
+        for row in reversed(rows)
     ]
 
 
-def _db_path() -> Path:
-    url = settings.database_url
-    raw = url.split("sqlite:///", 1)[1] if url.startswith("sqlite:///") else url
-    return Path(raw)
-
-
-def _connect() -> sqlite3.Connection:
-    path = _db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path, timeout=5.0)
-    connection.execute("PRAGMA busy_timeout = 5000")
-    _ensure_schema(connection, path)
-    return connection
-
-
-def _ensure_schema(connection: sqlite3.Connection, path: Path) -> None:
-    database_key = str(path.resolve())
-    if database_key in _INITIALIZED_DATABASES:
-        return
+def _database() -> Database:
+    """Return a URL-keyed sync database; tests may swap DATABASE_URL per case."""
+    database_url = settings.database_url
+    database = _DATABASES.get(database_url)
+    if database is not None:
+        return database
     with _SCHEMA_GUARD:
-        if database_key in _INITIALIZED_DATABASES:
-            return
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS cases ("
-            "id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"
-        )
-        columns = {row[1] for row in connection.execute("PRAGMA table_info(cases)")}
-        if "version" not in columns:
-            connection.execute(
-                "ALTER TABLE cases ADD COLUMN version INTEGER NOT NULL DEFAULT 0"
-            )
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS case_messages ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, "
-            "role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, "
-            "response_json TEXT)"
-        )
-        message_columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(case_messages)")
-        }
-        if "id" not in message_columns:
-            connection.execute("ALTER TABLE case_messages RENAME TO case_messages_legacy")
-            connection.execute(
-                "CREATE TABLE case_messages ("
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, "
-                "role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, "
-                "response_json TEXT)"
-            )
-            connection.execute(
-                "INSERT INTO case_messages (case_id, role, content, created_at) "
-                "SELECT case_id, role, content, created_at FROM case_messages_legacy "
-                "ORDER BY rowid"
-            )
-            connection.execute("DROP TABLE case_messages_legacy")
-            message_columns.add("response_json")
-        if "response_json" not in message_columns:
-            connection.execute(
-                "ALTER TABLE case_messages ADD COLUMN response_json TEXT"
-            )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS ix_case_messages_case_id "
-            "ON case_messages(case_id, id)"
-        )
-        connection.commit()
-        _INITIALIZED_DATABASES.add(database_key)
+        database = _DATABASES.get(database_url)
+        if database is None:
+            database = Database(database_url)
+            if settings.app_env != "production":
+                Base.metadata.create_all(
+                    database.engine,
+                    tables=[GuidanceCaseORM.__table__, GuidanceMessageORM.__table__],
+                )
+            _DATABASES[database_url] = database
+        return database
 
 
 def _set_message_response_sync(
@@ -345,9 +322,15 @@ def _set_message_response_sync(
     message_id: int,
     response: dict,
 ) -> None:
-    with closing(_connect()) as connection, connection:
-        connection.execute(
-            "UPDATE case_messages SET response_json = ? "
-            "WHERE id = ? AND case_id = ? AND role = 'assistant'",
-            (json.dumps(response, ensure_ascii=False), message_id, case_id),
+    database = _database()
+    with database.session() as session:
+        session.execute(
+            sql_update(GuidanceMessageORM)
+            .where(
+                GuidanceMessageORM.id == message_id,
+                GuidanceMessageORM.case_id == case_id,
+                GuidanceMessageORM.role == "assistant",
+            )
+            .values(response_json=json.dumps(response, ensure_ascii=False))
         )
+        session.commit()

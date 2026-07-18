@@ -4,7 +4,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0004_add_guidance_chat_persistence"
+revision = "0004_guidance_chat"
 down_revision = "0003_index_case_created_at"
 branch_labels = None
 depends_on = None

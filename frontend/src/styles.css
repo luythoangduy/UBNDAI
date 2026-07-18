@@ -722,7 +722,8 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   --draft-soft-green: #edf8f3;
   --draft-soft-gold: #fff8e5;
   max-width: 1800px;
-  padding-top: 24px;
+  padding-top: 14px;
+  padding-bottom: 12px;
   overflow-x: clip;
 }
 
@@ -742,7 +743,7 @@ label > small { display: block; color: var(--muted); font-weight: 400; margin-to
   align-items: flex-end;
   justify-content: space-between;
   gap: 28px;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 .chat-first-title h1 {
   max-width: 820px;

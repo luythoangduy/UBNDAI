@@ -33,10 +33,14 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
     llm_timeout_s: int = 30
 
-    # 'auto' | 'google' | 'bge-m3' | 'hashing' | 'fake' — phải khớp provider lúc index Chroma
+    # 'auto' | 'google' | 'huggingface' | 'bge-m3' | 'hashing' | 'fake'
+    # Phải khớp provider lúc index Chroma.
     embedding_provider: str = "auto"
     local_embedding_model_name: str = "BAAI/bge-m3"
     local_embedding_offline: bool = True
+    huggingface_embedding_model_name: str = "BAAI/bge-m3"
+    huggingface_inference_provider: str = "hf-inference"
+    huggingface_inference_timeout_s: float = 60.0
     hash_embedding_dimension: int = 384
 
     retrieval_top_k: int = 6

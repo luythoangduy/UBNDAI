@@ -297,6 +297,8 @@ planning/        # TEAM_PLAN.md — kế hoạch 3 người, sprint, contract fr
 | `docs/business-viability-pilot.md` | Khách hàng mục tiêu, mô hình kinh doanh, kinh tế đơn vị, lộ trình pilot 3 giai đoạn |
 | `docs/COST-REPORT.md` | Chi phí LLM mỗi lượt/hồ sơ, tính từ tỉ lệ token tiếng Việt đo thật |
 | `docs/DEMO-SCRIPT.md` | Kịch bản demo 5 phút, câu hỏi giám khảo, phương án dự phòng |
+| `docs/VIDEO-SCRIPT.md` | Kịch bản quay video 3 phút: 6 phân cảnh, lời thuyết minh, danh sách kiểm |
+| `docs/UBNDAI-pitch-deck.pptx` | Deck 15 slide — sinh bằng `scripts/build_pitch_deck.py` |
 
 ### An toàn & đánh giá
 

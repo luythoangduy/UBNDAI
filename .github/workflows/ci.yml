@@ -16,3 +16,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check src/ tests/
       - run: pytest tests/ -v --tb=short
+      # Cổng an toàn nhận diện thủ tục: chặn khi hệ thống tự tin chốt SAI thủ tục.
+      # Chạy offline (BM25 in-memory từ catalog), không cần index hay LLM API key.
+      - name: Eval nhận diện thủ tục (chốt nhầm phải = 0)
+        run: python scripts/eval_identify.py

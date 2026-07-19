@@ -78,3 +78,31 @@ def test_short_alias_still_matches_when_written_out():
     from src.services.retrieval import _identity_score
 
     assert _identity_score("tôi mất chứng minh thư rồi", get_procedure("can_cuoc")) == 1.0
+
+
+def test_short_alias_does_not_match_inside_another_word():
+    """Khớp cụm phải xét ranh giới từ, không dùng substring thuần.
+
+    Hồi quy hai lỗi thật, cả hai đều cho điểm 1.0 — tức chốt chắc chắn:
+
+    - alias "ở nhờ" của tam_tru fold thành "o nho", nằm gọn giữa "cho nho"
+      (cho nhỏ) → "cho nhỏ nhà tôi mượn giấy tờ" bị chốt tam_tru.
+    - alias "cưới" của ket_hon fold thành "cuoi", trùng khít "cuối" →
+      "nộp hồ sơ vào cuối năm" bị chốt ket_hon. Đây là đồng tự sau khi bỏ dấu
+      nên ranh giới từ không cứu được; alias đó đã phải gỡ khỏi catalog và thay
+      bằng cụm dài hơn ("đám cưới", "muốn cưới").
+    """
+    from src.services.catalog import get_procedure
+    from src.services.retrieval import _identity_score
+
+    assert _identity_score("cho nhỏ nhà tôi mượn giấy tờ", get_procedure("tam_tru")) < 0.6
+    assert _identity_score("nộp hồ sơ vào cuối năm có được không", get_procedure("ket_hon")) < 0.6
+
+
+def test_word_boundary_fix_keeps_genuine_matches():
+    """Chặn substring lọt giữa từ không được làm mất ca khớp thật."""
+    from src.services.catalog import get_procedure
+    from src.services.retrieval import _identity_score
+
+    assert _identity_score("tôi ở trọ cần khai báo", get_procedure("tam_tru")) == 1.0
+    assert _identity_score("hai đứa tụi mình muốn cưới", get_procedure("ket_hon")) == 1.0

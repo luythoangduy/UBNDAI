@@ -103,6 +103,19 @@ def retrieve_procedure_identity(query: str) -> list[RetrievedChunk]:
     return ranked
 
 
+def _contains_phrase(folded_text: str, folded_phrase: str) -> bool:
+    """Cụm có xuất hiện như từ trọn vẹn trong câu không.
+
+    Phải xét ranh giới từ chứ không dùng `in`: fold bỏ dấu khiến cụm ngắn lọt vào
+    giữa từ khác. "ở nhờ" -> "o nho" nằm gọn trong "cho nho" (cho nhỏ), và alias
+    đó từng cho điểm tuyệt đối 1.0 — tức chốt chắc chắn — với câu
+    "cho nhỏ nhà tôi mượn giấy tờ".
+    """
+    if not folded_phrase:
+        return False
+    return bool(re.search(rf"\b{re.escape(folded_phrase)}\b", folded_text))
+
+
 def _identity_score(query: str, procedure: Procedure) -> float:
     from src.services.retrieval.common import fold_ascii, tokenize
 
@@ -114,14 +127,14 @@ def _identity_score(query: str, procedure: Procedure) -> float:
     # Nếu cụm phủ định chỉ xuất hiện trong câu "không phải X, tôi cần Y" thì
     # _phrase_is_negated giữ lại ứng viên Y đúng như mong đợi.
     if any(
-        fold_ascii(keyword) in folded_query
+        _contains_phrase(folded_query, fold_ascii(keyword))
         and not _phrase_is_negated(folded_query, fold_ascii(keyword))
         for keyword in procedure.negative_keywords
     ):
         return 0.0
     explicit_phrases = [procedure.name, *procedure.aliases]
     if any(
-        fold_ascii(phrase) in folded_query
+        _contains_phrase(folded_query, fold_ascii(phrase))
         and not _phrase_is_negated(folded_query, fold_ascii(phrase))
         for phrase in explicit_phrases
     ):
@@ -141,7 +154,7 @@ def _identity_score(query: str, procedure: Procedure) -> float:
     for phrase in phrases:
         folded_phrase = fold_ascii(phrase)
         phrase_tokens = set(tokenize(phrase)) - _IDENTITY_GENERIC_TOKENS
-        if folded_phrase in folded_query:
+        if _contains_phrase(folded_query, folded_phrase):
             return 1.0
         # Cụm còn ≤2 token sau khi bỏ dấu và loại token chung thì KHÔNG được chấm
         # fuzzy: phủ toàn bộ cụm chỉ cần trùng 2 từ, cho ngay 0.7+ — trên ngưỡng

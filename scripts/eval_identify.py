@@ -106,9 +106,22 @@ async def main() -> None:
     hit, wrong, total = a_hit + b_hit + c_hit, a_wrong + b_wrong + c_wrong, a_total + b_total + c_total
     print("\n" + "=" * 60)
     print(f"TỔNG  nhận diện đúng {hit}/{total}  ·  chốt nhầm {wrong}/{total}")
-    if wrong:
-        print("\n!! Chốt nhầm khác 0 — đây là lỗi chặn, không phải chỉ số cần cải thiện dần.")
+    return wrong
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Cổng CI: chỉ chặn trên tỉ lệ chốt nhầm, KHÔNG chặn trên độ chính xác.
+    #
+    # Độ phủ được phép dao động — nó phụ thuộc từ vựng catalog và sẽ lên xuống mỗi
+    # lần thêm/sửa thủ tục, nên đặt ngưỡng cứng ở đó chỉ tạo ra test giòn. Ngược
+    # lại, chốt nhầm thủ tục làm sai toàn bộ checklist phía sau: người dân chuẩn bị
+    # đúng một bộ giấy tờ cho sai một thủ tục. Đó là lỗi chặn merge, không phải chỉ
+    # số cần cải thiện dần (AGENTS.md §5 — thà nói "chưa đủ căn cứ" còn hơn đoán).
+    wrong_commits = asyncio.run(main())
+    if wrong_commits:
+        print(
+            f"\n[FAIL] {wrong_commits} ca chốt nhầm thủ tục. Ngưỡng cho phép: 0.\n"
+            "       Hệ thống phải lùi về hỏi lại khi không chắc, không được chốt bừa."
+        )
+        raise SystemExit(1)
+    print("\n[OK] Không có ca chốt nhầm nào.")

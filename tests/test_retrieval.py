@@ -51,3 +51,30 @@ def test_reciprocal_rank_fusion_prefers_chunk_in_both_lists():
     fused = reciprocal_rank_fusion([[a, b], [c, b]])
     assert fused[0].metadata["chunk_id"] == "b"
     assert len(fused) == 3
+
+
+def test_short_phrase_does_not_fuzzy_match_after_diacritic_folding():
+    """Cụm ≤2 token sau khi bỏ dấu không được chấm fuzzy.
+
+    Hồi quy cho một lỗi thật: alias "chứng minh thư" của can_cuoc rút gọn thành
+    {chung, minh} sau khi fold bỏ dấu và loại token chung. Câu hỏi về kết hôn
+    "tụi mình định về chung một nhà, cần giấy tờ gì" chứa đúng hai token đó, cho
+    procedure_coverage = 1.0 → điểm 0.80, vượt identify_min_relevance và khiến
+    hệ thống CHỐT HẲN can_cuoc. Chốt nhầm thủ tục làm sai toàn bộ checklist phía
+    sau nên tệ hơn nhiều so với việc thành thật hỏi lại (AGENTS.md §5).
+    """
+    from src.services.catalog import get_procedure
+    from src.services.retrieval import _identity_score
+
+    query = "tụi mình định về chung một nhà, cần giấy tờ gì"
+    assert _identity_score(query, get_procedure("can_cuoc")) < 0.6, (
+        "cụm 2 token sau fold không được vượt identify_min_relevance"
+    )
+
+
+def test_short_alias_still_matches_when_written_out():
+    """Chặn fuzzy không được làm mất khả năng khớp chính xác."""
+    from src.services.catalog import get_procedure
+    from src.services.retrieval import _identity_score
+
+    assert _identity_score("tôi mất chứng minh thư rồi", get_procedure("can_cuoc")) == 1.0

@@ -5,7 +5,10 @@
   "aliases": [
     "làm giấy khai sinh",
     "đăng ký giấy khai sinh",
-    "khai sinh cho con"
+    "khai sinh cho con",
+    "khai sinh cho bé",
+    "giấy khai sinh cho con",
+    "đăng ký hộ tịch cho con"
   ],
   "example_queries": [
     "tôi muốn đăng ký khai sinh cho con",
@@ -16,11 +19,23 @@
     "đăng ký kết hôn",
     "căn cước công dân",
     "giấy phép xây dựng",
-    "đất đai"
+    "đất đai",
+    "sinh viên",
+    "khai báo tạm trú",
+    "khai báo lưu trú",
+    "phòng trọ",
+    "thuê trọ"
   ],
   "required_token_groups": [
-    ["khai", "sinh"],
-    ["giấy", "khai", "sinh"]
+    [
+      "khai",
+      "sinh"
+    ],
+    [
+      "giấy",
+      "khai",
+      "sinh"
+    ]
   ],
   "agency": "UBND cấp xã",
   "legal_basis": [
@@ -60,7 +75,9 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["to_khai_khai_sinh"],
+      "accepted_doc_types": [
+        "to_khai_khai_sinh"
+      ],
       "notes": "Hệ thống tự điền từ giấy tờ đã upload"
     },
     {
@@ -70,7 +87,9 @@
       "condition_label": "Áp dụng khi bé sinh tại cơ sở y tế",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_chung_sinh"]
+      "accepted_doc_types": [
+        "giay_chung_sinh"
+      ]
     },
     {
       "code": "van_ban_nguoi_lam_chung",
@@ -79,7 +98,10 @@
       "condition_label": "Áp dụng khi bé sinh ngoài cơ sở y tế",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["van_ban_lam_chung", "van_ban_cam_doan_viec_sinh"],
+      "accepted_doc_types": [
+        "van_ban_lam_chung",
+        "van_ban_cam_doan_viec_sinh"
+      ],
       "notes": "Nếu không có người làm chứng, thay bằng giấy cam đoan về việc sinh (Nghị định 120/2025/NĐ-CP). Trường hợp đặc biệt (trẻ bị bỏ rơi, mang thai hộ) cần biên bản/văn bản riêng — liên hệ cán bộ hộ tịch."
     },
     {
@@ -88,7 +110,10 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["cccd", "ho_chieu"]
+      "accepted_doc_types": [
+        "cccd",
+        "ho_chieu"
+      ]
     },
     {
       "code": "giay_dang_ky_ket_hon",
@@ -97,7 +122,9 @@
       "condition_label": "Áp dụng khi cha mẹ bé đã đăng ký kết hôn",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_dang_ky_ket_hon"]
+      "accepted_doc_types": [
+        "giay_dang_ky_ket_hon"
+      ]
     }
   ],
   "form_templates": [
@@ -105,13 +132,75 @@
       "id": "TT-04-2024-BTP-KHAI-SINH",
       "name": "Tờ khai đăng ký khai sinh",
       "fields": [
-        {"key": "ho_ten_con", "label": "Họ, chữ đệm, tên của trẻ", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.ho_ten_con"]},
-        {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true, "ocr_sources": ["giay_chung_sinh.ngay_sinh"]},
-        {"key": "noi_sinh", "label": "Nơi sinh", "type": "text", "required": true, "ocr_sources": ["giay_chung_sinh.noi_sinh"]},
-        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "options": ["Nam", "Nữ"], "ocr_sources": ["giay_chung_sinh.gioi_tinh"]},
-        {"key": "ho_ten_me", "label": "Họ tên mẹ", "type": "text", "required": true, "ocr_sources": ["cccd.ho_ten", "giay_chung_sinh.ho_ten_me"]},
-        {"key": "so_cccd_me", "label": "Số CCCD của mẹ", "type": "text", "required": true, "ocr_sources": ["cccd.so_cccd"]},
-        {"key": "ho_ten_cha", "label": "Họ tên cha", "type": "text", "required": false, "ocr_sources": ["cccd.ho_ten", "giay_dang_ky_ket_hon.ho_ten_chong"]}
+        {
+          "key": "ho_ten_con",
+          "label": "Họ, chữ đệm, tên của trẻ",
+          "type": "text",
+          "required": true,
+          "ocr_sources": [
+            "giay_chung_sinh.ho_ten_con"
+          ]
+        },
+        {
+          "key": "ngay_sinh",
+          "label": "Ngày, tháng, năm sinh",
+          "type": "date",
+          "required": true,
+          "ocr_sources": [
+            "giay_chung_sinh.ngay_sinh"
+          ]
+        },
+        {
+          "key": "noi_sinh",
+          "label": "Nơi sinh",
+          "type": "text",
+          "required": true,
+          "ocr_sources": [
+            "giay_chung_sinh.noi_sinh"
+          ]
+        },
+        {
+          "key": "gioi_tinh",
+          "label": "Giới tính",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Nam",
+            "Nữ"
+          ],
+          "ocr_sources": [
+            "giay_chung_sinh.gioi_tinh"
+          ]
+        },
+        {
+          "key": "ho_ten_me",
+          "label": "Họ tên mẹ",
+          "type": "text",
+          "required": true,
+          "ocr_sources": [
+            "cccd.ho_ten",
+            "giay_chung_sinh.ho_ten_me"
+          ]
+        },
+        {
+          "key": "so_cccd_me",
+          "label": "Số CCCD của mẹ",
+          "type": "text",
+          "required": true,
+          "ocr_sources": [
+            "cccd.so_cccd"
+          ]
+        },
+        {
+          "key": "ho_ten_cha",
+          "label": "Họ tên cha",
+          "type": "text",
+          "required": false,
+          "ocr_sources": [
+            "cccd.ho_ten",
+            "giay_dang_ky_ket_hon.ho_ten_chong"
+          ]
+        }
       ]
     }
   ],

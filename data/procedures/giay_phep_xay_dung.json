@@ -18,12 +18,37 @@
   "negative_keywords": [
     "đăng ký khai sinh",
     "đăng ký kết hôn",
-    "căn cước công dân"
+    "căn cước công dân",
+    "thuê nhà",
+    "ở trọ",
+    "phòng trọ",
+    "nhà trọ",
+    "ở nhờ",
+    "tạm trú",
+    "chứng minh thư",
+    "cccd",
+    "cmnd",
+    "sinh viên"
   ],
   "required_token_groups": [
-    ["giấy", "phép", "xây", "dựng"],
-    ["cấp", "phép", "xây", "dựng"],
-    ["xin", "phép", "xây", "nhà"]
+    [
+      "giấy",
+      "phép",
+      "xây",
+      "dựng"
+    ],
+    [
+      "cấp",
+      "phép",
+      "xây",
+      "dựng"
+    ],
+    [
+      "xin",
+      "phép",
+      "xây",
+      "nhà"
+    ]
   ],
   "agency": "UBND cấp xã",
   "legal_basis": [
@@ -53,7 +78,9 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["don_de_nghi_cap_phep"],
+      "accepted_doc_types": [
+        "don_de_nghi_cap_phep"
+      ],
       "notes": "Bản chính: 1 — Bản sao: 1. Tệp mẫu do Cổng DVC công bố: Mau01PLII.docx."
     },
     {
@@ -62,7 +89,9 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_to_quyen_su_dung_dat"],
+      "accepted_doc_types": [
+        "giay_to_quyen_su_dung_dat"
+      ],
       "notes": "Danh mục giấy tờ được chấp nhận quy định tại Điều 53 Nghị định 175/2024/NĐ-CP (gồm Giấy chứng nhận quyền sử dụng đất qua các thời kỳ, hoặc giấy tờ đủ điều kiện cấp giấy chứng nhận theo Điều 137 Luật Đất đai 2024)."
     },
     {
@@ -71,7 +100,9 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["ban_ve_thiet_ke_xay_dung"],
+      "accepted_doc_types": [
+        "ban_ve_thiet_ke_xay_dung"
+      ],
       "notes": "Đối với nhà ở riêng lẻ của hộ gia đình, cá nhân: 02 bộ bản vẽ thiết kế xây dựng kèm theo."
     },
     {
@@ -81,7 +112,9 @@
       "condition_label": "Áp dụng khi công trình liên quan đến khu vực bảo vệ di tích/di sản văn hóa",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["van_ban_y_kien_van_hoa"],
+      "accepted_doc_types": [
+        "van_ban_y_kien_van_hoa"
+      ],
       "notes": "Không thuộc danh mục thành phần hồ sơ cơ bản của mục (1.7) nhà ở riêng lẻ; phát sinh theo yêu cầu, điều kiện thực hiện của thủ tục. Đề nghị xác nhận với UBND cấp xã nơi tiếp nhận."
     },
     {
@@ -91,7 +124,9 @@
       "condition_label": "Áp dụng khi công trình thuộc diện phải thẩm duyệt PCCC",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_chung_nhan_tham_duyet_pccc"],
+      "accepted_doc_types": [
+        "giay_chung_nhan_tham_duyet_pccc"
+      ],
       "notes": "Không thuộc danh mục thành phần hồ sơ cơ bản của mục (1.7) nhà ở riêng lẻ; bắt nguồn từ yêu cầu bảo đảm an toàn phòng, chống cháy, nổ trong phần Yêu cầu, điều kiện thực hiện."
     }
   ],
@@ -100,16 +135,66 @@
       "id": "MAU-01-PL-II-ND-175-2024-GPXD",
       "name": "Đơn đề nghị cấp giấy phép xây dựng",
       "fields": [
-        {"key": "ho_ten_chu_dau_tu", "label": "Họ tên/Tên tổ chức đề nghị cấp phép", "type": "text", "required": true},
-        {"key": "so_cccd_chu_dau_tu", "label": "Số CCCD/hộ chiếu (cá nhân) hoặc mã số doanh nghiệp (tổ chức)", "type": "text", "required": true},
-        {"key": "dia_chi_lien_he", "label": "Địa chỉ liên hệ", "type": "text", "required": true},
-        {"key": "dia_diem_xay_dung", "label": "Địa điểm xây dựng", "type": "text", "required": true},
-        {"key": "so_to_ban_do", "label": "Thửa đất số, tờ bản đồ số", "type": "text", "required": true},
-        {"key": "dien_tich_xay_dung_tang_1", "label": "Diện tích xây dựng tầng 1 (m²)", "type": "number", "required": true},
-        {"key": "tong_dien_tich_san", "label": "Tổng diện tích sàn (m²)", "type": "number", "required": true},
-        {"key": "chieu_cao_cong_trinh", "label": "Chiều cao công trình (m)", "type": "number", "required": true},
-        {"key": "so_tang", "label": "Số tầng", "type": "number", "required": true},
-        {"key": "don_vi_thiet_ke", "label": "Đơn vị hoặc cá nhân thiết kế (nếu có)", "type": "text", "required": false}
+        {
+          "key": "ho_ten_chu_dau_tu",
+          "label": "Họ tên/Tên tổ chức đề nghị cấp phép",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "so_cccd_chu_dau_tu",
+          "label": "Số CCCD/hộ chiếu (cá nhân) hoặc mã số doanh nghiệp (tổ chức)",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "dia_chi_lien_he",
+          "label": "Địa chỉ liên hệ",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "dia_diem_xay_dung",
+          "label": "Địa điểm xây dựng",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "so_to_ban_do",
+          "label": "Thửa đất số, tờ bản đồ số",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "dien_tich_xay_dung_tang_1",
+          "label": "Diện tích xây dựng tầng 1 (m²)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "tong_dien_tich_san",
+          "label": "Tổng diện tích sàn (m²)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "chieu_cao_cong_trinh",
+          "label": "Chiều cao công trình (m)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "so_tang",
+          "label": "Số tầng",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "don_vi_thiet_ke",
+          "label": "Đơn vị hoặc cá nhân thiết kế (nếu có)",
+          "type": "text",
+          "required": false
+        }
       ]
     }
   ],

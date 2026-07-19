@@ -40,6 +40,27 @@ OUT_OF_CATALOG: list[tuple[str, str]] = [
     ("giay_phep_xay_dung", "muốn cất nhà mới thì thủ tục thế nào"),
 ]
 
+# Bộ C — GIỮ RIÊNG. Viết ra TRƯỚC khi tinh chỉnh aliases và không được dùng để
+# tinh chỉnh, nếu không nó mất giá trị. Bộ B đo "đã sửa được cái đã biết chưa";
+# bộ C đo "sửa xong có tổng quát hoá không hay chỉ vá đúng 15 câu kia".
+HELD_OUT: list[tuple[str, str]] = [
+    ("khai_sinh", "con mới đẻ cần làm thủ tục gì đầu tiên"),
+    ("khai_sinh", "đăng ký tên cho con vào sổ hộ tịch"),
+    ("khai_sinh", "cháu nhà tôi chưa có giấy tờ gì cả"),
+    ("ket_hon", "tụi mình định về chung một nhà, cần giấy tờ gì"),
+    ("ket_hon", "xin giấy chứng nhận hai người là vợ chồng"),
+    ("ket_hon", "làm đám cưới xong có phải ra phường không"),
+    ("tam_tru", "sinh viên thuê phòng trọ có phải khai báo không"),
+    ("tam_tru", "tôi ở nhà người thân mấy tháng, cần báo công an không"),
+    ("tam_tru", "chuyển chỗ ở mới thì đăng ký thế nào"),
+    ("can_cuoc", "thẻ căn cước bị hỏng muốn làm cái mới"),
+    ("can_cuoc", "giấy tờ tùy thân của tôi bị mất hết rồi"),
+    ("can_cuoc", "cmnd cũ giờ còn dùng được không hay phải đổi"),
+    ("giay_phep_xay_dung", "tôi muốn dựng nhà trên mảnh đất mới mua"),
+    ("giay_phep_xay_dung", "xây thêm tầng có phải xin phép không"),
+    ("giay_phep_xay_dung", "thủ tục cấp phép công trình nhà ở"),
+]
+
 
 def in_catalog_set() -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
@@ -81,9 +102,12 @@ async def run(name: str, cases: list[tuple[str, str]]) -> tuple[int, int, int]:
 async def main() -> None:
     a_hit, a_wrong, a_total = await run("BỘ A — in-catalog (hồi quy index)", in_catalog_set())
     b_hit, b_wrong, b_total = await run("BỘ B — out-of-catalog (độ phủ thật)", OUT_OF_CATALOG)
+    c_hit, c_wrong, c_total = await run("BỘ C — held-out (kiểm tổng quát hoá)", HELD_OUT)
+    hit, wrong, total = a_hit + b_hit + c_hit, a_wrong + b_wrong + c_wrong, a_total + b_total + c_total
     print("\n" + "=" * 60)
-    print(f"TỔNG  nhận diện đúng {a_hit + b_hit}/{a_total + b_total}"
-          f"  ·  chốt nhầm {a_wrong + b_wrong}/{a_total + b_total}")
+    print(f"TỔNG  nhận diện đúng {hit}/{total}  ·  chốt nhầm {wrong}/{total}")
+    if wrong:
+        print("\n!! Chốt nhầm khác 0 — đây là lỗi chặn, không phải chỉ số cần cải thiện dần.")
 
 
 if __name__ == "__main__":

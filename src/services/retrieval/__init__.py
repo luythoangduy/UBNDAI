@@ -141,10 +141,17 @@ def _identity_score(query: str, procedure: Procedure) -> float:
     for phrase in phrases:
         folded_phrase = fold_ascii(phrase)
         phrase_tokens = set(tokenize(phrase)) - _IDENTITY_GENERIC_TOKENS
-        if len(phrase_tokens) < 2:
-            continue
         if folded_phrase in folded_query:
             return 1.0
+        # Cụm còn ≤2 token sau khi bỏ dấu và loại token chung thì KHÔNG được chấm
+        # fuzzy: phủ toàn bộ cụm chỉ cần trùng 2 từ, cho ngay 0.7+ — trên ngưỡng
+        # identify_min_relevance. Fold bỏ dấu khiến chuyện này rất dễ xảy ra trong
+        # tiếng Việt: "chứng minh thư" rút gọn thành {chung, minh}, trùng khít
+        # "về chung một nhà ... tụi mình" và từng làm hệ thống chốt nhầm can_cuoc
+        # cho một câu hỏi về kết hôn. Cụm ngắn vẫn khớp chính xác ở nhánh substring
+        # phía trên, nên chặn ở đây không mất khả năng nhận diện.
+        if len(phrase_tokens) < 3:
+            continue
         overlap = len(query_tokens & phrase_tokens)
         procedure_coverage = overlap / len(phrase_tokens)
         query_coverage = overlap / len(query_tokens)

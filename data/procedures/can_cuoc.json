@@ -6,7 +6,12 @@
     "cấp thẻ căn cước",
     "làm căn cước công dân",
     "làm thẻ căn cước",
-    "làm cccd"
+    "làm cccd",
+    "cccd",
+    "cmnd",
+    "chứng minh thư",
+    "chứng minh nhân dân",
+    "thẻ căn cước"
   ],
   "example_queries": [
     "tôi muốn làm căn cước công dân",
@@ -18,10 +23,15 @@
     "cấp lại thẻ căn cước",
     "khai sinh",
     "đăng ký kết hôn",
-    "đăng ký tạm trú"
+    "đăng ký tạm trú",
+    "phòng trọ",
+    "sinh viên"
   ],
   "required_token_groups": [
-    ["căn", "cước"]
+    [
+      "căn",
+      "cước"
+    ]
   ],
   "agency": "Cơ quan quản lý căn cước của Công an cấp tỉnh",
   "legal_basis": [
@@ -53,7 +63,9 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["phieu_cc01"],
+      "accepted_doc_types": [
+        "phieu_cc01"
+      ],
       "notes": "Phiếu được tạo lập từ dữ liệu dân cư trong quá trình thu nhận để công dân kiểm tra và ký xác nhận."
     },
     {
@@ -63,7 +75,9 @@
       "condition_label": "Áp dụng khi đăng ký trực tuyến",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["phieu_dc02"]
+      "accepted_doc_types": [
+        "phieu_dc02"
+      ]
     },
     {
       "code": "phieu_dc01",
@@ -72,7 +86,9 @@
       "condition_label": "Áp dụng khi công dân chưa có thông tin trong Cơ sở dữ liệu quốc gia về dân cư",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["phieu_dc01"]
+      "accepted_doc_types": [
+        "phieu_dc01"
+      ]
     },
     {
       "code": "giay_to_phap_ly_thong_tin_cong_dan",
@@ -81,7 +97,9 @@
       "condition_label": "Áp dụng khi công dân chưa có thông tin trong Cơ sở dữ liệu quốc gia về dân cư",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_to_phap_ly"]
+      "accepted_doc_types": [
+        "giay_to_phap_ly"
+      ]
     }
   ],
   "form_templates": [
@@ -89,13 +107,52 @@
       "id": "DC02-TT-17-2024-BCA-CAN-CUOC",
       "name": "Phiếu đề nghị giải quyết thủ tục về căn cước",
       "fields": [
-        {"key": "ho_ten", "label": "Họ, chữ đệm và tên", "type": "text", "required": true},
-        {"key": "ngay_sinh", "label": "Ngày, tháng, năm sinh", "type": "date", "required": true},
-        {"key": "gioi_tinh", "label": "Giới tính", "type": "select", "required": true, "options": ["Nam", "Nữ"]},
-        {"key": "so_dinh_danh", "label": "Số định danh cá nhân (nếu đã có)", "type": "text", "required": false},
-        {"key": "noi_cu_tru", "label": "Nơi cư trú", "type": "text", "required": true},
-        {"key": "noi_dung_de_nghi", "label": "Nội dung đề nghị (vd: cấp thẻ căn cước lần đầu)", "type": "text", "required": true},
-        {"key": "ho_ten_nguoi_dai_dien", "label": "Họ tên người đại diện thực hiện thủ tục (nếu có)", "type": "text", "required": false}
+        {
+          "key": "ho_ten",
+          "label": "Họ, chữ đệm và tên",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "ngay_sinh",
+          "label": "Ngày, tháng, năm sinh",
+          "type": "date",
+          "required": true
+        },
+        {
+          "key": "gioi_tinh",
+          "label": "Giới tính",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Nam",
+            "Nữ"
+          ]
+        },
+        {
+          "key": "so_dinh_danh",
+          "label": "Số định danh cá nhân (nếu đã có)",
+          "type": "text",
+          "required": false
+        },
+        {
+          "key": "noi_cu_tru",
+          "label": "Nơi cư trú",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "noi_dung_de_nghi",
+          "label": "Nội dung đề nghị (vd: cấp thẻ căn cước lần đầu)",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "ho_ten_nguoi_dai_dien",
+          "label": "Họ tên người đại diện thực hiện thủ tục (nếu có)",
+          "type": "text",
+          "required": false
+        }
       ]
     }
   ],

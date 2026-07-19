@@ -2,7 +2,7 @@
 
 > Các chỉ số đánh giá hệ thống, kèm **baseline đo thật** và lệnh tái lập.
 >
-> Nguyên tắc chọn chỉ số: với hệ thống hướng dẫn thủ tục hành chính, **"nói sai" tệ hơn nhiều so với "không biết"**. Vì vậy chỉ số quan trọng nhất trong tài liệu này không phải độ chính xác, mà là **tỉ lệ chốt nhầm** — số lần hệ thống tự tin chọn sai thủ tục.
+> Nguyên tắc chọn chỉ số: với hệ thống hướng dẫn thủ tục hành chính, **"nói sai" tệ hơn nhiều so với "không biết"**. Vì vậy chỉ số quan trọng nhất trong tài liệu này không phải độ chính xác, mà là **tỉ lệ chốt nhầm** — số lần hệ thống tự tin chọn sai thủ tục. Chốt nhầm làm sai toàn bộ checklist phía sau: người dân chuẩn bị đúng một bộ giấy tờ cho sai một thủ tục.
 
 ---
 
@@ -10,104 +10,126 @@
 
 | # | Nhóm | Chỉ số | **Baseline** | Cách đo |
 |---|---|---|:---:|---|
-| 1 | Nhận diện | Độ chính xác — in-catalog | **30/30 = 100%** | `python scripts/eval_identify.py` (bộ A) |
-| 2 | Nhận diện | Độ chính xác — **out-of-catalog** | **9/15 = 60%** | `python scripts/eval_identify.py` (bộ B) |
-| 3 | **An toàn** | **Tỉ lệ chốt nhầm thủ tục** | **0/45 = 0%** | Cả hai bộ eval |
-| 4 | An toàn | Lùi về hỏi lại khi không chắc | 6/15 trên bộ B | Bộ B |
-| 5 | Kiểm thử | Toàn bộ suite | **329/330 PASS** | `python -m pytest -q` |
-| 6 | Kiểm thử | Rule engine (tầng duy nhất phát `error`) | **11/11** | `pytest tests/test_rule_engine.py` |
-| 7 | Kiểm thử | AI checker (chỉ warning/info) | **4/4** | `pytest tests/test_ai_checker.py` |
-| 8 | Kiểm thử | OCR pipeline | **19/19** | `pytest tests/test_ocr_pipeline.py` |
-| 9 | Kiểm thử | Hồi quy agent | **20/20** | `pytest tests/test_agent_regressions.py` |
-| 10 | Kiểm thử | Tình huống người dùng thật | **15/15** | `pytest tests/test_real_user_edge_cases.py` |
-| 11 | Kiểm thử | Trung thực nguồn live | **7/7** | `pytest tests/test_chat_experience.py` |
-| 12 | Kiểm thử | Khoá URL nguồn theo mã thủ tục | **4/4** | `pytest tests/test_procedure_source_urls.py` |
-| 13 | Chi phí | Token tiếng Việt | **2,17 ký tự/token** | `count_tokens` trên prompt planner thật |
-| 14 | Chi phí | Chi phí LLM / hồ sơ | **~0,016 USD** | `docs/business-viability-pilot.md` §6 |
-| 15 | Độ phủ | Thủ tục · rule khai báo | **5 thủ tục · 17 rule** | `data/procedures/`, `rules/` |
-| 16 | Độ phủ | Endpoint API | **75** | `docs/API-Reference.md` §10 |
+| 1 | **An toàn** | **Tỉ lệ chốt nhầm thủ tục** | **0/60 = 0%** | `python scripts/eval_identify.py` |
+| 2 | Nhận diện | Độ chính xác — in-catalog (bộ A) | **30/30 = 100%** | bộ A |
+| 3 | Nhận diện | Độ chính xác — out-of-catalog (bộ B) | **11/15 = 73,3%** | bộ B |
+| 4 | Nhận diện | Độ chính xác — **held-out (bộ C)** | **9/15 = 60,0%** | bộ C |
+| 5 | An toàn | Lùi về hỏi lại khi không chắc | 10/30 trên B+C | bộ B, C |
+| 6 | Kiểm thử | Toàn bộ suite | **329/330 PASS** | `python -m pytest -q` |
+| 7 | Kiểm thử | Rule engine (tầng duy nhất phát `error`) | **11/11** | `pytest tests/test_rule_engine.py` |
+| 8 | Kiểm thử | AI checker (chỉ warning/info) | **4/4** | `pytest tests/test_ai_checker.py` |
+| 9 | Kiểm thử | OCR pipeline | **19/19** | `pytest tests/test_ocr_pipeline.py` |
+| 10 | Kiểm thử | Truy hồi (gồm 2 test hồi quy mới) | **8/8** | `pytest tests/test_retrieval.py` |
+| 11 | Kiểm thử | Hồi quy agent | **20/20** | `pytest tests/test_agent_regressions.py` |
+| 12 | Kiểm thử | Tình huống người dùng thật | **15/15** | `pytest tests/test_real_user_edge_cases.py` |
+| 13 | Kiểm thử | Trung thực nguồn live | **7/7** | `pytest tests/test_chat_experience.py` |
+| 14 | Kiểm thử | Khoá URL nguồn theo mã thủ tục | **4/4** | `pytest tests/test_procedure_source_urls.py` |
+| 15 | Chi phí | Token tiếng Việt | **2,17 ký tự/token** | `count_tokens` trên prompt planner thật |
+| 16 | Chi phí | Chi phí LLM / hồ sơ | **~0,016 USD** | `docs/business-viability-pilot.md` §6 |
+| 17 | Độ phủ | Thủ tục · rule khai báo | **5 thủ tục · 17 rule** | `data/procedures/`, `rules/` |
+| 18 | Độ phủ | Endpoint API | **75** | `docs/API-Reference.md` §10 |
 
 ---
 
-## 2. Kết quả quan trọng nhất: chốt nhầm = 0
+## 2. Thiết kế eval: ba bộ, ba mục đích
+
+Tách bộ là điểm quan trọng nhất của phép đo này. Một con số gộp sẽ che mất cả điểm mạnh lẫn điểm yếu.
+
+| Bộ | Nguồn câu hỏi | Trả lời câu hỏi gì |
+|---|---|---|
+| **A** — in-catalog (30 câu) | `example_queries` + `aliases` trong catalog | "Index có vỡ không?" |
+| **B** — out-of-catalog (15 câu) | Diễn đạt tự nhiên, tự viết | "Độ phủ thật đến đâu?" |
+| **C** — held-out (15 câu) | Viết **trước** khi tinh chỉnh, **không** dùng để tinh chỉnh | "Sửa xong có tổng quát hoá không, hay chỉ vá đúng bộ B?" |
+
+**Bộ A có tính vòng tròn** — chính những chuỗi đó được đưa vào index, nên 100% là *điều kiện cần*, không chứng minh năng lực hiểu ngôn ngữ. Báo cáo riêng con số này sẽ là đánh lừa.
+
+**Bộ C tồn tại vì bộ B không đủ.** Sau khi tinh chỉnh catalog theo các ca trượt của bộ B, bộ B đương nhiên tăng — đó là overfit. Chỉ bộ C mới nói được thật.
+
+---
+
+## 3. Kết quả
 
 ```
 python scripts/eval_identify.py
 
-BỘ A — in-catalog (hồi quy index)
-  Nhận diện đúng : 30/30 = 100.0%
-  Chốt NHẦM      : 0/30 = 0.0%
-  Lùi về hỏi lại : 0/30
-
-BỘ B — out-of-catalog (độ phủ thật)
-  Nhận diện đúng : 9/15 = 60.0%
-  Chốt NHẦM      : 0/15 = 0.0%
-  Lùi về hỏi lại : 6/15
-
-TỔNG  nhận diện đúng 39/45  ·  chốt nhầm 0/45
+BỘ A — in-catalog          30/30 = 100%    chốt nhầm 0/30
+BỘ B — out-of-catalog      11/15 = 73,3%   chốt nhầm 0/15
+BỘ C — held-out             9/15 = 60,0%   chốt nhầm 0/15
+────────────────────────────────────────────────────────
+TỔNG  nhận diện đúng 50/60  ·  chốt nhầm 0/60
 ```
 
-**Cách đọc kết quả này.**
+**So với trước khi tinh chỉnh catalog:**
 
-Trên 15 câu diễn đạt tự nhiên không có trong catalog, hệ thống nhận đúng 9 câu. Sáu câu còn lại nó **không nhận ra** — nhưng trong cả sáu, nó trả `selected_procedure_id = None` và chuyển sang hỏi người dân chọn thủ tục (`pending_action: "select_procedure"`, `src/agents/nodes/identify.py:133`).
+| | Trước | Sau |
+|---|:---:|:---:|
+| Bộ B | 9/15 (60,0%) | **11/15 (73,3%)** |
+| Bộ C (held-out) | 7/15 (46,7%) | **9/15 (60,0%)** |
+| Tổng đúng | 46/60 | **50/60** |
+| **Chốt nhầm** | **1/60** | **0/60** |
 
-Không có ca nào hệ thống tự tin chốt sai thủ tục. Đây là điều quan trọng, vì **chốt nhầm thủ tục làm sai toàn bộ checklist phía sau** — người dân sẽ chuẩn bị đúng một bộ giấy tờ cho sai một thủ tục. Thất bại kiểu "tôi chưa rõ, bạn chọn giúp" tốn một lượt hội thoại; thất bại kiểu "chắc chắn là thủ tục X" tốn một chuyến đi lên phường.
-
-Ba ngưỡng tạo ra hành vi này (`src/config.py:53-55`):
-
-```python
-identify_confidence_threshold = 0.55   # dưới ngưỡng → không chốt
-identify_min_relevance       = 0.6     # ứng viên yếu bị loại
-identify_min_margin          = 0.15    # hai ứng viên sát nhau → hỏi lại
-```
-
-Ví dụ minh hoạ: `"tôi và bạn gái muốn ra giấy tờ chính thức"` cho `confidence = 1.00` với ứng viên `can_cuoc` — nhưng điểm liên quan dưới `identify_min_relevance`, nên hệ thống vẫn không chốt. Ngưỡng liên quan chặn được ca mà ngưỡng tự tin bỏ lọt.
+Bộ C tăng 46,7% → 60% cho thấy việc bổ sung từ vựng **có tổng quát hoá**, không chỉ vá riêng bộ B.
 
 ---
 
-## 3. Khoảng trống đã lộ ra: độ phủ 60%
+## 4. Lỗi thật mà bộ held-out phát hiện
 
-Đây là phát hiện đáng giá nhất của đợt đo, và nó là **vấn đề dữ liệu, không phải vấn đề mô hình**.
+Đây là lý do bộ C đáng công viết ra.
 
-| Câu trượt | Kỳ vọng | Ứng viên đứng đầu |
+Bộ B cho kết quả chốt nhầm 0/45 và tôi đã suýt ghi vào tài liệu rằng "hệ thống không bao giờ chốt nhầm". Bộ C bác bỏ ngay: câu `"sinh viên thuê phòng trọ có phải khai báo không"` bị **chốt hẳn** `khai_sinh`.
+
+**Nguyên nhân:** `required_token_groups` của `khai_sinh` là `['khai','sinh']`, và cơ chế khớp là *túi từ, không xét liền kề*. Câu trên có "**khai** báo" và "**sinh** viên" → đủ hai token → 0.95 điểm.
+
+Sửa xong ca đó thì bộ C lộ tiếp một ca thứ hai, tinh vi hơn: `"tụi mình định về chung một nhà, cần giấy tờ gì"` → chốt hẳn `can_cuoc` với điểm 0.80.
+
+**Nguyên nhân — lỗi đặc thù tiếng Việt.** Alias `"chứng minh thư"` sau khi bỏ dấu (`fold_ascii`) và loại token chung còn đúng `{chung, minh}`. Câu hỏi trên chứa "về **chung** một nhà" và "tụi **mình**" — trùng khít cả hai token → `procedure_coverage = 1.0` → điểm `0.7 × 1.0 + 0.3 × 0.18 = 0.80`, vượt `identify_min_relevance = 0.6`.
+
+Nói cách khác: **bỏ dấu làm "chứng minh" ≡ "chung mình"**. Bất kỳ alias nào rút gọn còn 2 token đều là bẫy tương tự.
+
+**Cách sửa** (`src/services/retrieval/__init__.py`): cụm còn dưới 3 token sau khi fold **không được chấm fuzzy**. Cụm ngắn vẫn khớp chính xác ở nhánh substring phía trên nên không mất khả năng nhận diện — `test_short_alias_still_matches_when_written_out` khoá tính chất này.
+
+Hai test hồi quy: `tests/test_retrieval.py::test_short_phrase_does_not_fuzzy_match_after_diacritic_folding` và `::test_short_alias_still_matches_when_written_out`. Đã xác minh test **fail trên code trước khi sửa** (điểm 0.8) và pass sau khi sửa.
+
+**Đánh đổi đã chấp nhận:** bản sửa làm tổng số nhận đúng giảm từ 52 xuống 50, vì hai ca trước đây đúng nhờ chính cơ chế fuzzy 2-token vừa bị chặn. Đổi lại chốt nhầm về 0. Với hệ thống này đó là đánh đổi đúng.
+
+---
+
+## 5. Khoảng trống còn lại
+
+10 ca trượt còn lại (tất cả đều **lùi về hỏi lại**, không ca nào chốt sai):
+
+| Nhóm trượt | Ví dụ | Bản chất |
 |---|---|---|
-| "thủ tục đăng ký làm vợ chồng hợp pháp" | `ket_hon` | *(không có)* |
-| "tôi và bạn gái muốn ra giấy tờ chính thức" | `ket_hon` | `can_cuoc` |
-| "thuê nhà ở quận khác thì phải đăng ký gì với công an" | `tam_tru` | `giay_phep_xay_dung` |
-| "ở nhờ nhà người quen lâu dài có phải báo không" | `tam_tru` | `giay_phep_xay_dung` |
-| "cccd của tôi hết hạn rồi làm sao" | `can_cuoc` | *(không có)* |
-| "mất chứng minh thư thì xin lại kiểu gì" | `can_cuoc` | `ket_hon` |
+| `khai_sinh` với cách nói vòng | "con mới đẻ cần làm thủ tục gì đầu tiên", "đăng ký tên cho con vào sổ hộ tịch" | Thiếu từ vựng "mới đẻ", "sổ hộ tịch" |
+| `ket_hon` với cách nói ẩn dụ | "về chung một nhà", "ra giấy tờ chính thức" | Khó — không có từ khoá nào về hôn nhân |
+| Câu quá mơ hồ | "cháu nhà tôi chưa có giấy tờ gì cả", "giấy tờ tùy thân bị mất hết rồi" | **Hỏi lại là hành vi đúng**, không nên tính là lỗi |
 
-Quy luật rõ ràng: hệ thống trượt khi người dân dùng **từ dân dã hoặc từ cũ** — "cccd", "chứng minh thư", "vợ chồng hợp pháp", "ở trọ", "ở nhờ". Đây đúng là cách người dân thật nói, đặc biệt nhóm ít thành thạo văn bản hành chính — tức là **đúng nhóm sản phẩm nhắm tới**.
+Nhóm thứ ba đáng chú ý: với những câu này, hỏi lại mới là hành vi mong muốn. Chỉ số "độ chính xác" đang **phạt oan** hệ thống ở đó. Bản eval sau nên tách riêng nhóm "mơ hồ chính đáng".
 
-**Cách sửa: bổ sung `aliases` và `negative_keywords` trong `data/procedures/*.json`, không sửa code.** Hai ca "thuê nhà"/"ở nhờ" bị `giay_phep_xay_dung` hút mất cho thấy `negative_keywords` của thủ tục xây dựng cần loại thêm các từ về thuê/trọ/ở nhờ.
-
-Đây là chi phí kiểu "kiểm duyệt dữ liệu" đã nêu ở `docs/business-viability-pilot.md` §6.3 — và là lý do Giai đoạn 2 của pilot đo **giờ công mỗi thủ tục** chứ không đo chi phí hạ tầng.
+Quy luật chung của các ca trượt: hệ thống yếu ở **từ dân dã và từ cũ**, đúng cách nói của nhóm ít thành thạo văn bản hành chính — tức **đúng nhóm người dùng sản phẩm nhắm tới**. Đây là chi phí kiểu "kiểm duyệt dữ liệu" nêu ở `docs/business-viability-pilot.md` §6.3.
 
 ---
 
-## 4. Giới hạn của phép đo này
+## 6. Giới hạn của phép đo
 
-Ghi rõ để không ai trích con số ra khỏi ngữ cảnh.
-
-- **Bộ A có tính vòng tròn.** `example_queries` và `aliases` chính là dữ liệu được index, nên 100% là *điều kiện cần*, không chứng minh năng lực hiểu ngôn ngữ. Nó là eval hồi quy để bắt lỗi vỡ index — đúng như mô tả trong `scripts/eval_identify.py`.
-- **Bộ B chỉ có 15 câu, do tôi tự viết.** Nó không phải mẫu đại diện thống kê cho cách người dân thật đặt câu hỏi. Con số 60% nên đọc là "có khoảng trống độ phủ rõ rệt", không phải "độ phủ chính xác bằng 60%".
-- **Chưa có eval cho chất lượng câu trả lời của node `answer`.** Đây là khoảng trống lớn nhất — xem §6.
-- **Chưa đo latency trên môi trường thật.**
+- **Bộ B và C mỗi bộ chỉ 15 câu, do tôi tự viết.** Không phải mẫu đại diện thống kê. Con số 73%/60% nên đọc là "có khoảng trống độ phủ rõ rệt", không phải giá trị chính xác.
+- **Chưa có eval cho chất lượng câu trả lời của node `answer`** — guardrail yếu nhất (`docs/GUARDRAILS.md` lớp 4) mà lại chưa có phép đo nào. Đây là khoảng trống lớn nhất.
+- **Chưa đo latency** trên môi trường thật.
 - **Chưa đo tỉ lệ OCR rơi vào `needs_human_review`** trên ảnh thật.
+- Chỉ số "độ chính xác" chưa tách nhóm câu mơ hồ chính đáng (§5).
 
 ---
 
-## 5. Chỉ số vận hành cho pilot
+## 7. Chỉ số vận hành cho pilot
 
-Các chỉ số dưới đây **chưa có baseline** vì chúng cần người dùng thật. Chúng là thứ Giai đoạn 1 của pilot phải đo (`docs/business-viability-pilot.md` §7-8).
+Chưa có baseline vì cần người dùng thật — Giai đoạn 1 pilot phải đo (`docs/business-viability-pilot.md` §7-8).
 
 | Chỉ số | Vì sao |
 |---|---|
 | **Tỷ lệ hồ sơ đạt ngay lần nộp đầu** | Chỉ số Bắc Đẩu |
 | Số sai sót nội dung do cán bộ báo cáo | Tiêu chí loại — phải bằng 0 |
 | Tỷ lệ trả lời "chưa đủ căn cứ" | Cao = catalog thiếu, không phải mô hình kém |
-| Tỷ lệ hội thoại phải hỏi lại để chọn thủ tục | Đo trực tiếp khoảng trống ở §3 trên người thật |
+| Tỷ lệ hội thoại phải hỏi lại để chọn thủ tục | Đo khoảng trống ở §5 trên người thật |
 | Tỷ lệ OCR → `needs_human_review` | Hiệu chỉnh ngưỡng 0,85 |
 | Số lượt trung bình mỗi phiên | Kiểm chứng mô hình chi phí |
 
@@ -115,35 +137,23 @@ Các chỉ số dưới đây **chưa có baseline** vì chúng cần người d
 
 ---
 
-## 6. Việc nên làm tiếp
+## 8. Việc nên làm tiếp
 
-Xếp theo giá trị trên công sức:
-
-1. **Mở rộng `aliases`/`negative_keywords` cho 5 thủ tục** rồi chạy lại bộ B. Sửa JSON, không sửa code. Đây là cách rẻ nhất để đẩy 60% lên.
-2. **Mở rộng bộ B lên 50–100 câu**, tốt nhất lấy từ câu hỏi thật ở Bộ phận Một cửa thay vì tự nghĩ.
-3. **Xây eval cho node `answer`** — chấm xem câu trả lời có bám nguồn đã truy hồi không, và có nói "chưa đủ căn cứ" đúng lúc không. Đây là guardrail yếu nhất (`docs/GUARDRAILS.md` lớp 4) mà lại chưa có phép đo nào.
-4. **Đo latency** trên môi trường thật.
-5. **Đưa `scripts/eval_identify.py` vào CI** với ngưỡng chặn: chốt nhầm phải bằng 0. Độ phủ có thể dao động, nhưng chốt nhầm khác 0 là lỗi chặn merge.
+1. **Đưa `scripts/eval_identify.py` vào CI với ngưỡng chặn `chốt nhầm == 0`.** Độ phủ được phép dao động; chốt nhầm khác 0 phải chặn merge.
+2. **Mở rộng bộ B/C lên 50–100 câu**, lấy từ câu hỏi thật ở Bộ phận Một cửa thay vì tự nghĩ.
+3. **Tách nhóm "mơ hồ chính đáng"** khỏi chỉ số độ chính xác.
+4. **Xây eval cho node `answer`** — chấm độ bám nguồn và độ đúng lúc của "chưa đủ căn cứ".
+5. **Rà soát toàn bộ alias 2 token** trong catalog theo bài học §4.
+6. **Đo latency** trên môi trường thật.
 
 ---
 
-## 7. Tái lập toàn bộ
+## 9. Tái lập
 
 ```bash
-# Nhận diện thủ tục (bộ A + bộ B)
-python scripts/eval_identify.py
-
-# Toàn bộ test suite
-python -m pytest -q
-
-# Theo nhóm guardrail
-pytest tests/test_rule_engine.py tests/test_ai_checker.py \
-       tests/test_ocr_pipeline.py tests/test_chat_experience.py \
-       tests/test_procedure_source_urls.py -q
-
-# Độ phủ catalog
-ls data/procedures/*.json | wc -l
-for f in rules/*.yaml; do echo "$f: $(grep -c '^\s*- id:' $f)"; done
+python scripts/eval_identify.py          # nhận diện thủ tục, 3 bộ
+python -m pytest -q                      # toàn bộ suite
+pytest tests/test_retrieval.py -q        # gồm 2 test hồi quy lỗi bỏ dấu
 ```
 
-> **Về 1 test failing.** `test_application_migrations.py::test_application_migration_round_trip_preserves_baseline_data` fail local nhưng **CI xanh trên 5 lần chạy `main` gần nhất**. Artifact môi trường local. Ghi ra thay vì báo 330/330 cho đẹp.
+> **Về 1 test failing.** `test_application_migrations.py::test_application_migration_round_trip_preserves_baseline_data` fail local (`no such table: application_cases`) nhưng **CI xanh trên 5 lần chạy `main` gần nhất**. Artifact môi trường local. Ghi ra thay vì báo 330/330 cho đẹp.

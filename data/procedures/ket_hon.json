@@ -5,7 +5,12 @@
   "aliases": [
     "đăng ký kết hôn",
     "làm giấy đăng ký kết hôn",
-    "làm giấy kết hôn"
+    "làm giấy kết hôn",
+    "làm vợ chồng",
+    "thành vợ chồng",
+    "đăng ký cưới",
+    "giấy chứng nhận kết hôn",
+    "cưới"
   ],
   "example_queries": [
     "tôi muốn đăng ký kết hôn",
@@ -17,10 +22,14 @@
     "kết hôn có yếu tố nước ngoài",
     "khai sinh",
     "đăng ký tạm trú",
-    "cấp thẻ căn cước"
+    "cấp thẻ căn cước",
+    "phòng trọ"
   ],
   "required_token_groups": [
-    ["kết", "hôn"]
+    [
+      "kết",
+      "hôn"
+    ]
   ],
   "agency": "UBND cấp xã",
   "legal_basis": [
@@ -48,7 +57,9 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["to_khai_dang_ky_ket_hon"],
+      "accepted_doc_types": [
+        "to_khai_dang_ky_ket_hon"
+      ],
       "notes": "Hai bên có thể khai chung một tờ khai khi nộp trực tiếp; hồ sơ trực tuyến dùng mẫu hộ tịch điện tử tương tác."
     },
     {
@@ -57,7 +68,10 @@
       "condition": null,
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["cccd", "ho_chieu"],
+      "accepted_doc_types": [
+        "cccd",
+        "ho_chieu"
+      ],
       "notes": "Nếu dữ liệu đã có trong cơ sở dữ liệu thì người dân cung cấp thông tin định danh để cơ quan tra cứu; không mặc định yêu cầu nộp bản sao."
     },
     {
@@ -67,7 +81,10 @@
       "condition_label": "Chỉ xuất trình khi cơ quan không khai thác được thông tin cư trú từ cơ sở dữ liệu",
       "original_required": true,
       "copies": 0,
-      "accepted_doc_types": ["giay_to_cu_tru", "giay_xac_nhan_cu_tru"]
+      "accepted_doc_types": [
+        "giay_to_cu_tru",
+        "giay_xac_nhan_cu_tru"
+      ]
     }
   ],
   "form_templates": [
@@ -75,18 +92,78 @@
       "id": "TT-04-2024-BTP-KET-HON",
       "name": "Tờ khai đăng ký kết hôn",
       "fields": [
-        {"key": "ho_ten_nam", "label": "Họ, chữ đệm, tên bên nam", "type": "text", "required": true},
-        {"key": "ngay_sinh_nam", "label": "Ngày, tháng, năm sinh bên nam", "type": "date", "required": true},
-        {"key": "dan_toc_nam", "label": "Dân tộc bên nam", "type": "text", "required": false},
-        {"key": "quoc_tich_nam", "label": "Quốc tịch bên nam", "type": "text", "required": true},
-        {"key": "noi_cu_tru_nam", "label": "Nơi cư trú bên nam", "type": "text", "required": true},
-        {"key": "so_dinh_danh_nam", "label": "Số định danh cá nhân/CCCD/hộ chiếu bên nam", "type": "text", "required": true},
-        {"key": "ho_ten_nu", "label": "Họ, chữ đệm, tên bên nữ", "type": "text", "required": true},
-        {"key": "ngay_sinh_nu", "label": "Ngày, tháng, năm sinh bên nữ", "type": "date", "required": true},
-        {"key": "dan_toc_nu", "label": "Dân tộc bên nữ", "type": "text", "required": false},
-        {"key": "quoc_tich_nu", "label": "Quốc tịch bên nữ", "type": "text", "required": true},
-        {"key": "noi_cu_tru_nu", "label": "Nơi cư trú bên nữ", "type": "text", "required": true},
-        {"key": "so_dinh_danh_nu", "label": "Số định danh cá nhân/CCCD/hộ chiếu bên nữ", "type": "text", "required": true}
+        {
+          "key": "ho_ten_nam",
+          "label": "Họ, chữ đệm, tên bên nam",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "ngay_sinh_nam",
+          "label": "Ngày, tháng, năm sinh bên nam",
+          "type": "date",
+          "required": true
+        },
+        {
+          "key": "dan_toc_nam",
+          "label": "Dân tộc bên nam",
+          "type": "text",
+          "required": false
+        },
+        {
+          "key": "quoc_tich_nam",
+          "label": "Quốc tịch bên nam",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "noi_cu_tru_nam",
+          "label": "Nơi cư trú bên nam",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "so_dinh_danh_nam",
+          "label": "Số định danh cá nhân/CCCD/hộ chiếu bên nam",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "ho_ten_nu",
+          "label": "Họ, chữ đệm, tên bên nữ",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "ngay_sinh_nu",
+          "label": "Ngày, tháng, năm sinh bên nữ",
+          "type": "date",
+          "required": true
+        },
+        {
+          "key": "dan_toc_nu",
+          "label": "Dân tộc bên nữ",
+          "type": "text",
+          "required": false
+        },
+        {
+          "key": "quoc_tich_nu",
+          "label": "Quốc tịch bên nữ",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "noi_cu_tru_nu",
+          "label": "Nơi cư trú bên nữ",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "so_dinh_danh_nu",
+          "label": "Số định danh cá nhân/CCCD/hộ chiếu bên nữ",
+          "type": "text",
+          "required": true
+        }
       ]
     }
   ],

@@ -296,6 +296,9 @@ planning/        # TEAM_PLAN.md — kế hoạch 3 người, sprint, contract fr
 | `docs/Agent-Features.md` | Kiến trúc agent: đồ thị LangGraph, 5 node, những chỗ cố tình không dùng LLM |
 | `docs/EVAL-METRICS.md` | Chỉ số đánh giá + baseline đo thật (nhận diện thủ tục, chốt nhầm, test) |
 | `docs/API-Reference.md` | 75 endpoint, sinh từ router thật |
+| `docs/DEMO-SCRIPT.md` | Kịch bản demo 5 phút, câu hỏi giám khảo, phương án dự phòng |
+| `docs/Deployment-Guide.md` | Kiến trúc hạ tầng, biến môi trường, cách kiểm bản chạy có mới không |
+| `docs/CI-Explained.md` | Pipeline CI, cổng chặn chốt nhầm, những gì CI chưa chặn |
 | `docs/business-viability-pilot.md` | Khách hàng mục tiêu, mô hình kinh doanh, kinh tế đơn vị (tính từ hệ thống thật), lộ trình pilot 3 giai đoạn |
 | `docs/procedure-sync.md` | Quy trình đồng bộ catalog thủ tục với nguồn công bố |
 | `docs/hackathon-chat-experience.md` | Thiết kế trải nghiệm chat |

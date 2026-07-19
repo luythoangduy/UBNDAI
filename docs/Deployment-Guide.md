@@ -1,0 +1,203 @@
+# Deployment Guide — UBNDAI
+
+> Cách triển khai hệ thống: kiến trúc hạ tầng, biến môi trường, quy trình deploy, và cách kiểm tra bản chạy có thật sự là bản mới nhất không.
+
+---
+
+## 1. Kiến trúc triển khai
+
+```
+        Người dùng
+            │
+            ▼
+   ┌─────────────────┐
+   │     Vercel      │   Frontend (React + Vite, static)
+   │  ubndai.vercel  │   rewrites /api/* ──┐
+   │      .app       │   rewrites /*  → index.html (SPA)
+   └─────────────────┘                     │
+                                           ▼
+                              ┌──────────────────────────┐
+                              │         Render           │  Backend FastAPI
+                              │ c3-tthc-assistant        │  uvicorn, Docker
+                              │      .onrender.com       │
+                              └────────────┬─────────────┘
+                                           │
+                        ┌──────────────────┼──────────────────┐
+                        ▼                  ▼                  ▼
+                  PostgreSQL          Chroma + BM25      LLM API
+                  (Alembic)         (tuỳ chọn, có         (Anthropic /
+                                     fallback)             OpenAI cho OCR)
+```
+
+Frontend không gọi thẳng backend — nó gọi `/api/*` cùng origin, Vercel rewrite sang Render (`frontend/vercel.json`). Nhờ vậy không có CORS và không lộ URL backend trong mã nguồn frontend.
+
+---
+
+## 2. Backend — Render (Docker)
+
+`Dockerfile` ở gốc repo. Điểm đáng chú ý:
+
+```dockerfile
+FROM python:3.11-slim
+RUN useradd --create-home --uid 1000 user
+USER user                              # không chạy bằng root
+EXPOSE 7860
+CMD ["sh", "-c", "alembic -c alembic.ini upgrade head \
+  && (python scripts/index_procedures.py --embedding-provider ${EMBEDDING_PROVIDER:-auto} \
+      || echo 'Dense index unavailable; continuing with BM25') \
+  && exec uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-7860} \
+      --proxy-headers --forwarded-allow-ips '*'"]
+```
+
+Ba tính chất quan trọng của lệnh khởi động:
+
+1. **`alembic upgrade head` chạy trước** — migration tự áp dụng khi deploy, không cần thao tác tay.
+2. **Index dense được phép thất bại** — `|| echo ...` khiến container vẫn khởi động khi không dựng được Chroma, và hệ thống lùi về BM25. Đây là chủ ý: **thà chạy với truy hồi yếu hơn còn hơn không chạy**.
+3. **`--proxy-headers --forwarded-allow-ips '*'`** — bắt buộc khi đứng sau reverse proxy của Render, nếu không mọi client IP đều thành IP của proxy.
+
+`PORT` do Render cấp qua biến môi trường; mặc định 7860 chỉ dùng khi chạy local.
+
+---
+
+## 3. Frontend — Vercel
+
+`frontend/vercel.json`:
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://c3-tthc-assistant.onrender.com/api/:path*" },
+    { "source": "/(.*)",       "destination": "/index.html" }
+  ]
+}
+```
+
+Thứ tự hai rule quan trọng: rule `/api/*` phải đứng **trước** rule catch-all, nếu không mọi request API sẽ bị nuốt vào `index.html`.
+
+> **Khi đổi URL backend** (đổi service Render, đổi sang domain riêng), phải sửa `destination` ở đây. Đây là chỗ duy nhất hard-code URL backend.
+
+---
+
+## 4. Biến môi trường
+
+Danh sách đầy đủ ở `.env.example`. Nhóm theo mức độ bắt buộc:
+
+### Bắt buộc cho production
+
+| Biến | Ghi chú |
+|---|---|
+| `DATABASE_URL` | PostgreSQL. Khi bắt đầu bằng `postgresql://` thì `database_persistence_enabled` **tự bật** (`src/config.py:88`) |
+| `JWT_SECRET` | **Phải đổi** — mặc định là `change-me` |
+| `LLM_API_KEY` | Anthropic. Thiếu → hệ thống vẫn chạy nhưng mất hỏi đáp mở |
+| `APP_ENV` | Đặt `production` |
+| `ENABLE_DEMO_AUTH` | Đặt `false` ở production thật |
+| `DEMO_PASSWORD` | Đổi nếu còn bật demo auth |
+
+### Nên đặt
+
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `LLM_PROVIDER` | `anthropic` | Hoặc `gemini` |
+| `OCR_LLM_PROVIDER` / `OCR_LLM_API_KEY` / `OCR_LLM_MODEL` | `openai` / — / `gpt-5-mini` | **Key riêng**, không dùng chung với chatbot |
+| `OCR_CONFIDENCE_THRESHOLD` | `0.85` | Dưới ngưỡng → `needs_human_review` |
+| `EMBEDDING_PROVIDER` | `auto` | Phải khớp provider lúc index Chroma |
+| `STORAGE_ROOT` | `./uploads/private` | Trên Render cần volume bền, nếu không tệp mất khi restart |
+| `OFFICIAL_SOURCE_LIVE_FETCH` | `true` | Tắt nếu môi trường chặn mạng ngoài |
+
+### Xác thực thật (thay demo auth)
+
+`OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_AUDIENCE`, `OIDC_REDIRECT_URI`, `OIDC_REQUIRED_MFA_CLAIM` (mặc định `amr:mfa`).
+
+> **Không commit `.env`.** Đã nằm trong `.gitignore`. Khai báo biến trong dashboard Render/Vercel.
+
+---
+
+## 5. Quy trình deploy
+
+### Backend (Render)
+
+1. Render theo dõi nhánh `main`, tự build lại từ `Dockerfile` khi có commit mới.
+2. Migration tự chạy trong `CMD`.
+3. Kiểm tra: `curl https://<render-url>/health`
+
+### Frontend (Vercel)
+
+1. Vercel theo dõi `main`, build `frontend/`.
+2. Kiểm tra bằng cách mở app và gọi một endpoint qua rewrite.
+
+### Không có deploy tự động?
+
+```bash
+# Backend — build và chạy thử cục bộ đúng như production
+docker build -t ubndai .
+docker run -p 7860:7860 --env-file .env ubndai
+
+# Frontend
+cd frontend && npm ci && npm run build
+```
+
+---
+
+## 6. Kiểm tra bản đang chạy có phải bản mới nhất không
+
+**Đây là bước hay bị bỏ sót nhất, và đã từng gây hiểu nhầm nghiêm trọng trong chính dự án này** — có thời điểm production chậm **9 commit** so với `main`, thiếu cả bản sửa lỗi hiển thị `[object Object]` cho người dùng, trong khi mọi người vẫn tưởng đang xem bản mới.
+
+Cách kiểm nhanh, không cần truy cập dashboard:
+
+| Kiểm | Cách | Bản cũ biểu hiện thế nào |
+|---|---|---|
+| Backend có bản sửa mới nhất | `curl -s https://<render-url>/health` | — |
+| Lỗi 422 hiển thị đúng | Đăng nhập với mật khẩu quá ngắn | Bản cũ hiện `[object Object]` |
+| Frontend là bundle mới | Xem DevTools → có class `cache-badge` không | Bản cũ **còn** `cache-badge` |
+| Nguồn trích dẫn | Gửi một câu hỏi thủ tục, xem khối "Đã kiểm chứng nguồn" | Bản cũ trỏ `thutuc.dichvucong.gov.vn` (đã 503 toàn subdomain) |
+
+Nếu thấy bất kỳ dấu hiệu nào ở cột phải: **production đang chạy code cũ**, cần redeploy từ `main` trên cả Vercel lẫn Render.
+
+---
+
+## 7. Sau khi deploy — danh sách kiểm
+
+```bash
+# 1. Backend sống
+curl -s https://<render-url>/health
+
+# 2. Catalog nạp được
+curl -s https://<render-url>/api/v1/procedures | head -c 300
+
+# 3. Luồng chat chạy trọn vẹn
+curl -X POST https://<render-url>/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"tôi muốn xin giấy phép xây dựng nhà ở riêng lẻ"}'
+```
+
+Bước 3 là bước quan trọng nhất — nó đi qua toàn bộ đồ thị LangGraph. Phản hồi phải có `checklist` và `citations`. Nếu trả 500, xem log Render: nguyên nhân thường là thiếu biến môi trường hoặc migration chưa chạy, **không phải lỗi logic** (logic đã được 333 test phủ).
+
+---
+
+## 8. Sự cố thường gặp
+
+| Triệu chứng | Nguyên nhân thường gặp | Xử lý |
+|---|---|---|
+| 500 ở mọi endpoint | Thiếu `DATABASE_URL` hoặc migration chưa chạy | Xem log khởi động, kiểm `alembic upgrade head` |
+| `no such column: case_messages.response_json` | DB thiếu migration | `alembic upgrade head` |
+| Chat trả lời nhưng không có citation | Index chưa dựng → chỉ BM25 | Chấp nhận được; chạy `scripts/index_procedures.py` nếu muốn dense |
+| "Nguồn live chưa phản hồi" | Cổng DVC lỗi/chặn mạng | Tự hồi phục sau TTL 120 s. Nếu kéo dài, kiểm `OFFICIAL_SOURCE_LIVE_FETCH` |
+| Tệp tải lên mất sau restart | `STORAGE_ROOT` trỏ vào ổ đĩa tạm | Gắn volume bền trên Render |
+| Frontend gọi API ra 404 | Rewrite sai thứ tự hoặc sai URL backend | Kiểm `frontend/vercel.json` |
+| `[object Object]` khi đăng nhập sai | Frontend là bundle cũ | Redeploy frontend |
+
+---
+
+## 9. Bảo mật khi triển khai
+
+| Việc | Trạng thái |
+|---|---|
+| Container không chạy bằng root | ✅ `USER user` trong Dockerfile |
+| `.env` không lọt vào repo | ✅ `.gitignore` |
+| Lỗi nội bộ không lộ ra client | ✅ handler ở `src/main.py`, chi tiết chỉ vào log |
+| `JWT_SECRET` đã đổi khỏi `change-me` | ⚠️ **phải kiểm thủ công** |
+| `ENABLE_DEMO_AUTH=false` ở production | ⚠️ **phải kiểm thủ công** |
+| Tệp tải lên ở vùng riêng | ✅ `storage_root` |
+| Hạn mức tải lên | ✅ 10 tệp · 10 MB/tệp |
+
+> **Xoay khoá định kỳ.** Nếu một API key từng bị in ra log, terminal, hoặc chia sẻ trong chat — coi như đã lộ và **thu hồi ngay**, kể cả khi tin rằng không ai khác thấy. Thu hồi rẻ hơn nhiều so với điều tra xem ai đã dùng.

@@ -292,6 +292,10 @@ planning/        # TEAM_PLAN.md — kế hoạch 3 người, sprint, contract fr
 | `ARCHITECTURE.md` | Kiến trúc, data flow, data model, bản đồ tái sử dụng từ C2-App-108 |
 | `AGENTS.md` | Quy tắc cho AI coding agent |
 | `planning/TEAM_PLAN.md` | Phân công 3 dev, sprint plan, integration checkpoint |
+| `docs/GUARDRAILS.md` | 7 lớp an toàn & grounding, kèm vị trí code và bằng chứng test |
+| `docs/Agent-Features.md` | Kiến trúc agent: đồ thị LangGraph, 5 node, những chỗ cố tình không dùng LLM |
+| `docs/EVAL-METRICS.md` | Chỉ số đánh giá + baseline đo thật (nhận diện thủ tục, chốt nhầm, test) |
+| `docs/API-Reference.md` | 75 endpoint, sinh từ router thật |
 | `docs/business-viability-pilot.md` | Khách hàng mục tiêu, mô hình kinh doanh, kinh tế đơn vị (tính từ hệ thống thật), lộ trình pilot 3 giai đoạn |
 | `docs/procedure-sync.md` | Quy trình đồng bộ catalog thủ tục với nguồn công bố |
 | `docs/hackathon-chat-experience.md` | Thiết kế trải nghiệm chat |

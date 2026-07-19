@@ -131,6 +131,13 @@ python scripts/eval_identify.py                            # chốt nhầm phả
 | 6 | `negative_keywords` loại các thủ tục dễ nhầm | Tránh hút nhầm truy vấn |
 | 7 | Chạy `eval_identify.py` — chốt nhầm = 0 | Cổng CI |
 | 8 | **Cán bộ chuyên môn ký duyệt** | Điều kiện bắt buộc của pilot Giai đoạn 1 |
+| 9 | **Khởi động lại tiến trình** sau khi sửa catalog | Catalog cache vĩnh viễn — xem cảnh báo dưới |
+
+> ### ⚠️ Sửa catalog xong phải restart
+>
+> `load_catalog()` (`catalog.py:19`) cache vào `_CACHE` và không nạp lại trong vòng đời tiến trình. Sửa JSON trên đĩa **không** ảnh hưởng tới server đang chạy.
+>
+> Đã xảy ra thật: sau khi gỡ hai văn bản pháp luật không tồn tại khỏi catalog, server chạy từ trước vẫn phục vụ chúng nhiều giờ. Kiểm nhanh: `curl .../api/v1/procedures/<id>` rồi so với file trên đĩa. Chi tiết: `docs/Deployment-Guide.md` §8.
 
 ---
 

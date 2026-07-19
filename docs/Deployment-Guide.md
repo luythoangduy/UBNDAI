@@ -185,6 +185,24 @@ Bước 3 là bước quan trọng nhất — nó đi qua toàn bộ đồ thị
 | Tệp tải lên mất sau restart | `STORAGE_ROOT` trỏ vào ổ đĩa tạm | Gắn volume bền trên Render |
 | Frontend gọi API ra 404 | Rewrite sai thứ tự hoặc sai URL backend | Kiểm `frontend/vercel.json` |
 | `[object Object]` khi đăng nhập sai | Frontend là bundle cũ | Redeploy frontend |
+| **Sửa `data/procedures/*.json` rồi mà API vẫn trả nội dung cũ** | **Catalog cache theo vòng đời tiến trình** — xem cảnh báo dưới | **Khởi động lại tiến trình** |
+
+> ### ⚠️ Catalog chỉ nạp một lần cho mỗi tiến trình
+>
+> `load_catalog()` (`src/services/catalog.py:19`) cache vào `_CACHE` và **không bao giờ nạp lại**. Sửa file JSON trên đĩa **không** có hiệu lực với tiến trình đang chạy.
+>
+> Đây không phải phiền toái nhỏ. Đã xảy ra thật: sau khi gỡ *"Luật Xây dựng số 135/2025/QH15"* và *"Nghị định 217/2026/NĐ-CP"* — **hai văn bản không tồn tại** — khỏi catalog, server chạy từ trước vẫn tiếp tục phục vụ chúng cho người dùng suốt nhiều giờ. File đã đúng, API vẫn sai.
+>
+> Hệ quả vận hành: **thu hồi một trích dẫn pháp lý sai không có hiệu lực cho tới khi khởi động lại tiến trình.** Với hệ thống hướng dẫn thủ tục hành chính, đó là khoảng trống cần biết rõ.
+>
+> **Cách kiểm bất cứ lúc nào** — so nội dung API đang phục vụ với file trên đĩa:
+>
+> ```bash
+> curl -s http://127.0.0.1:8000/api/v1/procedures/giay_phep_xay_dung | grep -o "217/2026" && echo "SERVER ĐANG CHẠY CATALOG CŨ"
+> python -c "import json;print(json.load(open('data/procedures/giay_phep_xay_dung.json',encoding='utf-8'))['legal_basis'])"
+> ```
+>
+> Trên Render, mỗi lần deploy là một tiến trình mới nên catalog luôn tươi. Rủi ro nằm ở **máy dev chạy server lâu ngày** và ở bất kỳ môi trường nào cập nhật catalog mà không restart.
 
 ---
 

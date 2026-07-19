@@ -10,6 +10,7 @@ khi engine là PaddleOCR/Google Vision (chỉ trả raw text).
 
 from __future__ import annotations
 
+import re
 import unicodedata
 
 # (keyword đã bỏ dấu, trọng số). Tiêu đề chuẩn nhà nước = trọng số cao;
@@ -135,10 +136,19 @@ _MAX_CONFIDENCE = 0.98
 
 
 def _fold(text: str) -> str:
-    """Bỏ dấu + lowercase để so khớp bền với OCR thiếu dấu/sai dấu."""
+    """Bỏ dấu + lowercase + gộp khoảng trắng để so khớp bền với OCR.
+
+    Gộp khoảng trắng là bắt buộc, không phải làm cho đẹp: tiêu đề giấy tờ nhà nước
+    hầu như luôn xuống dòng giữa chừng. Sổ đỏ in "GIẤY CHỨNG NHẬN" trên một dòng
+    rồi "QUYỀN SỬ DỤNG ĐẤT, ..." ở dòng dưới, nên keyword liền mạch
+    "giay chung nhan quyen su dung dat" không khớp được nếu giữ nguyên "\\n".
+    Khi đó điểm rơi về các keyword phụ và giấy tờ bị phân loại nhầm — sổ đỏ từng
+    bị nhận thành "cccd" chỉ vì trong đó có dòng "CCCD: ..." của chủ đất.
+    """
     normalized = unicodedata.normalize("NFD", text or "")
     stripped = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    return stripped.replace("đ", "d").replace("Đ", "D").casefold()
+    folded = stripped.replace("đ", "d").replace("Đ", "D").casefold()
+    return re.sub(r"\s+", " ", folded)
 
 
 def _keyword_score(folded: str, keywords: list[tuple[str, float]]) -> float:

@@ -125,3 +125,32 @@ def test_procedure_specific_phrasing_is_not_encoded_in_fallback_parser():
 def test_common_age_phrases_are_parsed(message):
     result = extract_answers(message, _khai_sinh().clarifying_questions)
     assert result["so_ngay_tu_khi_sinh"] == 5
+
+
+@pytest.mark.asyncio
+async def test_stale_case_note_is_refreshed_from_catalog():
+    """Sửa catalog phải lan tới hồ sơ đang mở, không chỉ hồ sơ mới.
+
+    Hồi quy lỗi thật: sau khi gỡ "Nghị định 217/2026/NĐ-CP" — văn bản KHÔNG tồn
+    tại — khỏi catalog, các case tạo trước đó vẫn hiển thị nó, vì note được sao
+    chép vào case lúc tạo và không bao giờ đọc lại. Với hệ thống hướng dẫn thủ
+    tục hành chính, đó nghĩa là nội dung đã bị thu hồi vẫn tới tay người dân.
+    """
+    from src.agents.nodes import checklist as checklist_node
+    from src.models.cases import ChecklistItem
+
+    stale = ChecklistItem(
+        requirement_code="don_de_nghi_cap_phep",
+        status="missing",
+        note="Theo Mẫu số 01 Phụ lục II, Nghị định 217/2026/NĐ-CP",
+    )
+    state = await checklist_node.run(
+        {
+            "selected_procedure_id": "giay_phep_xay_dung",
+            "messages": [],
+            "answers": {},
+            "checklist": [stale.model_dump()],
+        }
+    )
+    reply = state.get("reply", "")
+    assert "217/2026" not in reply, "note cũ trong case vẫn lọt ra ngoài"

@@ -1,3 +1,10 @@
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -18,6 +25,8 @@ COPY --chown=user:user alembic.ini ./
 COPY --chown=user:user scripts/index_procedures.py ./scripts/index_procedures.py
 COPY --chown=user:user data ./data
 COPY --chown=user:user rules ./rules
+
+COPY --from=frontend-builder --chown=user:user /app/frontend/dist ./frontend/dist
 
 EXPOSE 7860
 

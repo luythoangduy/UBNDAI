@@ -26,6 +26,8 @@ frontend/test-results/
 .coverage
 .ruff_cache/
 secrets/
+# File khoá tạm của Office khi đang mở tài liệu — không phải nội dung dự án.
+~$*
 
 # Claude Code local settings / AI session logs
 .claude/settings.local.json

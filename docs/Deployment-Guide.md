@@ -6,39 +6,59 @@
 
 ## 1. Kiến trúc triển khai
 
+Có **hai đường phục vụ frontend**, cùng tồn tại. Biết rõ đang dùng đường nào là điều kiện để gỡ lỗi 404.
+
 ```
-        Người dùng
-            │
-            ▼
-   ┌─────────────────┐
-   │     Vercel      │   Frontend (React + Vite, static)
-   │  ubndai.vercel  │   rewrites /api/* ──┐
-   │      .app       │   rewrites /*  → index.html (SPA)
-   └─────────────────┘                     │
-                                           ▼
-                              ┌──────────────────────────┐
-                              │         Render           │  Backend FastAPI
-                              │ c3-tthc-assistant        │  uvicorn, Docker
-                              │      .onrender.com       │
-                              └────────────┬─────────────┘
-                                           │
-                        ┌──────────────────┼──────────────────┐
-                        ▼                  ▼                  ▼
-                  PostgreSQL          Chroma + BM25      LLM API
-                  (Alembic)         (tuỳ chọn, có         (Anthropic /
-                                     fallback)             OpenAI cho OCR)
+                        Người dùng
+                    ┌───────┴────────┐
+                    ▼                ▼
+        ┌───────────────────┐   (vào thẳng Render)
+        │      Vercel       │        │
+        │  ubndai.vercel.app│        │
+        │  rewrites /api/*  │        │
+        │  rewrites /* →    │        │
+        │     index.html    │        │
+        └─────────┬─────────┘        │
+                  └──────────┬───────┘
+                             ▼
+              ┌──────────────────────────────┐
+              │            Render            │  Docker multi-stage:
+              │    c3-tthc-assistant         │   1. node:20 build frontend
+              │      .onrender.com           │   2. python:3.11-slim + dist
+              │                              │
+              │  /api/v1/*   → FastAPI       │
+              │  /citizen    → SPA (dist)    │
+              │  /officer    → SPA (dist)    │
+              │  /assets     → static        │
+              └──────────────┬───────────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          ▼                  ▼                  ▼
+    PostgreSQL          Chroma + BM25       LLM API
+    (Alembic)         (tuỳ chọn, có       (Anthropic ·
+                       fallback)           OpenAI cho OCR)
 ```
 
-Frontend không gọi thẳng backend — nó gọi `/api/*` cùng origin, Vercel rewrite sang Render (`frontend/vercel.json`). Nhờ vậy không có CORS và không lộ URL backend trong mã nguồn frontend.
+**Đường 1 — qua Vercel.** Frontend không gọi thẳng backend; nó gọi `/api/*` cùng origin và Vercel rewrite sang Render (`frontend/vercel.json`). Không có CORS, không lộ URL backend trong bundle.
+
+**Đường 2 — Render phục vụ cả hai.** Từ commit `5b3b2b6`, `Dockerfile` là multi-stage: stage `node:20-alpine` build `frontend/`, stage Python copy `frontend/dist` vào image. `src/main.py:83-99` mount `dist` qua `SPAStaticFiles` tại `/citizen`, `/officer` và `/assets` — chỉ mount khi thư mục tồn tại, nên chạy backend không có `dist` vẫn không lỗi.
+
+> **Vì sao có đường 2.** Nó ra đời để sửa lỗi 404. Hệ quả đáng giá: container tự chứa, mở thẳng URL Render là dùng được cả hai cổng mà không cần Vercel. Với môi trường cơ quan nhà nước chỉ triển khai nội bộ một dịch vụ, đây là đường nên dùng.
+>
+> Đánh đổi: build image lâu hơn (phải `npm ci` + `npm run build`), và **bundle frontend bị đóng băng vào image** — sửa frontend thì phải build lại image, không chỉ redeploy Vercel.
 
 ---
 
 ## 2. Backend — Render (Docker)
 
-`Dockerfile` ở gốc repo. Điểm đáng chú ý:
+`Dockerfile` ở gốc repo, **multi-stage**. Điểm đáng chú ý:
 
 ```dockerfile
-FROM python:3.11-slim
+FROM node:20-alpine AS frontend-builder     # stage 1: build SPA
+WORKDIR /app/frontend
+RUN npm ci && npm run build
+
+FROM python:3.11-slim                        # stage 2: runtime
 RUN useradd --create-home --uid 1000 user
 USER user                              # không chạy bằng root
 EXPOSE 7860
@@ -48,6 +68,8 @@ CMD ["sh", "-c", "alembic -c alembic.ini upgrade head \
   && exec uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-7860} \
       --proxy-headers --forwarded-allow-ips '*'"]
 ```
+
+`COPY --from=frontend-builder /app/frontend/dist ./frontend/dist` đưa bundle đã build sang image runtime. Ảnh cuối **không** chứa Node hay `node_modules`.
 
 Ba tính chất quan trọng của lệnh khởi động:
 
@@ -184,6 +206,8 @@ Bước 3 là bước quan trọng nhất — nó đi qua toàn bộ đồ thị
 | "Nguồn live chưa phản hồi" | Cổng DVC lỗi/chặn mạng | Tự hồi phục sau TTL 120 s. Nếu kéo dài, kiểm `OFFICIAL_SOURCE_LIVE_FETCH` |
 | Tệp tải lên mất sau restart | `STORAGE_ROOT` trỏ vào ổ đĩa tạm | Gắn volume bền trên Render |
 | Frontend gọi API ra 404 | Rewrite sai thứ tự hoặc sai URL backend | Kiểm `frontend/vercel.json` |
+| Mở `/citizen` trên Render ra 404 | Image build thiếu `frontend/dist` | Kiểm log build stage `frontend-builder`; `main.py:84` chỉ mount khi thư mục tồn tại nên thiếu là im lặng bỏ qua |
+| Sửa frontend rồi mà Render vẫn bản cũ | Bundle đóng băng trong image | Phải **build lại image**, redeploy không đủ |
 | `[object Object]` khi đăng nhập sai | Frontend là bundle cũ | Redeploy frontend |
 | **Sửa `data/procedures/*.json` rồi mà API vẫn trả nội dung cũ** | **Catalog cache theo vòng đời tiến trình** — xem cảnh báo dưới | **Khởi động lại tiến trình** |
 

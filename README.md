@@ -373,3 +373,7 @@ For local development, Vite proxies `/api` to port `8001` in this checkout so it
 can coexist with an older backend process that may still hold port `8000`.
 Start the current backend with `python -m uvicorn src.main:app --host 127.0.0.1
 --port 8001`, then open `http://127.0.0.1:5173/officer/`.
+
+The frontend hides sample credentials by default. For an explicit demo-only
+environment, copy `frontend/.env.example` to `frontend/.env.local` and set
+`VITE_SHOW_DEMO_CREDENTIALS=true`.

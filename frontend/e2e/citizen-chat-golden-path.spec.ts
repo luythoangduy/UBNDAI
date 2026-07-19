@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { mockCitizenChatApi } from './support/citizen-chat-api';
 
-test('citizen completes the hackathon chat golden path without creating a duplicate case', async ({ page }) => {
+test('citizen completes the hackathon chat golden path without creating a duplicate case', async ({ page }, testInfo) => {
   const pageErrors: Error[] = [];
   page.on('pageerror', error => pageErrors.push(error));
+  await page.addInitScript(theme => localStorage.setItem('ubndai.theme', theme), testInfo.project.name === 'mobile' ? 'dark' : 'light');
   const apiState = await mockCitizenChatApi(page);
 
   await page.goto('/chat');
@@ -16,6 +17,7 @@ test('citizen completes the hackathon chat golden path without creating a duplic
     page.waitForEvent('pageerror').then(error => Promise.reject(error)),
   ]);
   expect(pageErrors, 'the chat page must not raise runtime errors').toEqual([]);
+  await page.getByRole('button', { name: 'Lịch sử', exact: true }).click();
   await expect(page.locator('.history-item', { hasText: 'Đăng ký khai sinh' })).toBeVisible();
 
   // Prove that “new chat” clears a previously selected case, not merely the transcript.
@@ -41,12 +43,14 @@ test('citizen completes the hackathon chat golden path without creating a duplic
 
   await expect(page.getByText('Checklist cá nhân hóa đã sẵn sàng: 2 giấy tờ cần chuẩn bị.')).toBeVisible();
   await expect(page.getByText('Đã kiểm chứng nguồn')).toBeVisible();
+  await expect(page).toHaveScreenshot('citizen-chat-checklist.png', { animations: 'disabled' });
   expect(apiState.chatRequests[1]).toMatchObject({ case_id: 'case-chat-001', message: 'Có' });
 
   await page.getByRole('button', { name: /Bắt đầu điền tờ khai/ }).click();
   await expect(page.getByRole('complementary', { name: 'Không gian sinh văn bản' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Tờ khai đăng ký khai sinh' })).toBeVisible();
   await expect(page.getByText('Đã mở biểu mẫu. Bạn có thể bổ sung dữ liệu rồi sinh bản nháp để rà soát.')).toBeVisible();
+  await expect(page).toHaveScreenshot('citizen-document-workspace.png', { animations: 'disabled' });
 
   expect(apiState.createCaseRequests, 'form handoff must reuse the case created by chat').toHaveLength(0);
 });

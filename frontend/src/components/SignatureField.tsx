@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, PenLine, RotateCcw, X } from 'lucide-react';
+import { ArrowCounterClockwise as RotateCcw, Check, PenNib as PenLine, X } from '@phosphor-icons/react';
 import { isSignatureImage } from '../signature';
 
 type SignatureFieldProps = {

@@ -1,0 +1,152 @@
+.ui-button,
+.theme-selector__trigger,
+.theme-selector__menu button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.ui-button:hover:not(:disabled),
+.theme-selector__trigger:hover,
+.theme-selector__menu button:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-subtle);
+}
+
+.ui-button:active:not(:disabled),
+.theme-selector__trigger:active,
+.theme-selector__menu button:active {
+  transform: translateY(1px);
+}
+
+.ui-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ui-button--primary {
+  color: var(--color-primary-contrast);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  border-color: var(--color-primary-hover);
+  background: var(--color-primary-hover);
+}
+
+.ui-input,
+.ui-select,
+.ui-textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.ui-input::placeholder,
+.ui-textarea::placeholder {
+  color: var(--color-text-subtle);
+  opacity: 1;
+}
+
+.ui-input[aria-invalid='true'],
+.ui-select[aria-invalid='true'],
+.ui-textarea[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.ui-status {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.ui-alert {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.ui-alert--error { color: var(--color-danger); border-color: var(--color-danger); background: var(--color-danger-surface); }
+.ui-alert--success { color: var(--color-success); border-color: var(--color-success); background: var(--color-success-surface); }
+.ui-alert--warning { color: var(--color-warning); border-color: var(--color-warning); background: var(--color-warning-surface); }
+.ui-alert--info { color: var(--color-info); border-color: var(--color-info); background: var(--color-info-surface); }
+
+.theme-selector {
+  position: relative;
+  display: inline-flex;
+}
+
+.theme-selector__trigger {
+  white-space: nowrap;
+}
+
+.theme-selector__menu {
+  position: absolute;
+  z-index: var(--z-popover);
+  top: calc(100% + var(--space-2));
+  right: 0;
+  width: max-content;
+  min-width: 190px;
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.theme-selector__menu button {
+  width: 100%;
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+}
+
+.theme-selector__menu button[aria-checked='true'] {
+  color: var(--color-primary);
+  background: var(--color-info-surface);
+}
+
+.ui-skeleton {
+  border-radius: var(--radius-control);
+  background: linear-gradient(90deg, var(--color-bg-subtle) 25%, var(--color-border) 50%, var(--color-bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: ui-skeleton 1.5s ease-in-out infinite;
+}
+
+@keyframes ui-skeleton {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton { animation: none; }
+}

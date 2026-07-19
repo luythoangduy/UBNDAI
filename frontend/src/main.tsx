@@ -705,9 +705,15 @@ function ChatPortal() {
   const continueWithReviewedImage = (reviewedFile: File, review: ImageFormatReview) => {
     setFile(reviewedFile);
     setReviewedImage({ file: reviewedFile, review });
-    setProcedureForImageOpen(false);
     setPendingOcrFile(reviewedFile);
     setImageReviewOpen(false);
+    
+    // Auto-advance so the user doesn't feel the flow is "blocked"
+    if (selectedTemplate) {
+      setDraftPanelOpen(true);
+    } else {
+      setProcedureForImageOpen(true);
+    }
   };
 
   return (

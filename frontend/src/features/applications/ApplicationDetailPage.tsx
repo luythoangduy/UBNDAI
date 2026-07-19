@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api';
-import type { ApplicationDetail } from '../../application-management-types';
+import { applicationStatusLabels, type ApplicationDetail } from '../../application-management-types';
 import type { CaseDetail } from '../../types';
 import { ReviewWorkspace } from '../officer-review/ReviewWorkspace';
 
@@ -28,8 +28,8 @@ export default function ApplicationDetailPage() {
   const app = management.data;
   return <>
     <header className="officer-topbar">
-      <div><Link to="/officer/applications">Hồ sơ</Link><h1>{app.application_code}</h1><p>{app.application_type_name}</p></div>
-      <span className="am-status am-status-warning">{app.status}</span>
+      <div><Link className="am-breadcrumb" to="/officer/applications">Hồ sơ</Link><h1>{app.application_code}</h1><p>{app.application_type_name}</p></div>
+      <span className="am-status am-status-warning">{applicationStatusLabels[app.status] ?? app.status}</span>
     </header>
     <div className="officer-container am-detail-container am-legacy-embedded">
       <ReviewWorkspace
@@ -39,6 +39,6 @@ export default function ApplicationDetailPage() {
         onError={error => setToast(error instanceof Error ? error.message : 'Không thể tải lại hồ sơ.')}
       />
     </div>
-    {toast && <div className="am-toast" role="status">{toast}</div>}
+    {toast && <div className="am-toast am-toast-error" role="alert">{toast}</div>}
   </>;
 }

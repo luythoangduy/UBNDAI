@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MessageCircle, X, FileText, Download, Check, Bold, Italic, Strikethrough, List as ListIcon, Printer, ImageUp, Menu, SquarePen, ArrowUp } from 'lucide-react';
+import { ArrowSquareOut, ArrowUp, ChatCircle as MessageCircle, Check, CheckCircle, ClipboardText, Clock, DownloadSimple as Download, FileMagnifyingGlass, FileText, Image as ImageUp, List as Menu, ListBullets as ListIcon, MagnifyingGlass, NotePencil as SquarePen, Printer, Scales, Sparkle, TextB as Bold, TextItalic as Italic, TextStrikethrough as Strikethrough, Warning, X } from '@phosphor-icons/react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { api, apiBlob, ApiError, idempotency, setToken, token } from './api';
@@ -10,25 +10,28 @@ import { diffDraftBlocks, type DiffBlock } from './draft-diff';
 import { buildCaseQuery, clarificationAnswerEntries, formatBytes, formatDate, formatSubmissionValue, humanizeStatus, visibleSubmissionEntries } from './utils';
 import { draftValuesFromCase, isMissingAnswer, validateClarifyingAnswers, type ClarifyingAnswers } from './citizen-form';
 import { SignatureField } from './components/SignatureField';
+import { PortalShell } from './components/PortalShell';
+import { ThemeSelector } from './components/ThemeSelector';
+import { ThemeProvider } from './theme/ThemeProvider';
 import { composeSignedDocumentHtml } from './signature';
 import './styles.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/primitives.css';
+import './styles/citizen-premium.css';
 import './styles/application-management.css';
-import { ApplicationManagementRouter } from './app/AppRouter';
 import { isApplicationManagementPath, legacyReviewCaseId } from './application-management-routing';
-import { ReviewWorkspace as ManagedReviewWorkspace } from './features/officer-review/ReviewWorkspace';
+
+const ApplicationManagementRouter = React.lazy(() => import('./app/AppRouter').then(module => ({ default: module.ApplicationManagementRouter })));
+const ManagedReviewWorkspace = React.lazy(() => import('./features/officer-review/ReviewWorkspace').then(module => ({ default: module.ReviewWorkspace })));
 
 const procedureNames: Record<string, string> = {};
 const rememberProcedureNames = (items: ProcedureSummary[]) => items.forEach(item => { procedureNames[item.id] = item.name; });
 const activeFindingStatuses = new Set<Finding['status']>(['open', 'accepted', 'escalated']);
 const isActiveFinding = (finding: Finding) => activeFindingStatuses.has(finding.status);
 
-function Brand() {
-  return <a className="brand" href="/citizen" aria-label="Trang chủ UBNDAI"><span className="brand-mark">AI</span><span><strong>UBNDAI</strong><small>Trợ lý thủ tục hành chính</small></span></a>;
-}
-
 function Shell({ children, role }: { children: React.ReactNode; role: PortalRole }) {
-  const path = location.pathname;
-  return <div className="app-shell"><header className="topbar"><Brand/><nav aria-label="Điều hướng chính"><a className={!path.startsWith('/chat') && role === 'citizen' ? 'active' : ''} href="/citizen">Dành cho công dân</a><a className={path.startsWith('/chat') ? 'active' : ''} href="/chat">Trợ lý AI</a><a className={role === 'officer' ? 'active' : ''} href="/officer">Cổng cán bộ</a></nav><span className="secure-label">Kết nối bảo mật</span></header>{children}<footer><span>© 2026 UBNDAI</span><span>Hệ thống hỗ trợ tiền kiểm, không thay thế quyết định của cơ quan có thẩm quyền.</span></footer></div>;
+  return <PortalShell role={role} themeControl={<ThemeSelector compact />}>{children}</PortalShell>;
 }
 
 function Login({ role, onSuccess }: { role: PortalRole; onSuccess: () => void }) {
@@ -47,7 +50,32 @@ function Login({ role, onSuccess }: { role: PortalRole; onSuccess: () => void })
       setError(apiError.status === 401 ? 'Tên đăng nhập hoặc mật khẩu không đúng.' : apiError.message || 'Không thể đăng nhập, vui lòng thử lại.');
     } finally { setBusy(false); }
   };
-  return <Shell role={role}><main className="login-page"><section className="login-story"><span className="eyebrow">DỊCH VỤ CÔNG THÔNG MINH</span><h1>{role === 'citizen' ? 'Chuẩn bị hồ sơ đúng ngay từ lần đầu.' : 'Một không gian làm việc, toàn bộ căn cứ cần thiết.'}</h1><p>{role === 'citizen' ? 'Được hướng dẫn từng bước, kiểm tra giấy tờ và theo dõi hồ sơ minh bạch.' : 'Tiếp nhận, đối chiếu OCR, xử lý cảnh báo và lưu vết mọi quyết định.'}</p><div className="trust-row"><span>✓ Dữ liệu riêng tư</span><span>✓ Có căn cứ</span><span>✓ Có người kiểm tra</span></div></section><form className="login-card" onSubmit={submit}><div className="login-icon">{role === 'citizen' ? 'CN' : 'CB'}</div><span className="eyebrow">{role === 'citizen' ? 'CỔNG CÔNG DÂN' : 'DÀNH CHO CÁN BỘ'}</span><h2>Đăng nhập hệ thống</h2><p className="muted">Sử dụng tài khoản được cấp để tiếp tục.</p><label>Tên đăng nhập<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} /></label><label>Mật khẩu<input autoComplete="current-password" type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Nhập mật khẩu" /></label>{error && <div className="alert error" role="alert">{error}</div>}<button className="primary wide" disabled={busy}>{busy ? 'Đang xác thực…' : 'Đăng nhập'}</button><small className="demo-hint">Tài khoản demo dùng mật khẩu <code>ChangeMe123!</code></small></form></main></Shell>;
+  const showDemoCredentials = import.meta.env.VITE_SHOW_DEMO_CREDENTIALS === 'true';
+  return <Shell role={role}>
+    <main id="main-content" className="login-page">
+      <section className="login-story" aria-labelledby="login-story-title">
+        <span className="eyebrow">Dịch vụ công thông minh</span>
+        <h1 id="login-story-title">{role === 'citizen' ? 'Chuẩn bị hồ sơ đúng ngay từ lần đầu.' : 'Một không gian làm việc, toàn bộ căn cứ cần thiết.'}</h1>
+        <p>{role === 'citizen' ? 'Được hướng dẫn từng bước, kiểm tra giấy tờ và theo dõi hồ sơ minh bạch.' : 'Tiếp nhận, đối chiếu OCR, xử lý cảnh báo và lưu vết mọi quyết định.'}</p>
+        <div className="trust-row" aria-label="Cam kết dịch vụ">
+          <span><CheckCircle aria-hidden="true" />Dữ liệu riêng tư</span>
+          <span><CheckCircle aria-hidden="true" />Có căn cứ</span>
+          <span><CheckCircle aria-hidden="true" />Có người kiểm tra</span>
+        </div>
+      </section>
+      <form className="login-card" onSubmit={submit} aria-labelledby="login-title">
+        <div className="login-icon" aria-hidden="true">{role === 'citizen' ? 'CN' : 'CB'}</div>
+        <span className="eyebrow">{role === 'citizen' ? 'Cổng công dân' : 'Dành cho cán bộ'}</span>
+        <h2 id="login-title">Đăng nhập hệ thống</h2>
+        <p className="muted">Sử dụng tài khoản được cấp để tiếp tục.</p>
+        <label>Tên đăng nhập<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} /></label>
+        <label>Mật khẩu<input autoComplete="current-password" type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Nhập mật khẩu" /></label>
+        {error && <div className="alert error" role="alert">{error}</div>}
+        <button className="primary wide" disabled={busy}>{busy ? 'Đang xác thực…' : 'Đăng nhập'}</button>
+        {showDemoCredentials && <small className="demo-hint">Tài khoản demo dùng mật khẩu <code>ChangeMe123!</code></small>}
+      </form>
+    </main>
+  </Shell>;
 }
 
 type ReviewedImage = { file: File; review: ImageFormatReview };
@@ -158,7 +186,15 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
     else if (action.kind === 'start_form') onStartProcedure?.(action.value);
     else window.open(action.value, '_blank', 'noopener,noreferrer');
   };
-  const iconFor = (icon: ChatAction['icon']) => ({ search: '⌕', checklist: '✓', clock: '◷', template: '▤', form: '✦', source: '↗' }[icon]);
+  const iconFor = (icon: ChatAction['icon']) => {
+    const props = { size: 20, weight: 'bold' as const, 'aria-hidden': true };
+    if (icon === 'search') return <MagnifyingGlass {...props}/>;
+    if (icon === 'checklist') return <ClipboardText {...props}/>;
+    if (icon === 'clock') return <Clock {...props}/>;
+    if (icon === 'template') return <FileText {...props}/>;
+    if (icon === 'form') return <Sparkle {...props}/>;
+    return <ArrowSquareOut {...props}/>;
+  };
   const chooseTemplate = (response: ChatMessage['response'], templateId: string) => {
     if (response?.procedure_id) onSelectTemplate?.(response.procedure_id, templateId);
   };
@@ -176,7 +212,7 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
     <div className="chat-dock open">
       <section className="assistant-card docked" aria-label="Trợ lý hồ sơ AI">
         <div className="panel-heading">
-          <h2>Bạn cần làm thủ tục gì?</h2>
+          <h2>Chuẩn bị hồ sơ bằng một cuộc trò chuyện</h2>
           <span className="online"><i/>Đang trực tuyến</span>
         </div>
           <div className="chat-log" ref={logRef} aria-live="polite" onScroll={event => { const element = event.currentTarget; followChatRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }}>
@@ -198,7 +234,7 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
         {!!latestEvidence?.length && (
           <aside className="evidence-rail" aria-label="Nguồn đã kiểm chứng cho câu trả lời mới nhất">
             <div className="evidence-rail-head">
-              <b>Đã kiểm chứng nguồn</b>
+              <b>Căn cứ cho câu trả lời</b>
               <small>Căn cứ của câu trả lời mới nhất</small>
             </div>
             <div className="evidence-rail-body">
@@ -212,7 +248,7 @@ function CitizenAssistant({ activeCaseId, resetKey, onCaseChanged, onChecklist, 
                     target={step.source_url ? '_blank' : undefined}
                     rel="noreferrer"
                   >
-                    <i aria-hidden="true">{verified ? '✓' : '!'}</i>
+                    <i aria-hidden="true">{verified ? <Check size={14} weight="bold"/> : <Warning size={14} weight="fill"/>}</i>
                     <span>
                       <b>{step.label}</b>
                       <small>{step.detail}</small>
@@ -398,8 +434,8 @@ function WordWorkspace({ content, fileName, signature, onSignatureChange, signer
       </div>
       {source && (
         <div className="word-source-bar">
-          <span>⚖ {source.label}</span>
-          <span className="word-source-links">{source.links.map(link => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.title} ↗</a>)}</span>
+          <span><Scales size={15} weight="bold" aria-hidden="true"/> {source.label}</span>
+          <span className="word-source-links">{source.links.map(link => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.title} <ArrowSquareOut size={13} aria-hidden="true"/></a>)}</span>
         </div>
       )}
       <div className="word-ruler">{Array.from({ length: 17 }, (_, index) => <i key={index}/>)}</div>
@@ -718,12 +754,12 @@ function ChatPortal() {
 
   return (
     <Shell role="citizen">
-      <main className="citizen-page chat-first-page">
+      <main id="main-content" className="citizen-page chat-first-page">
         <div className="chat-topline">
-          <button type="button" className="history-toggle" aria-expanded={historyOpen} aria-controls="chat-history-drawer" onClick={() => setHistoryOpen(open => !open)}>
+          <button type="button" className="history-toggle" aria-label="Lịch sử" aria-expanded={historyOpen} aria-controls="chat-history-drawer" onClick={() => setHistoryOpen(open => !open)}>
             <Menu size={17}/><span>Lịch sử</span>
           </button>
-          <button type="button" className="topline-new" onClick={() => { setHistoryOpen(false); startNewConversation(); }}><SquarePen size={15}/><span>Cuộc trò chuyện mới</span></button>
+          <button type="button" className="topline-new" aria-label="Cuộc trò chuyện mới" onClick={() => { setHistoryOpen(false); startNewConversation(); }}><SquarePen size={15}/><span>Cuộc trò chuyện mới</span></button>
           <h1>Trợ lý thủ tục hành chính</h1>
           <div className="chat-first-meta"><span><i/>Nguồn chính thức</span><button className="ghost compact" onClick={() => { setToken('', 'citizen'); setLogged(false); }}>Đăng xuất</button></div>
         </div>
@@ -990,7 +1026,7 @@ function CitizenPortal() {
   };
   return (
     <Shell role="citizen">
-      <main className="citizen-page document-centric">
+      <main id="main-content" className="citizen-page document-centric">
         <div className="page-title">
           <div>
             <span className="eyebrow">CỔNG DỊCH VỤ CÔNG</span>
@@ -1205,7 +1241,7 @@ function CitizenPortal() {
 }
 
 function Status({ value }: { value: string }) { return <span className={`status status-${value}`}>{humanizeStatus(value)}</span>; }
-function Empty({ title, text }: { title: string; text: string }) { return <div className="empty-state"><span>◇</span><h3>{title}</h3><p>{text}</p></div>; }
+function Empty({ title, text }: { title: string; text: string }) { return <div className="empty-state"><FileMagnifyingGlass size={32} weight="duotone" aria-hidden="true"/><h3>{title}</h3><p>{text}</p></div>; }
 
 function OfficerPortal() {
   const [logged, setLogged] = useState(!!token()); const [cases, setCases] = useState<CaseRecord[]>([]); const [summary, setSummary] = useState<DashboardSummary>(); const [selected, setSelected] = useState<CaseDetail>();
@@ -1271,6 +1307,11 @@ function FindingsPanel({ findings, busy, reasons, setReasons, onDecide }: { find
 
 function App() {
   const isManagementRoute = isApplicationManagementPath(location.pathname);
-  return isManagementRoute ? <ApplicationManagementRouter/> : location.pathname.startsWith('/chat') ? <ChatPortal/> : location.pathname.startsWith('/officer') ? <OfficerPortal/> : <CitizenPortal/>;
+  if (isManagementRoute || location.pathname.startsWith('/officer')) {
+    return <React.Suspense fallback={<div className="route-loading" role="status">Đang tải không gian cán bộ…</div>}>
+      {isManagementRoute ? <ApplicationManagementRouter/> : <OfficerPortal/>}
+    </React.Suspense>;
+  }
+  return location.pathname.startsWith('/chat') ? <ChatPortal/> : <CitizenPortal/>;
 }
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+createRoot(document.getElementById('root')!).render(<React.StrictMode><ThemeProvider><App/></ThemeProvider></React.StrictMode>);

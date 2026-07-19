@@ -1,7 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CaseDetail } from '../../types';
 import { ReviewWorkspace } from './ReviewWorkspace';
+
+afterEach(cleanup);
 
 vi.mock('../../api', () => ({
   api: vi.fn(async () => []),
@@ -45,6 +47,18 @@ describe('ReviewWorkspace', () => {
     expect(screen.getByText('UBNDAI-2026-000001')).toBeInTheDocument();
     expect(screen.getByText('Nguyễn Minh An')).toBeInTheDocument();
     expect(document.querySelectorAll('.review-columns > .review-panel')).toHaveLength(3);
+    await waitFor(() => expect(screen.getByAltText('giay-chung-sinh.svg')).toBeInTheDocument());
+  });
+
+  it('names each review region and exposes the process progress', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    render(<ReviewWorkspace detail={detail} onRefresh={vi.fn()} onError={vi.fn()} />);
+
+    expect(screen.getByRole('region', { name: 'Tài liệu và căn cứ' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Dữ liệu có cấu trúc' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Kết quả kiểm tra' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Tiến trình xử lý hồ sơ' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByAltText('giay-chung-sinh.svg')).toBeInTheDocument());
   });
 });

@@ -1,0 +1,130 @@
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-bg: #f3f6fa;
+  --color-bg-subtle: #eaf0f6;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-border: #d5dee9;
+  --color-border-strong: #b9c7d6;
+  --color-text: #15243a;
+  --color-text-muted: #566b82;
+  --color-text-subtle: #6d8094;
+  --color-primary: #155f9d;
+  --color-primary-hover: #0f4f86;
+  --color-primary-active: #0b416f;
+  --color-primary-contrast: #ffffff;
+  --color-focus: #1474c4;
+  --color-success: #176b4b;
+  --color-success-surface: #e7f6ee;
+  --color-warning: #7a4b00;
+  --color-warning-surface: #fff1cf;
+  --color-danger: #a3303b;
+  --color-danger-surface: #fdebed;
+  --color-info: #155f9d;
+  --color-info-surface: #e7f2fb;
+  --color-overlay: rgb(6 20 38 / 62%);
+  --color-document-paper: #ffffff;
+  --color-document-ink: #1a1a1a;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  --font-sans: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif;
+  --font-serif: var(--font-sans);
+  --font-size-xs: 0.8125rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.375rem;
+  --font-size-2xl: clamp(1.75rem, 2vw, 2.25rem);
+  --line-height-tight: 1.25;
+  --line-height-body: 1.65;
+
+  --radius-document: 4px;
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgb(25 50 78 / 6%), 0 4px 12px rgb(25 50 78 / 5%);
+  --shadow-md: 0 12px 32px rgb(25 50 78 / 10%);
+  --shadow-lg: 0 24px 64px rgb(25 50 78 / 16%);
+  --motion-fast: 160ms;
+  --motion-normal: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --z-sticky: 30;
+  --z-popover: 100;
+  --z-dialog: 1000;
+
+  /* Compatibility aliases while legacy surfaces migrate to semantic tokens. */
+  --navy: #103b66;
+  --navy-2: #155486;
+  --blue: var(--color-primary);
+  --teal: #166d69;
+  --red: var(--color-danger);
+  --gold: #8a5808;
+  --green: var(--color-success);
+  --line: var(--color-border);
+  --muted: var(--color-text-muted);
+  --paper: var(--color-surface);
+  --shadow: var(--shadow-md);
+  --bd: var(--color-border);
+  --s1: var(--color-bg);
+  --s2: var(--color-bg-subtle);
+  --tx: var(--color-text);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #0b1628;
+  --color-bg-subtle: #111f33;
+  --color-surface: #14243a;
+  --color-surface-elevated: #1a2c44;
+  --color-border: #2c4058;
+  --color-border-strong: #40566f;
+  --color-text: #edf4fb;
+  --color-text-muted: #afc0d2;
+  --color-text-subtle: #91a5ba;
+  --color-primary: #65afe8;
+  --color-primary-hover: #83c2ee;
+  --color-primary-active: #a1d1f3;
+  --color-primary-contrast: #071523;
+  --color-focus: #78c5ff;
+  --color-success: #72d2a8;
+  --color-success-surface: #123b30;
+  --color-warning: #f2c169;
+  --color-warning-surface: #3e3019;
+  --color-danger: #ff9ba5;
+  --color-danger-surface: #48232b;
+  --color-info: #8cc9f3;
+  --color-info-surface: #16334d;
+  --color-overlay: rgb(2 8 18 / 76%);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 20%), 0 4px 12px rgb(0 0 0 / 16%);
+  --shadow-md: 0 12px 32px rgb(0 0 0 / 28%);
+  --shadow-lg: 0 24px 64px rgb(0 0 0 / 42%);
+
+  --navy: #d7eaff;
+  --navy-2: #82bce7;
+  --blue: var(--color-primary);
+  --teal: #72d2c8;
+  --red: var(--color-danger);
+  --gold: var(--color-warning);
+  --green: var(--color-success);
+  --line: var(--color-border);
+  --muted: var(--color-text-muted);
+  --paper: var(--color-surface);
+  --shadow: var(--shadow-md);
+  --bd: var(--color-border);
+  --s1: var(--color-bg);
+  --s2: var(--color-bg-subtle);
+  --tx: var(--color-text);
+}

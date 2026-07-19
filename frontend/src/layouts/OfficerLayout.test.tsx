@@ -1,11 +1,26 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OfficerLayout } from './OfficerLayout';
+
+vi.mock('../components/ThemeSelector', () => ({ ThemeSelector: () => <button>Giao diện: Theo hệ thống</button> }));
 
 afterEach(cleanup);
 
 describe('OfficerLayout navigation', () => {
+  it('offers a skip link, a named navigation landmark, and theme controls', () => {
+    render(
+      <MemoryRouter initialEntries={['/officer']}>
+        <OfficerLayout><div>Dashboard</div></OfficerLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Bỏ qua điều hướng' })).toHaveAttribute('href', '#officer-main-content');
+    expect(screen.getByRole('navigation', { name: 'Điều hướng cổng cán bộ' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /giao diện/i })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'officer-main-content');
+  });
+
   it('marks only Hồ sơ as current on the applications list', () => {
     render(
       <MemoryRouter initialEntries={['/officer/applications']}>

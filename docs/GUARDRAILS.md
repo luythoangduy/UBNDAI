@@ -184,7 +184,7 @@ Hệ quả tới quy trình, không phải tới code:
 
 ```
 python -m pytest -q
-→ 329 passed, 1 failed
+→ 333 passed, 1 failed
 ```
 
 Chi tiết theo nhóm guardrail:
@@ -200,4 +200,4 @@ Chi tiết theo nhóm guardrail:
 | Hồi quy agent | `test_agent_regressions.py` | 20/20 |
 | OIDC | `test_oidc.py` | 2/2 |
 
-> **Về 1 test failing.** `test_application_migrations.py::test_application_migration_round_trip_preserves_baseline_data` fail trên máy local nhưng **CI xanh trên cả 5 lần chạy `main` gần nhất** (kiểm bằng `gh run list`). Đây là artifact môi trường local, không phải lỗi sản phẩm. Ghi ra đây thay vì báo "330/330 PASS" cho đẹp.
+> **Về 1 test failing.** `test_application_migrations.py::test_application_migration_round_trip_preserves_baseline_data` fail trên máy local nhưng **CI xanh trên cả 5 lần chạy `main` gần nhất** (kiểm bằng `gh run list`). Đây là artifact môi trường local, không phải lỗi sản phẩm. Ghi ra đây thay vì báo "334/334 PASS" cho đẹp.

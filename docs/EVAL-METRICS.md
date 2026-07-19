@@ -15,11 +15,11 @@
 | 3 | Nhận diện | Độ chính xác — out-of-catalog (bộ B) | **11/15 = 73,3%** | bộ B |
 | 4 | Nhận diện | Độ chính xác — **held-out (bộ C)** | **9/15 = 60,0%** | bộ C |
 | 5 | An toàn | Lùi về hỏi lại khi không chắc | 10/30 trên B+C | bộ B, C |
-| 6 | Kiểm thử | Toàn bộ suite | **329/330 PASS** | `python -m pytest -q` |
+| 6 | Kiểm thử | Toàn bộ suite | **333/334 PASS** | `python -m pytest -q` |
 | 7 | Kiểm thử | Rule engine (tầng duy nhất phát `error`) | **11/11** | `pytest tests/test_rule_engine.py` |
 | 8 | Kiểm thử | AI checker (chỉ warning/info) | **4/4** | `pytest tests/test_ai_checker.py` |
 | 9 | Kiểm thử | OCR pipeline | **19/19** | `pytest tests/test_ocr_pipeline.py` |
-| 10 | Kiểm thử | Truy hồi (gồm 2 test hồi quy mới) | **8/8** | `pytest tests/test_retrieval.py` |
+| 10 | Kiểm thử | Truy hồi (gồm 4 test hồi quy mới) | **10/10** | `pytest tests/test_retrieval.py` |
 | 11 | Kiểm thử | Hồi quy agent | **20/20** | `pytest tests/test_agent_regressions.py` |
 | 12 | Kiểm thử | Tình huống người dùng thật | **15/15** | `pytest tests/test_real_user_edge_cases.py` |
 | 13 | Kiểm thử | Trung thực nguồn live | **7/7** | `pytest tests/test_chat_experience.py` |
@@ -193,4 +193,4 @@ python -m pytest -q                      # toàn bộ suite
 pytest tests/test_retrieval.py -q        # gồm 2 test hồi quy lỗi bỏ dấu
 ```
 
-> **Về 1 test failing.** `test_application_migrations.py::test_application_migration_round_trip_preserves_baseline_data` fail local (`no such table: application_cases`) nhưng **CI xanh trên 5 lần chạy `main` gần nhất**. Artifact môi trường local. Ghi ra thay vì báo 330/330 cho đẹp.
+> **Về 1 test failing.** `test_application_migrations.py::test_application_migration_round_trip_preserves_baseline_data` fail local (`no such table: application_cases`) nhưng **CI xanh trên 5 lần chạy `main` gần nhất**. Artifact môi trường local. Ghi ra thay vì báo 334/334 cho đẹp.

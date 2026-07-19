@@ -287,20 +287,39 @@ planning/        # TEAM_PLAN.md — kế hoạch 3 người, sprint, contract fr
 
 ## 7. Tài liệu
 
+**Bắt đầu từ đâu:** giám khảo/người mới → `docs/DEMO-SCRIPT.md` rồi `docs/EVAL-EVIDENCE.md`. Dev mới → `ARCHITECTURE.md` rồi `docs/Agent-Features.md`.
+
+### Sản phẩm & kinh doanh
+
+| Tài liệu | Nội dung |
+|----------|----------|
+| `docs/PRD-UBNDAI-MVP.md` | Phạm vi MVP, người dùng, yêu cầu phi chức năng bắt buộc, **những gì cố ý không làm** |
+| `docs/business-viability-pilot.md` | Khách hàng mục tiêu, mô hình kinh doanh, kinh tế đơn vị, lộ trình pilot 3 giai đoạn |
+| `docs/COST-REPORT.md` | Chi phí LLM mỗi lượt/hồ sơ, tính từ tỉ lệ token tiếng Việt đo thật |
+| `docs/DEMO-SCRIPT.md` | Kịch bản demo 5 phút, câu hỏi giám khảo, phương án dự phòng |
+
+### An toàn & đánh giá
+
+| Tài liệu | Nội dung |
+|----------|----------|
+| `docs/GUARDRAILS.md` | 7 lớp an toàn & grounding, kèm vị trí code và bằng chứng test |
+| `docs/EVAL-METRICS.md` | Chỉ số + baseline đo thật; ba lỗi chốt nhầm đã tìm ra và sửa |
+| `docs/EVAL-EVIDENCE.md` | **Output thật chụp từ hệ thống**, chạy offline, kèm lệnh tái lập |
+| `docs/Authorization-Spec.md` | Vai trò, token, OIDC + MFA, và những gì chưa đủ cho production |
+
+### Kỹ thuật
+
 | Tài liệu | Nội dung |
 |----------|----------|
 | `ARCHITECTURE.md` | Kiến trúc, data flow, data model, bản đồ tái sử dụng từ C2-App-108 |
+| `docs/Agent-Features.md` | Đồ thị LangGraph, 5 node, những chỗ cố tình không dùng LLM |
+| `docs/KnowledgeBase-Guide.md` | Cấu trúc catalog, truy hồi, **cách thêm thủ tục mới** + cạm bẫy alias |
+| `docs/API-Reference.md` | 75 endpoint, sinh từ router thật |
+| `docs/Deployment-Guide.md` | Hạ tầng, biến môi trường, cách kiểm bản chạy có mới không |
+| `docs/CI-Explained.md` | Pipeline CI, cổng chặn chốt nhầm, những gì CI chưa chặn |
+| `docs/procedure-sync.md` | Quy trình đồng bộ catalog với nguồn công bố |
 | `AGENTS.md` | Quy tắc cho AI coding agent |
 | `planning/TEAM_PLAN.md` | Phân công 3 dev, sprint plan, integration checkpoint |
-| `docs/GUARDRAILS.md` | 7 lớp an toàn & grounding, kèm vị trí code và bằng chứng test |
-| `docs/Agent-Features.md` | Kiến trúc agent: đồ thị LangGraph, 5 node, những chỗ cố tình không dùng LLM |
-| `docs/EVAL-METRICS.md` | Chỉ số đánh giá + baseline đo thật (nhận diện thủ tục, chốt nhầm, test) |
-| `docs/API-Reference.md` | 75 endpoint, sinh từ router thật |
-| `docs/DEMO-SCRIPT.md` | Kịch bản demo 5 phút, câu hỏi giám khảo, phương án dự phòng |
-| `docs/Deployment-Guide.md` | Kiến trúc hạ tầng, biến môi trường, cách kiểm bản chạy có mới không |
-| `docs/CI-Explained.md` | Pipeline CI, cổng chặn chốt nhầm, những gì CI chưa chặn |
-| `docs/business-viability-pilot.md` | Khách hàng mục tiêu, mô hình kinh doanh, kinh tế đơn vị (tính từ hệ thống thật), lộ trình pilot 3 giai đoạn |
-| `docs/procedure-sync.md` | Quy trình đồng bộ catalog thủ tục với nguồn công bố |
 | `docs/hackathon-chat-experience.md` | Thiết kế trải nghiệm chat |
 
 ## 8. Quản lý hồ sơ cho cán bộ

@@ -90,9 +90,19 @@ Hệ thống **hỏi lại** trước khi chốt checklist:
 
 > *"Công trình có thuộc diện phải thẩm duyệt thiết kế phòng cháy chữa cháy không?"*
 
-Trả lời `không`. Checklist hiện ra — **và nói thẳng điều quan trọng**:
+Trả lời `không` cho cả hai câu hỏi. Checklist hiện ra — **và nói thẳng điều quan trọng**:
 
-> "Chú ý: checklist này có 3 mục, không phải 5. Hai mục kia đã bị loại vì không áp dụng cho trường hợp vừa mô tả. Đó chính là vòng lặp ở đầu bài — bị xoá ngay tại đây."
+> "Chú ý: danh mục có 5 thành phần, nhưng chỉ **3 mục cần chuẩn bị**. Hai mục kia được đánh dấu *không áp dụng*, **kèm lý do** — chứ không bị giấu đi. Người dân thấy được vì sao nó không áp dụng với mình. Đó chính là vòng lặp ở đầu bài, bị xoá ngay tại đây."
+
+**Đã kiểm chứng bằng cách chạy thật** (`docs/EVAL-EVIDENCE.md` §2) — số mục cần chuẩn bị đổi theo câu trả lời:
+
+| Trả lời | Cần chuẩn bị | Không áp dụng |
+|---|:---:|:---:|
+| Không PCCC, không di tích | **3** | 2 |
+| Có PCCC, không di tích | 4 | 1 |
+| Có PCCC, có di tích | 5 | 0 |
+
+> Nếu muốn diễn ấn tượng hơn: chạy lần hai với câu trả lời `có` cho PCCC, checklist tăng lên 4 mục ngay trước mắt giám khảo.
 
 #### Thao tác 2 — Truy vết nguồn *(khoảng 30 giây)*
 
@@ -176,7 +186,7 @@ Chuẩn bị sẵn, trả lời ngắn.
 | Nói "AI của chúng tôi rất thông minh" | Không kiểm chứng được, và không phải điểm mạnh của sản phẩm này |
 | Đi tuần tự hết mọi màn hình | Demo là để chứng minh một luận điểm, không phải hướng dẫn sử dụng |
 | Né trạng thái `fallback` khi nó hiện | Đó là bằng chứng về tính trung thực — dùng nó |
-| Báo "330/330 test PASS" | Có 1 test fail trên local. Nói thật kèm giải thích CI xanh sẽ đáng tin hơn |
+| Báo "334/334 test PASS" | Có 1 test fail trên local. Nói thật kèm giải thích CI xanh sẽ đáng tin hơn |
 | Đưa số liệu thị trường không nguồn | Bị hỏi nguồn mà không có là mất toàn bộ độ tin cậy đã xây |
 | Sửa code trong lúc demo | Không bao giờ |
 
